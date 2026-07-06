@@ -1,0 +1,21 @@
+# WASPADA — Python dependencies
+# GPU deps (RAPIDS) need the NVIDIA package index. Install everything with:
+#   pip install --extra-index-url=https://pypi.nvidia.com -r requirements.txt
+# (RAPIDS runs on Linux/WSL — see HACKATHON.md, option A.)
+
+# --- NVIDIA acceleration layer (the GPU pipeline) ---
+cudf-cu12>=26.6        # GPU dataframes (cudf.pandas)
+cuml-cu12>=26.6        # GPU ML (risk models)
+
+# --- Google Cloud data layer ---
+google-cloud-bigquery>=3.25
+google-cloud-bigquery-storage>=2.25   # fast BigQuery -> Arrow reads
+db-dtypes>=1.2                         # BigQuery types in pandas/cudf
+
+# --- CPU baseline (for the GPU-vs-CPU acceleration benchmark) ---
+pandas>=2.2
+scikit-learn>=1.5
+pyarrow>=17
+
+# --- Utilities ---
+python-dotenv>=1.0
