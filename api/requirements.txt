@@ -1,0 +1,11 @@
+# CPU-only deps for Cloud Run (no GPU/cuDF/cuML — those run in WSL only)
+fastapi>=0.115
+uvicorn[standard]>=0.30
+scikit-learn>=1.5
+pyarrow>=17
+pandas>=2.2
+numpy>=1.26
+python-dotenv>=1.0
+google-cloud-bigquery>=3.25
+google-cloud-bigquery-storage>=2.25
+db-dtypes>=1.2

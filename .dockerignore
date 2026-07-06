@@ -1,0 +1,17 @@
+.venv/
+.venv-verify/
+.git/
+.pytest_cache/
+node_modules/
+dashboard/node_modules/
+# Don't exclude dashboard/dist — we need it in the image
+data/
+*.parquet
+models/
+secrets/
+.env
+.env.*
+!.env.example
+*.pptx
+gpu/
+backlog/
