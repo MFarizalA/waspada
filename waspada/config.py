@@ -1,91 +1,79 @@
-"""Environment + lane configuration for WASPADA.
+"""Configuration & environment loading for WASPADA.
 
-Loads vars from ``.env`` (gitignored; see ``.env.example``) on import and
-exposes the resolved settings + the active lane switch. The two lanes
-(collections | origination) share one engine and differ only in which
-features/label/recommendation phrasing applies -- so the lane is a runtime
-switch, not a separate codebase.
+Reads from the environment, optionally seeded from a ``.env`` file via
+python-dotenv. The contract (:func:`load_config`) returns a snapshot
+:class:`Config` with empty-string defaults (never ``None``) so callers can do
+simple truthiness checks, and raises ``ValueError`` for an invalid lane so a
+typo fails loudly instead of silently picking a lane.
 
-Env vars (all optional at import time -- defaults are safe for local dev and
-tests; production values come from ``.env`` or real env):
-    BQ_PROJECT   -- GCP project holding the BigQuery dataset.
-    BQ_DATASET   -- BigQuery dataset name.
-    BQ_TABLE     -- BigQuery source table (e.g. the LendingClub table).
-    WASPADA_LANE -- "collections" (default) | "origination".
+Vars (see ``.env.example``):
+  * ``BQ_PROJECT``, ``BQ_DATASET``, ``BQ_TABLE`` — BigQuery location of the loans table.
+  * ``WASPADA_LANE`` — decision lane: ``collections`` (default) or ``origination``.
 """
-
 from __future__ import annotations
 
 import os
 from dataclasses import dataclass
-from typing import Literal
+from typing import Tuple
 
-try:
-    # python-dotenv is a declared dependency (requirements.txt). Importing must
-    # not hard-fail when the file is absent or the package isn't installed yet
-    # (e.g. in a minimal test env): load_dotenv is best-effort here.
-    from dotenv import load_dotenv
+from dotenv import load_dotenv
 
-    load_dotenv()
-except Exception:  # pragma: no cover - dependency-missing path
-    pass
+# The two decision lanes sharing one engine (see HACKATHON.md "Two lanes").
+COLLECTIONS = "collections"
+ORIGINATION = "origination"
+LANES: Tuple[str, ...] = (COLLECTIONS, ORIGINATION)
 
-Lane = Literal["collections", "origination"]
-
-_DEFAULTS: dict[str, str] = {
-    "BQ_PROJECT": "",
-    "BQ_DATASET": "",
-    "BQ_TABLE": "",
-    "WASPADA_LANE": "collections",
-}
-
-_VALID_LANES = {"collections", "origination"}
+# Seed env from .env once on import (no-op when .env is absent).
+load_dotenv()
 
 
 @dataclass(frozen=True)
 class Config:
-    """Resolved configuration snapshot.
+    """Snapshot of the active WASPADA configuration.
 
-    Fields are empty-string-safe so tests can ``import waspada`` with no ``.env``
-    and no GCP credentials present. Downstream code that actually talks to
-    BigQuery (WA-002) validates non-empty values at call time, not at import.
+    BQ fields default to empty string (not None) so callers can use simple
+    truthiness checks; ``lane`` defaults to ``collections``.
     """
 
+    lane: str
     bq_project: str
     bq_dataset: str
     bq_table: str
-    lane: Lane
+
+    def require_bq(self) -> "Config":
+        """Return self if BigQuery is fully configured, else raise RuntimeError."""
+        if not (self.bq_project and self.bq_dataset and self.bq_table):
+            raise RuntimeError(
+                "BigQuery not configured: set BQ_PROJECT, BQ_DATASET, BQ_TABLE "
+                "(see .env.example)."
+            )
+        return self
 
 
-def _get(key: str) -> str:
-    val = os.environ.get(key)
-    return val if val is not None and val != "" else _DEFAULTS[key]
-
-
-def _resolve_lane(raw: str) -> Lane:
-    lane = raw.strip().lower()
-    if lane not in _VALID_LANES:
+def _resolve_lane() -> str:
+    """Resolve WASPADA_LANE: strip, lowercase, validate; default collections."""
+    value = (os.environ.get("WASPADA_LANE") or COLLECTIONS).strip().lower()
+    if value not in LANES:
         raise ValueError(
-            f"WASPADA_LANE must be one of {sorted(_VALID_LANES)}, got: {raw!r}"
+            f"WASPADA_LANE={value!r} is invalid; must be one of {LANES}"
         )
-    return lane  # type: ignore[return-value]
+    return value
 
 
 def load_config() -> Config:
-    """Build a :class:`Config` from the current environment.
+    """Build a :class:`Config` from the current environment (pure, no caching).
 
-    Reads env vars (plus any ``.env`` loaded at import). Raises ``ValueError``
-    only if ``WASPADA_LANE`` is set to an unknown value; empty/missing BigQuery
-    values are allowed (validated lazily by WA-002).
+    Reads the live env each call, so tests using ``monkeypatch.setenv`` see the
+    new value immediately. Lane defaults to ``collections`` and is validated.
     """
     return Config(
-        bq_project=_get("BQ_PROJECT"),
-        bq_dataset=_get("BQ_DATASET"),
-        bq_table=_get("BQ_TABLE"),
-        lane=_resolve_lane(_get("WASPADA_LANE")),
+        lane=_resolve_lane(),
+        bq_project=os.environ.get("BQ_PROJECT", ""),
+        bq_dataset=os.environ.get("BQ_DATASET", ""),
+        bq_table=os.environ.get("BQ_TABLE", ""),
     )
 
 
-# Module-level resolved config: importable as ``from waspada.config import config``.
-# Tests that need to vary env should call ``load_config()`` after setting env.
+# Module-level singleton — convenient for ``from waspada.config import config``.
+# Tests that mutate env and call ``importlib.reload(config)`` see it refreshed.
 config: Config = load_config()

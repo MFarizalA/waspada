@@ -1,112 +1,51 @@
-"""WSL->GPU entrypoint helper.
+"""WSL → GPU entrypoint helper.
 
-The single chokepoint for all GPU/data steps: shells out to the RAPIDS Python
-interpreter inside WSL, captures stdout/stderr, and surfaces non-zero exits as
-:class:`GpuError`. cuDF/cuML are never imported on the host -- every GPU call
-goes through :func:`run_gpu`.
-
-Resolution order for the WSL invocation (env-overridable for tests and for
-running outside WSL):
-    1. ``WASPADA_WSL_BIN``  -- the wsl executable path (default: ``"wsl"``).
-    2. ``WASPADA_GPU_PY``   -- the GPU-side python (default:
-       ``"/root/rapids/bin/python"``).
-
-Example::
-
-    out = run_gpu(["-c", "import cudf, cuml; print('ok')"])
-    assert out.strip() == "ok"
+The single chokepoint for every GPU/RAPIDS step. The host worker containers have
+no GPU; cuDF/cuML live inside WSL (proven on the MX570 — see HACKATHON.md option
+A). So nothing on the host imports cuDF/cuML — all GPU/data work runs through
+:func:`run_gpu`, which shells out to ``wsl -e <rapids-python> <args>``.
 """
-
 from __future__ import annotations
 
-import os
+import shutil
 import subprocess
-from dataclasses import dataclass
+from typing import List, Optional, Sequence
 
-__all__ = ["GpuResult", "GpuError", "run_gpu"]
-
-
-@dataclass(frozen=True)
-class GpuResult:
-    """Captured result of a WSL->RAPIDS invocation."""
-
-    stdout: str
-    stderr: str
-    returncode: int
+# The RAPIDS interpreter inside WSL (proven path; see HACKATHON.md).
+DEFAULT_PYTHON = "/root/rapids/bin/python"
 
 
-class GpuError(RuntimeError):
-    """Raised when a GPU/WSL subprocess exits non-zero.
+def run_gpu(
+    args: Sequence[str],
+    *,
+    python: str = DEFAULT_PYTHON,
+    check: bool = True,
+    timeout: Optional[float] = None,
+) -> str:
+    """Run a Python invocation inside WSL on the RAPIDS interpreter.
 
-    Carries the captured :class:`GpuResult` so callers can inspect output.
+    ``args`` is forwarded verbatim after the interpreter, so both inline code
+    and script entry points work::
+
+        run_gpu(["-c", "import cudf, cuml; print('ok')"])           # inline smoke
+        run_gpu(["gpu/run_features.py", "--in", x, "--out", y])     # script entry
+
+    Returns stdout (trailing whitespace stripped). On non-zero exit with
+    ``check=True`` (default), raises :class:`RuntimeError` carrying stderr.
+    Raises :class:`RuntimeError` if the ``wsl`` launcher is unavailable (e.g.
+    inside a worker container) — never a bare ``FileNotFoundError``.
     """
-
-    def __init__(self, result: GpuResult):
-        self.result = result
-        super().__init__(
-            f"wsl python exited {result.returncode}: {result.stderr.strip()}"
+    if shutil.which("wsl") is None:
+        raise RuntimeError(
+            "WSL launcher 'wsl' not found on PATH — run_gpu can only execute on a "
+            "host with WSL+RAPIDS, not inside this container. "
+            "(GPU steps run via WSL; see HACKATHON.md option A.)"
         )
-
-
-def _wsl_bin() -> str:
-    return os.environ.get("WASPADA_WSL_BIN", "wsl")
-
-
-def _gpu_python() -> str:
-    return os.environ.get("WASPADA_GPU_PY", "/root/rapids/bin/python")
-
-
-def run_gpu(args: list[str]) -> str:
-    """Run a script/snippet in the WSL RAPIDS interpreter; return its stdout.
-
-    Builds the command ``wsl -e <gpu_python> <args...>``. On non-zero exit,
-    raises :class:`GpuError` (with full stderr). Designed to be easy to mock in
-    tests -- the only external surface is :mod:`subprocess`.
-
-    Args:
-        args: Arguments forwarded to the GPU-side python interpreter
-            (e.g. ``["-c", "import cudf; ..."]`` or ``["scripts/x.py", "--n",
-            "1e6"]``).
-
-    Returns:
-        The subprocess stdout as a string.
-
-    Raises:
-        GpuError: if the subprocess returns a non-zero exit code.
-        FileNotFoundError: if the configured wsl binary is not on PATH
-            (i.e. WSL is unavailable in the current environment).
-    """
-    cmd = [_wsl_bin(), "-e", _gpu_python(), *args]
-    completed = subprocess.run(  # noqa: S603 -- command built from trusted env
-        cmd,
-        capture_output=True,
-        text=True,
-    )
-    result = GpuResult(
-        stdout=completed.stdout,
-        stderr=completed.stderr,
-        returncode=completed.returncode,
-    )
-    if result.returncode != 0:
-        raise GpuError(result)
-    return result.stdout
-
-
-def run_gpu_captured(args: list[str]) -> GpuResult:
-    """Like :func:`run_gpu` but returns the full :class:`GpuResult`.
-
-    Use this when a caller needs stderr even on success (e.g. for benchmark
-    logging). Raises :class:`GpuError` on non-zero exit, same as :func:`run_gpu`.
-    """
-    cmd = [_wsl_bin(), "-e", _gpu_python(), *args]
-    completed = subprocess.run(  # noqa: S603
-        cmd, capture_output=True, text=True
-    )
-    result = GpuResult(
-        stdout=completed.stdout,
-        stderr=completed.stderr,
-        returncode=completed.returncode,
-    )
-    if result.returncode != 0:
-        raise GpuError(result)
-    return result
+    cmd: List[str] = ["wsl", "-e", python, *list(args)]
+    proc = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+    if check and proc.returncode != 0:
+        raise RuntimeError(
+            f"run_gpu failed (exit {proc.returncode}): {' '.join(cmd)}\n"
+            f"--- stderr ---\n{proc.stderr}"
+        )
+    return proc.stdout.rstrip()

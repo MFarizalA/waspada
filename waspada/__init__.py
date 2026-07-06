@@ -1,25 +1,15 @@
-"""WASPADA -- Warning & Approval System for Portfolio And Default Analytics.
+"""WASPADA — shared risk-decision package.
 
-The shared Python spine every downstream ticket builds against. This package
-holds:
-
-- :mod:`waspada.schema` -- the **frozen** data-contract types
-  (``RawLoans -> FeatureFrame -> ScoredAccounts -> DashboardPayload``).
-- :mod:`waspada.config` -- env/lane configuration.
-- :mod:`waspada.wsl` -- the WSL->RAPIDS GPU entrypoint helper.
-
-See ``backlog/WA-001.md`` for the contract spec and ``HACKATHON.md`` for the
-full project brief.
+Package spine for every downstream ticket: config/env loading, the WSL→GPU
+entrypoint helper, and the **frozen data-contract schemas** (raw → features →
+scores → dashboard payload). Contract names live in :mod:`waspada.schema` and
+are re-exported here so downstream tickets cite them verbatim.
 """
-
 from __future__ import annotations
 
-__version__ = "0.1.0"
-
-# Re-export the contract surface so ``from waspada import RawLoans`` works.
-# (Schema/config import is cheap and side-effect free; wsl import is deferred
-# because importing it is harmless but run_gpu is the only GPU entrypoint.)
-from .schema import (  # noqa: E402,F401
+from . import config, schema, wsl  # noqa: F401
+from .config import Config, load_config
+from .schema import (
     Alert,
     DashboardPayload,
     FeatureFrame,
@@ -27,23 +17,29 @@ from .schema import (  # noqa: E402,F401
     RawLoans,
     ScoredAccounts,
     Segment,
+    schema_from_dataclass,
+    validate_table,
 )
-# NB: only Config/load_config are re-exported here -- NOT the module-level
-# ``config`` instance, because binding ``config`` into this namespace would
-# shadow the ``waspada.config`` submodule (``from waspada import config`` would
-# then return the instance, not the module). Downstream code that wants the
-# pre-resolved instance uses ``from waspada.config import config``.
-from .config import Config, load_config  # noqa: E402,F401
+from .wsl import run_gpu
+
+__version__ = "0.1.0"
 
 __all__ = [
-    "__version__",
-    "RawLoans",
-    "FeatureFrame",
-    "Segment",
-    "ScoredAccounts",
-    "PortfolioHealth",
-    "Alert",
-    "DashboardPayload",
+    "config",
+    "schema",
+    "wsl",
     "Config",
     "load_config",
+    # frozen contract types (see waspada/schema.py)
+    "RawLoans",
+    "FeatureFrame",
+    "ScoredAccounts",
+    "Segment",
+    "DashboardPayload",
+    "PortfolioHealth",
+    "Alert",
+    "schema_from_dataclass",
+    "validate_table",
+    "run_gpu",
+    "__version__",
 ]

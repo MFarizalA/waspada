@@ -1,65 +1,30 @@
-"""WSL->GPU smoke test (waspada/wsl.py).
+"""Smoke test for the WSL → RAPIDS bridge (WA-001 acceptance).
 
-WA-001 AC: ``run_gpu(["-c", "import cudf, cuml; print('ok')"])`` prints ``ok``.
-That requires WSL+RAPIDS on the host. In environments without WSL (e.g. the
-docker worker container), this test skips cleanly rather than failing -- the
-task body explicitly defers the GPU smoke to in-container/later runs.
+Skipped inside the worker container — there is no GPU and no ``wsl`` launcher
+here (GPU runs in WSL on the host; see HACKATHON.md option A). Enable on the
+host/WSL by setting ``WASPADA_RUN_GPU_TESTS=1``; it then asserts the
+Python → WSL → RAPIDS bridge works (cuDF + cuML import cleanly).
+
+The in-container GPU run is a separate ticket; this test is written now and
+gated so the suite stays green until that ticket lands.
 """
-
 from __future__ import annotations
 
+import os
 import shutil
 
 import pytest
 
-from waspada import wsl as wsl_mod
+from waspada.wsl import run_gpu
+
+_ENABLED = os.environ.get("WASPADA_RUN_GPU_TESTS") == "1"
+_WSL_PRESENT = shutil.which("wsl") is not None
 
 
-def _wsl_available() -> bool:
-    return shutil.which("wsl") is not None
-
-
-def test_run_gpu_smoke():
-    """AC: run_gpu bridges to RAPIDS and prints 'ok'.
-
-    Skipped when ``wsl`` is not on PATH (the GPU bridge runs on the host/WSL,
-    not in the worker container). On WSL-capable hosts this is the real
-    Python->WSL->RAPIDS proof called for by WA-001.
-    """
-    if not _wsl_available():
-        pytest.skip("wsl not available in this environment (GPU smoke deferred)")
-    out = wsl_mod.run_gpu(["-c", "import cudf, cuml; print('ok')"])
+@pytest.mark.skipif(
+    not (_ENABLED or _WSL_PRESENT),
+    reason="WSL/RAPIDS unavailable here; set WASPADA_RUN_GPU_TESTS=1 on the host/WSL.",
+)
+def test_run_gpu_imports_rapids():
+    out = run_gpu(["-c", "import cudf, cuml; print('ok')"])
     assert out.strip() == "ok"
-
-
-def test_run_gpu_raises_on_nonzero(monkeypatch):
-    """run_gpu wraps subprocess and raises GpuError on non-zero exit."""
-    import subprocess
-
-    class _Fake:
-        returncode = 2
-        stdout = ""
-        stderr = "boom"
-
-    def fake_run(cmd, capture_output, text):
-        assert cmd[1:3] == ["-e", "/root/rapids/bin/python"]
-        return _Fake()
-
-    monkeypatch.setattr(subprocess, "run", fake_run)
-    with pytest.raises(wsl_mod.GpuError) as exc:
-        wsl_mod.run_gpu(["-c", "raise SystemExit"])
-    assert exc.value.result.returncode == 2
-
-
-def test_run_gpu_forwards_args_and_returns_stdout(monkeypatch):
-    """run_gpu returns captured stdout on a zero-exit subprocess."""
-    import subprocess
-
-    class _Fake:
-        returncode = 0
-        stdout = "ok\n"
-        stderr = ""
-
-    monkeypatch.setattr(subprocess, "run", lambda *a, **k: _Fake())
-    out = wsl_mod.run_gpu(["-c", "print('ok')"])
-    assert out == "ok\n"

@@ -55,13 +55,18 @@ def sample_featureframe(as_of):
 
     return FeatureFrame(
         loan_id="L-0001",
+        amount=15000.0,
+        term=36,
+        rate=13.56,
+        grade="C",
+        annual_income=58000.0,
+        dti=18.2,
+        purpose="debt_consolidation",
+        region="West",
         loan_age=33,
         payment_ratio=11800.0 / 15000.0,
         outstanding_ratio=4200.0 / 15000.0,
         delinquency_status="Default",
-        dti=18.2,
-        grade="C",
-        term=36,
         label_default=True,
-        as_of_date=as_of,
+        as_of_date=dt.date.fromisoformat(as_of),
     )
