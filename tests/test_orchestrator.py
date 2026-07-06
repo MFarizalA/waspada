@@ -1,0 +1,218 @@
+"""Orchestrator tests (WA-010 acceptance).
+
+Full run with mock LLM + stubbed data: asserts step order, gate invocation,
+payload emitted, report non-empty, and that an ApprovalGate rejection
+short-circuits the pipeline.
+"""
+from __future__ import annotations
+
+import datetime as dt
+import os
+from pathlib import Path
+
+import pyarrow as pa
+import pytest
+
+from waspada.agents import AgentContext, ApprovalGate, Approved, MockLLM, Rejected, Status
+from waspada.agents.ingest import IngestAgent
+from waspada.agents.orchestrator import COLLECTIONS_STEP_ORDER, Orchestrator
+from waspada.schema import RawLoans, schema_from_dataclass
+
+
+# --------------------------------------------------------------------------- #
+# Synthetic RawLoans fixture (shared shape with the pipeline-agents test).
+# --------------------------------------------------------------------------- #
+def _raw_table(n: int = 80, seed: int = 11) -> pa.Table:
+    import dataclasses
+    import numpy as np
+
+    rng = np.random.default_rng(seed)
+    issue_years = [2019, 2020, 2021, 2022, 2023]
+    rows = []
+    for i in range(n):
+        iy = int(issue_years[i % len(issue_years)])
+        im = int(rng.integers(1, 13))
+        risky = rng.random() < 0.5
+        if risky:
+            rate = float(rng.uniform(18, 28)); dti = float(rng.uniform(22, 35))
+            grade = "E"; op = float(rng.uniform(0.5, 0.9)); tp = float(rng.uniform(0.0, 0.3))
+            status = "Charged Off"
+        else:
+            rate = float(rng.uniform(4, 10)); dti = float(rng.uniform(2, 12))
+            grade = "A"; op = float(rng.uniform(0.0, 0.3)); tp = float(rng.uniform(0.6, 1.0))
+            status = "Current"
+        rows.append(dict(
+            loan_id=f"R{i:04d}",
+            amount=float(rng.uniform(2000, 25000)),
+            term=int(rng.choice([36, 60])),
+            rate=rate, grade=grade,
+            annual_income=float(rng.uniform(30000, 120000)),
+            dti=dti,
+            issue_date=dt.date(iy, im, 1),
+            purpose=str(rng.choice(["credit_card", "debt_consolidation", "car", "medical"])),
+            region=str(rng.choice(["West", "South", "Midwest", "Northeast"])),
+            outstanding_principal=float(rng.uniform(100, 5000)) * op,
+            total_paid=float(rng.uniform(100, 5000)) * tp,
+            current_status=status,
+        ))
+    cols = {f.name: [] for f in dataclasses.fields(RawLoans)}
+    for r in rows:
+        for name in cols:
+            cols[name].append(r[name])
+    return pa.table(cols, schema=schema_from_dataclass(RawLoans))
+
+
+def _orchestrator_with_stub(raw: pa.Table, *, gate: ApprovalGate) -> Orchestrator:
+    """Build an orchestrator whose ingest fetch is stubbed (offline)."""
+    orch = Orchestrator(MockLLM(), gate=gate, as_of=dt.date(2024, 12, 1), top_n=15)
+    _stub = (lambda tbl: (lambda *, lane="collections", limit=None: tbl))(raw)
+    _orig_build = orch._build_agents
+    def _build():
+        agents = _orig_build()
+        for a in agents:
+            if isinstance(a, IngestAgent):
+                a.register_tool("fetch", _stub)
+        return agents
+    orch._build_agents = _build  # type: ignore[method-assign]
+    return orch
+
+
+@pytest.fixture
+def raw_table() -> pa.Table:
+    return _raw_table()
+
+
+# --------------------------------------------------------------------------- #
+# plan — builds the Collections step sequence.
+# --------------------------------------------------------------------------- #
+def test_plan_returns_collections_step_order():
+    orch = Orchestrator(MockLLM())
+    steps = orch.plan("collections")
+    assert steps == list(COLLECTIONS_STEP_ORDER)
+    assert steps[0] == "ingest" and steps[-1] == "insight"
+
+
+def test_plan_rejects_unknown_lane():
+    orch = Orchestrator(MockLLM())
+    with pytest.raises(ValueError):
+        orch.plan("bogus")
+
+
+def test_plan_rejects_origination_not_implemented():
+    """Origination is deferred; orchestrator raises rather than guess."""
+    orch = Orchestrator(MockLLM())
+    with pytest.raises(ValueError, match="origination"):
+        orch.plan("origination")
+
+
+# --------------------------------------------------------------------------- #
+# run — full orchestrated pipeline: step order, gate, payload emitted.
+# --------------------------------------------------------------------------- #
+def test_run_executes_all_steps_in_order(raw_table):
+    gate = ApprovalGate(auto_approve=True)
+    orch = _orchestrator_with_stub(raw_table, gate=gate)
+    ctx = AgentContext(lane="collections", data_handles={})
+    res = orch.run(ctx)
+
+    assert res.ok
+    assert res.artifact_ref == "dashboard_payload"
+    # Step order logged: one "run" step per agent, in sequence.
+    run_notes = [s.notes for s in orch.steps if s.action == "run"]
+    # Each run-step names the agent and its artifact handle.
+    assert any("ingest" in n and "raw_loans" in n for n in run_notes)
+    assert any("analytics" in n and "feature_frame" in n for n in run_notes)
+    assert any("risk_model" in n and "scored_accounts" in n for n in run_notes)
+    assert any("insight" in n and "dashboard_payload" in n for n in run_notes)
+    # Handoffs recorded frm→to in order.
+    assert [h.frm for h in orch.handoffs] == ["ingest", "analytics", "risk_model"]
+    assert [h.to for h in orch.handoffs] == ["analytics", "risk_model", "insight"]
+
+
+def test_run_invokes_approval_gate_before_payload(raw_table):
+    """The gate is invoked (publish_work_list) before the payload is released."""
+    gate = ApprovalGate(auto_approve=True)
+    orch = _orchestrator_with_stub(raw_table, gate=gate)
+    orch.run(AgentContext(lane="collections", data_handles={}))
+    assert any(s.action == "publish_work_list" and s.auto is True for s in gate.steps)
+
+
+def test_run_emits_dashboard_payload(raw_table):
+    gate = ApprovalGate(auto_approve=True)
+    orch = _orchestrator_with_stub(raw_table, gate=gate)
+    ctx = AgentContext(lane="collections", data_handles={})
+    res = orch.run(ctx)
+    payload = getattr(orch, "_final_ctx", ctx).data_handles[res.artifact_ref]
+    assert set(payload.keys()) == {"work_list", "portfolio_health", "alerts"}
+
+
+# --------------------------------------------------------------------------- #
+# Gate rejection short-circuits the pipeline.
+# --------------------------------------------------------------------------- #
+def test_run_short_circuits_on_gate_rejection(raw_table):
+    """A rejected work-list gate halts the pipeline with a BLOCKED result."""
+    def _reject(action, rationale):
+        return Rejected(action=action, rationale=rationale, reason="analyst said no")
+    gate = ApprovalGate(decide=_reject)
+    orch = _orchestrator_with_stub(raw_table, gate=gate)
+    res = orch.run(AgentContext(lane="collections", data_handles={}))
+
+    assert res.status == Status.BLOCKED
+    assert "insight" in res.notes.lower() or "rejected" in res.notes.lower()
+    # The pipeline ran ingest→analytics→risk_model but stopped at insight.
+    run_agents = [n.split(" ")[0] for n in (s.notes for s in orch.steps if s.action == "run")]
+    assert "ingest" in run_agents and "risk_model" in run_agents
+
+
+def test_run_surfaces_stage_failure_not_swallowed():
+    """An ingest failure (zero rows) surfaces as BLOCKED, not a silent success."""
+    import dataclasses
+    empty = pa.table(
+        {f.name: [] for f in dataclasses.fields(RawLoans)},
+        schema=schema_from_dataclass(RawLoans),
+    )
+    gate = ApprovalGate(auto_approve=True)
+    orch = _orchestrator_with_stub(empty, gate=gate)
+    res = orch.run(AgentContext(lane="collections", data_handles={}))
+    assert res.status == Status.BLOCKED
+    assert "ingest" in res.notes.lower()
+
+
+# --------------------------------------------------------------------------- #
+# report — plain-language summary, non-empty, mentions the key facts.
+# --------------------------------------------------------------------------- #
+def test_report_is_non_empty_and_mentions_health(raw_table):
+    gate = ApprovalGate(auto_approve=True)
+    orch = _orchestrator_with_stub(raw_table, gate=gate)
+    ctx = AgentContext(lane="collections", data_handles={})
+    res = orch.run(ctx)
+    payload = getattr(orch, "_final_ctx", ctx).data_handles[res.artifact_ref]
+    text = orch.report(payload)
+    assert isinstance(text, str) and len(text) > 20
+    assert "NPL" in text
+    assert "Alerts" in text
+
+
+def test_report_handles_empty_payload():
+    """An empty payload still produces a readable report (no crash)."""
+    orch = Orchestrator(MockLLM())
+    text = orch.report({"work_list": [], "portfolio_health": {"npl_ratio": 0.0, "vintage_default_rate": {}, "status_mix": {}}, "alerts": []})
+    assert isinstance(text, str) and "0 accounts" in text
+
+
+# --------------------------------------------------------------------------- #
+# CLI — end-to-end offline run writes the payload JSON.
+# --------------------------------------------------------------------------- #
+def test_cli_writes_dashboard_payload(tmp_path, monkeypatch):
+    """`python -m waspada.agents` (offline) writes a valid payload JSON."""
+    from waspada.agents.__main__ import main
+
+    out = tmp_path / "payload.json"
+    # Ensure offline path (no BQ creds) + auto-approve.
+    monkeypatch.delenv("BQ_PROJECT", raising=False)
+    code = main(["--lane", "collections", "--auto-approve", "--top-n", "10", "--out", str(out)])
+    assert code == 0
+    assert out.exists()
+    import json
+    payload = json.loads(out.read_text())
+    assert set(payload.keys()) == {"work_list", "portfolio_health", "alerts"}
+    assert len(payload["work_list"]) <= 10
