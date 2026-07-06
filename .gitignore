@@ -9,7 +9,8 @@ env/
 .pytest_cache/
 
 # --- Data & models (large; keep out of git) ---
-data/
+# Top-level data/ dumps only — NOT the waspada/data/ source package.
+/data/
 *.csv
 *.parquet
 *.feather
@@ -35,3 +36,5 @@ dist/
 # --- OS / editor ---
 .DS_Store
 Thumbs.db
+
+*.pptx
