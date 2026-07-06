@@ -117,26 +117,38 @@ envelopes (frm→to) so a full run can be reconstructed.
 
 ## Acceleration evidence — the "why GPU" proof (measured, honestly)
 
-The CPU-vs-GPU benchmark lives in [`data/benchmark.json`](data/benchmark.json),
-run on the real LendingClub-derived snapshot (336,916 train rows, 27 features):
+The CPU-vs-GPU benchmark lives in [`bench/LAST_RUN.json`](bench/LAST_RUN.json),
+produced by the reproducible harness `waspada/bench/harness.py`
+(`python bench/run_bench.py`). It runs the **real collections pipeline**
+(`build_features` → `train`/`predict`) on the synthetic 1M-loan portfolio at two
+row counts, timing each stage on each stack.
 
-| Stage | CPU (pandas/sklearn) | GPU (cuDF/cuML) | Speedup |
-|---|---|---|---|
-| BigQuery ingest | 35.91 s | — | (I/O bound; same path) |
-| Feature engineering | 0.268 s | 0.341 s | **0.79× (GPU slower)** |
-| Model training | 8.53 s | 7.30 s | **1.2×** |
+Last real run (CPU only — see honesty note below):
 
-**What this honestly shows:** at this data volume and feature count, the GPU
-does not yet win on feature engineering (cuDF's per-op overhead exceeds the
-compute saved on ~337k rows × 27 features) and only marginally wins on a linear
-model fit. The HACKATHON brief flags this risk explicitly: *"Weak speedup on
-trivial ops — the real GPU win needs heavier compute (joins, many-feature
-engineering, tree models)."* The benchmark harness to stress heavier workloads
-(WA-007) and a GPU tree model are on hold; the CPU path ships now and the GPU
-estimators are a drop-in (`train`/`predict` keep their signatures). The
-acceleration story is **architected and measured**, not claimed — the honest
-number today is "~1.2× on training; GPU feature engineering is slower at this
-scale pending a heavier workload."
+| Rows | Stage | CPU (pyarrow/sklearn) | GPU (cuDF/cuML) | Speedup |
+|---|---|---|---|---|
+| 100k | Feature engineering | ~0.21 s | not run here | — |
+| 100k | Model (train+predict) | ~12.0 s | not run here | — |
+| 1M | Feature engineering | ~1.46 s | not run here | — |
+| 1M | Model (train+predict) | ~27.1 s | not run here | — |
+
+**Honesty note (what was measured and what wasn't):** the worker container that
+runs CI has no GPU and no WSL launcher, so the GPU column here is
+`not_run`, **not** a fabricated time. The harness *requests* the GPU column on
+every run (`gpu=True`); on a host with WSL+RAPIDS the same call produces live
+cuDF feature numbers with no code change (`waspada/wsl.py:run_gpu` →
+`gpu/run_features.py`). The cuML **model** stage is not yet wired as code — the
+GPU estimator is a drop-in once added (`train`/`predict` keep their signatures),
+and until then the model stage is CPU-only and reported plainly. Exact numbers
+for your machine: `python bench/run_bench.py` (writes `bench/LAST_RUN.json`).
+
+The HACKATHON brief flags the GPU risk explicitly: *"Weak speedup on trivial
+ops — the real GPU win needs heavier compute (joins, many-feature engineering,
+tree models)."* The harness is built around the real collections workload
+(many-feature engineering + standardized one-hot + L2 logistic fit), so when the
+GPU column runs on the host the speedup it reports is the honest one for *this*
+workload — including a sub-1× result if cuDF's per-op overhead exceeds the
+compute saved at this scale.
 
 ---
 
@@ -163,8 +175,9 @@ waspada/
     └── __main__.py        # CLI: python -m waspada.agents (WA-010)
 dashboard/                 # React/TS EWS dashboard (Kirana, WA-011)
 gpu/                       # WSL entry points for cuDF/cuML (on hold)
-tests/                     # 101 passing tests (1 skipped: live BQ smoke)
-data/benchmark.json        # measured CPU-vs-GPU numbers
+bench/                     # WA-007 benchmark harness + committed LAST_RUN.json
+tests/                     # 108 passing tests (1 skipped: live BQ smoke)
+data/benchmark.json        # stale placeholder — real numbers in bench/LAST_RUN.json
 backlog/                   # ticket specs (WA-001..WA-012)
 ```
 
@@ -246,7 +259,7 @@ python -m pytest tests/ -v          # 101 passed, 1 skipped (live BQ smoke)
 | WA-004 | Collections features + label (cuDF + pyarrow) | ✅ done |
 | WA-005 | Risk model (CPU adaptation) | ✅ done |
 | WA-006 | Ranking, segmentation, work-list, alerts | ✅ done |
-| WA-007 | CPU-vs-GPU benchmark harness | ⏸ on hold (GPU) |
+| WA-007 | CPU-vs-GPU benchmark harness | ✅ done (CPU measured; GPU wired via WSL) |
 | WA-008 | Agent framework + ApprovalGate | ✅ done |
 | WA-009 | Pipeline agents (ingest/analytics/risk-model/insight) | ✅ done |
 | WA-010 | Orchestrator + CLI | ✅ done |

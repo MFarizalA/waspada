@@ -1,0 +1,76 @@
+{
+  "version": "1.0",
+  "generated_at": "2026-07-06T17:40:33Z",
+  "as_of": "2024-12-01",
+  "stages": [
+    "features",
+    "model"
+  ],
+  "results": [
+    {
+      "row_count": 100000,
+      "raw_source": "data/loans.parquet",
+      "stages": {
+        "features": {
+          "cpu_s": 0.2121,
+          "gpu_s": null,
+          "speedup_x": null,
+          "peak_vram_mib": null,
+          "status": "ok",
+          "notes": [
+            "CPU: build_features() pyarrow over 100000 rows.",
+            "GPU: wsl launcher unavailable \u2014 not run."
+          ]
+        },
+        "model": {
+          "cpu_s": 12.0338,
+          "gpu_s": null,
+          "speedup_x": null,
+          "peak_vram_mib": null,
+          "status": "ok",
+          "notes": [
+            "CPU: train()+predict() sklearn LogisticRegression (train=10.994s, predict=1.040s) over 100000 rows.",
+            "GPU: cuML model not yet implemented; CPU sklearn timing is the only model stage measured."
+          ]
+        }
+      },
+      "notes": []
+    },
+    {
+      "row_count": 1000000,
+      "raw_source": "data/loans.parquet",
+      "stages": {
+        "features": {
+          "cpu_s": 1.461,
+          "gpu_s": null,
+          "speedup_x": null,
+          "peak_vram_mib": null,
+          "status": "ok",
+          "notes": [
+            "CPU: build_features() pyarrow over 1000000 rows.",
+            "GPU: wsl launcher unavailable \u2014 not run."
+          ]
+        },
+        "model": {
+          "cpu_s": 27.075,
+          "gpu_s": null,
+          "speedup_x": null,
+          "peak_vram_mib": null,
+          "status": "ok",
+          "notes": [
+            "CPU: train()+predict() sklearn LogisticRegression (train=18.923s, predict=8.152s) over 1000000 rows.",
+            "GPU: cuML model not yet implemented; CPU sklearn timing is the only model stage measured."
+          ]
+        }
+      },
+      "notes": []
+    }
+  ],
+  "notes": [
+    "raw source: data/loans.parquet (1000000 rows total).",
+    "as_of: 2024-12-01.",
+    "CPU stack: pyarrow + sklearn (always available).",
+    "GPU stack: cuDF via WSL/RAPIDS (gpu=True, wsl_available=False).",
+    "cuML model stage is CPU-only until a GPU estimator is wired (reported not_run, not faked)."
+  ]
+}

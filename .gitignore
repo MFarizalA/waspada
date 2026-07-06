@@ -33,6 +33,11 @@ node_modules/
 dist/
 .vite/
 
+# --- Benchmark scratch (WA-007) ---
+# Per-run artifacts are large and machine-specific; only bench/LAST_RUN.json
+# (the committed snapshot for the README) is tracked.
+bench/results/
+
 # --- OS / editor ---
 .DS_Store
 Thumbs.db
