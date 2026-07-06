@@ -4,6 +4,7 @@ dist-ssr
 *.local
 .vite
 .DS_Store
+*.tsbuildinfo
 dashboard/node_modules/
 dashboard/dist/
 dashboard/tsconfig*.tsbuildinfo
