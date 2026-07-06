@@ -57,26 +57,14 @@ Origination and collections are the same problem — *score entities by default
 risk → rank → recommend, human approves* — differing only at three points. So
 we build one engine + one set of agents and run it in two lanes.
 
-```
-                         ┌─────────────────────────────────────────────┐
-                         │              ORCHESTRATOR (primary)          │
-                         │   plan → run → report · holds the gate       │
-                         └──────┬──────────────────────────────────────┘
-                                │  AgentContext (artifacts via handles)
-            ┌───────────────────┼───────────────────┬──────────────────┐
-            ▼                   ▼                   ▼                  ▼
-       ┌─────────┐         ┌──────────┐        ┌──────────┐       ┌──────────┐
-       │ INGEST  │ ──────▶ │ ANALYTICS│ ─────▶ │RISK-MODEL│ ─────▶│ INSIGHT  │
-       │  agent  │  RawLoans│  agent   │FeatureF│  agent   │Scored │  agent   │
-       │ BigQuery│  Arrow   │ cuDF/skl │ Arrow  │ cuML/skl │Accts  │ rank+alert│
-       └─────────┘         └──────────┘        └──────────┘       └────┬─────┘
-                                                                        │
-                                                          ApprovalGate ◀──┤
-                                                                        ▼
-                                                          DashboardPayload (JSON)
-                                                                        │
-                                                                        ▼
-                                                            React/TS dashboard
+```mermaid
+flowchart LR
+    O["Orchestrator<br/>plans · runs · holds the gate"] --> I["Ingest agent<br/>BigQuery"]
+    I -->|RawLoans| A["Analytics agent<br/>cuDF"]
+    A -->|FeatureFrame| R["Risk-Model agent<br/>cuML"]
+    R -->|ScoredAccounts| N["Insight agent<br/>rank + alert"]
+    N --> G["Approval Gate<br/>human"]
+    G --> D["Dashboard"]
 ```
 
 **Frozen data contract** (`waspada/schema.py`) — four types locked once so every
