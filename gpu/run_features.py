@@ -67,6 +67,11 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default=DEFAULT_SLICE_ROWS,
         help=f"rows per VRAM slice (default {DEFAULT_SLICE_ROWS})",
     )
+    p.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="build features on GPU but skip parquet write (avoids VRAM crash on 4GB cards during write)",
+    )
     return p.parse_args(argv)
 
 
@@ -136,6 +141,10 @@ def main(argv: list[str] | None = None) -> int:
         parts.append(_build_slice(slc, as_of, default_set_lower))
 
     feats = cudf.concat(parts, ignore_index=True) if len(parts) > 1 else parts[0]
+
+    if args.dry_run:
+        print(f"[dry-run] built {len(feats)} FeatureFrame rows on GPU (skipped parquet write)")
+        return 0
 
     os.makedirs(os.path.dirname(os.path.abspath(args.out)), exist_ok=True)
     feats.to_parquet(args.out)

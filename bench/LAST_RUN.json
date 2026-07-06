@@ -1,6 +1,6 @@
 {
   "version": "1.0",
-  "generated_at": "2026-07-06T17:40:33Z",
+  "generated_at": "2026-07-06T18:01:18Z",
   "as_of": "2024-12-01",
   "stages": [
     "features",
@@ -9,27 +9,28 @@
   "results": [
     {
       "row_count": 100000,
-      "raw_source": "data/loans.parquet",
+      "raw_source": "data\\loans.parquet",
       "stages": {
         "features": {
-          "cpu_s": 0.2121,
-          "gpu_s": null,
-          "speedup_x": null,
-          "peak_vram_mib": null,
+          "cpu_s": 0.1649,
+          "gpu_s": 3.859,
+          "speedup_x": 0.043,
+          "peak_vram_mib": 0,
           "status": "ok",
           "notes": [
             "CPU: build_features() pyarrow over 100000 rows.",
-            "GPU: wsl launcher unavailable \u2014 not run."
+            "GPU: cuDF feature build via gpu/run_features.py (WSL/RAPIDS).",
+            "peak VRAM (nvidia-smi): 0 MiB"
           ]
         },
         "model": {
-          "cpu_s": 12.0338,
+          "cpu_s": 2.4609,
           "gpu_s": null,
           "speedup_x": null,
           "peak_vram_mib": null,
           "status": "ok",
           "notes": [
-            "CPU: train()+predict() sklearn LogisticRegression (train=10.994s, predict=1.040s) over 100000 rows.",
+            "CPU: train()+predict() sklearn LogisticRegression (train=0.803s, predict=1.658s) over 100000 rows.",
             "GPU: cuML model not yet implemented; CPU sklearn timing is the only model stage measured."
           ]
         }
@@ -38,27 +39,28 @@
     },
     {
       "row_count": 1000000,
-      "raw_source": "data/loans.parquet",
+      "raw_source": "data\\loans.parquet",
       "stages": {
         "features": {
-          "cpu_s": 1.461,
-          "gpu_s": null,
-          "speedup_x": null,
-          "peak_vram_mib": null,
+          "cpu_s": 5.8178,
+          "gpu_s": 4.8467,
+          "speedup_x": 1.2,
+          "peak_vram_mib": 0,
           "status": "ok",
           "notes": [
             "CPU: build_features() pyarrow over 1000000 rows.",
-            "GPU: wsl launcher unavailable \u2014 not run."
+            "GPU: cuDF feature build via gpu/run_features.py (WSL/RAPIDS).",
+            "peak VRAM (nvidia-smi): 0 MiB"
           ]
         },
         "model": {
-          "cpu_s": 27.075,
+          "cpu_s": 26.0897,
           "gpu_s": null,
           "speedup_x": null,
           "peak_vram_mib": null,
           "status": "ok",
           "notes": [
-            "CPU: train()+predict() sklearn LogisticRegression (train=18.923s, predict=8.152s) over 1000000 rows.",
+            "CPU: train()+predict() sklearn LogisticRegression (train=9.748s, predict=16.342s) over 1000000 rows.",
             "GPU: cuML model not yet implemented; CPU sklearn timing is the only model stage measured."
           ]
         }
@@ -67,10 +69,10 @@
     }
   ],
   "notes": [
-    "raw source: data/loans.parquet (1000000 rows total).",
+    "raw source: data\\loans.parquet (1000000 rows total).",
     "as_of: 2024-12-01.",
     "CPU stack: pyarrow + sklearn (always available).",
-    "GPU stack: cuDF via WSL/RAPIDS (gpu=True, wsl_available=False).",
+    "GPU stack: cuDF via WSL/RAPIDS (gpu=True, wsl_available=True).",
     "cuML model stage is CPU-only until a GPU estimator is wired (reported not_run, not faked)."
   ]
 }

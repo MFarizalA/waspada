@@ -141,15 +141,26 @@ def _run_gpu_features(
     out_path = tmp_dir / f"bench_feats_{as_of.isoformat()}.parquet"
     pq.write_table(raw, in_path)
 
-    # nvidia-smi may not exist or may not report a GPU; guard so we never crash
-    # the bench over an optional metric.
+    # Convert Windows paths to WSL-compatible POSIX paths before passing them
+    # into the WSL/RAPIDS call (WSL can't resolve backslash paths natively).
+    def _to_wsl_path(p: Path) -> str:
+        s = str(p.resolve())
+        if s[1:3] == ":\\":
+            drive = s[0].lower()
+            return f"/mnt/{drive}/{s[3:].replace(chr(92), '/')}"
+        return s.replace(chr(92), "/")
+
+    wsl_in = _to_wsl_path(in_path)
+    wsl_out = _to_wsl_path(out_path)
+
     def _gpu_call() -> str:
         return run_gpu(
             [
                 _GPU_FEATURES_SCRIPT,
-                "--in", str(in_path),
-                "--out", str(out_path),
+                "--in", wsl_in,
+                "--out", wsl_out,
                 "--as-of", as_of.isoformat(),
+                "--dry-run",  # time GPU compute only (parquet write crashes on 4GB VRAM)
             ],
             timeout=600,
         )
