@@ -13,12 +13,16 @@ from typing import List, Optional, Sequence
 
 # The RAPIDS interpreter inside WSL (proven path; see HACKATHON.md).
 DEFAULT_PYTHON = "/root/rapids/bin/python"
+# RAPIDS lives under /root, and the default WSL user is non-root, so we must
+# invoke as root (-u root) or the interpreter is permission-denied.
+DEFAULT_WSL_USER = "root"
 
 
 def run_gpu(
     args: Sequence[str],
     *,
     python: str = DEFAULT_PYTHON,
+    user: str = DEFAULT_WSL_USER,
     check: bool = True,
     timeout: Optional[float] = None,
 ) -> str:
@@ -41,7 +45,7 @@ def run_gpu(
             "host with WSL+RAPIDS, not inside this container. "
             "(GPU steps run via WSL; see HACKATHON.md option A.)"
         )
-    cmd: List[str] = ["wsl", "-e", python, *list(args)]
+    cmd: List[str] = ["wsl", "-u", user, "-e", python, *list(args)]
     proc = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
     if check and proc.returncode != 0:
         raise RuntimeError(
