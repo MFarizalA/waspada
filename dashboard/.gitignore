@@ -1,0 +1,9 @@
+node_modules
+dist
+dist-ssr
+*.local
+.vite
+.DS_Store
+dashboard/node_modules/
+dashboard/dist/
+dashboard/tsconfig*.tsbuildinfo

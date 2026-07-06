@@ -1,0 +1,56 @@
+{
+  "work_list": [
+    { "loan_id": "LC-48201", "p_default": 0.91, "score_band": "Q5", "segment": { "product": "installment", "region": "TX" }, "recommended_action": "call" },
+    { "loan_id": "LC-51844", "p_default": 0.87, "score_band": "Q5", "segment": { "product": "installment", "region": "FL" }, "recommended_action": "call" },
+    { "loan_id": "LC-47233", "p_default": 0.84, "score_band": "Q5", "segment": { "product": "installment", "region": "TX" }, "recommended_action": "call" },
+    { "loan_id": "LC-50010", "p_default": 0.78, "score_band": "Q5", "segment": { "product": "revolving", "region": "CA" }, "recommended_action": "call" },
+    { "loan_id": "LC-49887", "p_default": 0.72, "score_band": "Q4", "segment": { "product": "installment", "region": "NY" }, "recommended_action": "watch" },
+    { "loan_id": "LC-46120", "p_default": 0.68, "score_band": "Q4", "segment": { "product": "revolving", "region": "IL" }, "recommended_action": "watch" },
+    { "loan_id": "LC-52301", "p_default": 0.61, "score_band": "Q4", "segment": { "product": "installment", "region": "GA" }, "recommended_action": "watch" },
+    { "loan_id": "LC-45088", "p_default": 0.55, "score_band": "Q3", "segment": { "product": "installment", "region": "TX" }, "recommended_action": "watch" },
+    { "loan_id": "LC-48900", "p_default": 0.47, "score_band": "Q3", "segment": { "product": "revolving", "region": "WA" }, "recommended_action": "watch" },
+    { "loan_id": "LC-43310", "p_default": 0.39, "score_band": "Q2", "segment": { "product": "installment", "region": "OH" }, "recommended_action": "auto-cure" },
+    { "loan_id": "LC-47550", "p_default": 0.28, "score_band": "Q2", "segment": { "product": "installment", "region": "PA" }, "recommended_action": "auto-cure" },
+    { "loan_id": "LC-42017", "p_default": 0.18, "score_band": "Q1", "segment": { "product": "revolving", "region": "MA" }, "recommended_action": "auto-cure" }
+  ],
+  "portfolio_health": {
+    "npl_ratio": 0.122,
+    "vintage_default_rate": {
+      "2019": 0.061,
+      "2020": 0.054,
+      "2021": 0.083,
+      "2022": 0.113,
+      "2023": 0.137
+    },
+    "status_mix": {
+      "Current": 0.641,
+      "Late (16-30)": 0.118,
+      "Late (31-60)": 0.072,
+      "Late (61-90)": 0.043,
+      "Charged Off": 0.126
+    }
+  },
+  "alerts": [
+    {
+      "metric": "npl_ratio",
+      "value": 0.252,
+      "threshold": 0.150,
+      "message": "TX installment NPL ratio above portfolio threshold — 3 accounts in active deterioration.",
+      "segment": { "product": "installment", "region": "TX" }
+    },
+    {
+      "metric": "vintage_default_rate",
+      "value": 0.137,
+      "threshold": 0.100,
+      "message": "2023 vintage default rate above threshold — recent origination cohort underperforming.",
+      "segment": null
+    },
+    {
+      "metric": "npl_ratio",
+      "value": 0.088,
+      "threshold": 0.150,
+      "message": "Portfolio NPL ratio within tolerance.",
+      "segment": null
+    }
+  ]
+}

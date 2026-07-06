@@ -1,0 +1,120 @@
+.panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: var(--sp-5) var(--sp-6);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+}
+
+.title {
+  margin: 0;
+  font-size: 1.125rem;
+  font-weight: 650;
+}
+
+.breachBadge {
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 2px var(--sp-2);
+  border-radius: 999px;
+  background: rgba(185, 28, 28, 0.12);
+  color: var(--sev-critical);
+}
+
+.list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+}
+
+.empty {
+  margin: 0;
+  padding: var(--sp-4);
+  text-align: center;
+  font-size: 0.88rem;
+  color: var(--text-subtle);
+  background: var(--surface-muted);
+  border-radius: var(--radius);
+}
+
+.alertRow {
+  padding: var(--sp-3) var(--sp-4);
+  background: var(--surface-muted);
+  border-radius: var(--radius-sm);
+  border-left: 4px solid var(--text-subtle);
+}
+
+.rowTop {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
+  margin-bottom: var(--sp-2);
+}
+
+.severityTag {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px var(--sp-2);
+  border-radius: 4px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.metric {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.segment {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  margin-left: auto;
+}
+
+.message {
+  margin: 0 0 var(--sp-2);
+  font-size: 0.88rem;
+  line-height: 1.45;
+  color: var(--text);
+}
+
+.stats {
+  display: flex;
+  gap: var(--sp-5);
+  margin: 0;
+}
+
+.stats > div {
+  display: flex;
+  flex-direction: column;
+}
+
+.stats dt {
+  font-size: 0.68rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-subtle);
+}
+
+.stats dd {
+  margin: 0;
+  font-size: 0.85rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}

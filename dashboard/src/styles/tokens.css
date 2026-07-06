@@ -1,0 +1,136 @@
+/**
+ * Pasar design tokens — WASPADA's shared design system. Primary brand: teal.
+ * These are the single source of styling truth for the dashboard; components
+ * reference tokens, never hard-coded hex values. Keeps the UI consistent and
+ * cheap-Android/3G friendly (one stylesheet, no runtime CSS-in-JS).
+ */
+
+:root {
+  /* Brand */
+  --pasar-teal-50:  #f0fdfa;
+  --pasar-teal-100: #ccfbf1;
+  --pasar-teal-500: #0d9488;
+  --pasar-teal-600: #0f766e;
+  --pasar-teal-700: #115e59;
+
+  /* Risk band ramp — low to high, color-blind safe (teal → amber → red) */
+  --risk-low:      #0d9488;   /* Q1-Q2 */
+  --risk-moderate: #ca8a04;   /* Q3 */
+  --risk-elevated: #d97706;   /* Q4 */
+  --risk-high:     #b91c1c;   /* Q5 */
+
+  /* Alert severity (derived; severity.ts) */
+  --sev-critical:  #b91c1c;
+  --sev-high:      #c2410c;
+  --sev-moderate:  #b45309;
+  --sev-low:       #0f766e;
+  --sev-info:      #475569;
+
+  /* Action badge palette */
+  --action-call-fg:       #ffffff;
+  --action-call-bg:       #b91c1c;
+  --action-watch-fg:      #1e293b;
+  --action-watch-bg:      #fef3c7;
+  --action-autocure-fg:   #ffffff;
+  --action-autocure-bg:   #0f766e;
+
+  /* Neutrals (light) */
+  --bg:               #f8fafc;
+  --surface:          #ffffff;
+  --surface-muted:    #f1f5f9;
+  --border:           #e2e8f0;
+  --border-strong:    #cbd5e1;
+  --text:             #0f172a;
+  --text-muted:       #475569;
+  --text-subtle:      #64748b;
+
+  /* Chart */
+  --chart-bar:        #0d9488;
+  --chart-bar-trend:  #b91c1c;
+  --chart-track:      #e2e8f0;
+
+  /* Shape */
+  --radius-sm: 6px;
+  --radius:    10px;
+  --radius-lg: 14px;
+
+  /* Type */
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+               "Helvetica Neue", Arial, "Noto Sans", sans-serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+
+  /* Spacing scale (4px base) */
+  --sp-1: 4px;  --sp-2: 8px;  --sp-3: 12px;
+  --sp-4: 16px; --sp-5: 20px; --sp-6: 24px; --sp-8: 32px;
+
+  /* Focus ring — accessible, visible on any bg */
+  --focus-ring: 0 0 0 3px rgba(13, 148, 136, 0.45);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg:            #0b1220;
+    --surface:       #111a2e;
+    --surface-muted: #16213a;
+    --border:        #23304d;
+    --border-strong: #324463;
+    --text:          #e6edf7;
+    --text-muted:    #aab6cc;
+    --text-subtle:   #8896b0;
+
+    --action-watch-fg: #fef3c7;
+    --action-watch-bg: #4a3a12;
+
+    --chart-track: #23304d;
+  }
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html, body, #root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-sans);
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+}
+
+/* Accessible focus everywhere */
+:where(button, a, [tabindex], input, select, textarea):focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+  border-radius: var(--radius-sm);
+}
+
+/* Respect reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    transition-duration: 0.001ms !important;
+  }
+}
+
+.visually-hidden {
+  position: absolute !important;
+  width: 1px; height: 1px;
+  padding: 0; margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}

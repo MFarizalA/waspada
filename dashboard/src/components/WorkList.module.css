@@ -1,0 +1,164 @@
+.workList {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+
+.header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--sp-4);
+  padding: var(--sp-5) var(--sp-6) var(--sp-4);
+  border-bottom: 1px solid var(--border);
+}
+
+.title {
+  margin: 0;
+  font-size: 1.125rem;
+  font-weight: 650;
+}
+
+.subtitle {
+  margin: var(--sp-1) 0 0;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+.controls {
+  display: flex;
+  gap: var(--sp-3);
+  align-items: center;
+}
+
+.topNLabel {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+.topNSelect {
+  padding: var(--sp-1) var(--sp-2);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text);
+}
+
+.tableWrap {
+  overflow-x: auto;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+.table thead th {
+  text-align: left;
+  padding: var(--sp-3) var(--sp-4);
+  font-weight: 600;
+  font-size: 0.75rem;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--text-subtle);
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+.colRank { width: 2.5rem; text-align: right; }
+.colLoan { min-width: 7rem; }
+.colSegment { min-width: 10rem; }
+.colBand { width: 4.5rem; }
+.colOpen { width: 2rem; }
+
+.sortBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+  padding: 0;
+  border: none;
+  background: transparent;
+  font: inherit;
+  font-size: 0.75rem;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  font-weight: 600;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.sortIcon {
+  color: var(--pasar-teal-600);
+}
+
+.row {
+  cursor: pointer;
+  transition: background-color 120ms ease;
+}
+
+.row:hover,
+.row:focus-visible {
+  background: var(--surface-muted);
+  outline: none;
+}
+
+.row td {
+  padding: var(--sp-3) var(--sp-4);
+  border-bottom: 1px solid var(--border);
+  vertical-align: middle;
+}
+
+.row:last-child td {
+  border-bottom: none;
+}
+
+.rank {
+  text-align: right;
+  color: var(--text-subtle);
+  font-variant-numeric: tabular-nums;
+  font-size: 0.85rem;
+}
+
+.loanId {
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.segment {
+  color: var(--text-muted);
+}
+
+.score {
+  font-variant-numeric: tabular-nums;
+}
+
+.band {
+  text-align: center;
+}
+
+.openHint {
+  color: var(--text-subtle);
+  font-size: 1.1rem;
+  text-align: center;
+}
+
+/* Shared badge shape used by BandBadge / ActionBadge */
+:global(.badge) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 2.5rem;
+  padding: 2px var(--sp-2);
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+  line-height: 1.6;
+  white-space: nowrap;
+}

@@ -1,0 +1,130 @@
+.panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: var(--sp-5) var(--sp-6);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-5);
+}
+
+.title {
+  margin: 0;
+  font-size: 1.125rem;
+  font-weight: 650;
+}
+
+/* NPL headline card */
+.nplCard {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-6);
+  padding: var(--sp-5);
+  background: var(--surface-muted);
+  border-radius: var(--radius);
+}
+
+.nplLabel {
+  margin: 0;
+  font-size: 0.75rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-subtle);
+}
+
+.nplValue {
+  margin: var(--sp-1) 0 0;
+  font-size: 2.25rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+  color: var(--risk-elevated);
+}
+
+.nplHint {
+  margin: var(--sp-1) 0 0;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+
+.nplMeter {
+  flex: 0 0 160px;
+  height: 10px;
+  background: var(--chart-track);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.nplMeterFill {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, var(--risk-low), var(--risk-elevated));
+  border-radius: 999px;
+}
+
+/* Subsections */
+.subsection {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+}
+
+.subtitle {
+  margin: 0;
+  font-size: 0.8rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-subtle);
+  font-weight: 600;
+}
+
+.empty {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--text-subtle);
+}
+
+/* Bar lists (vintage + status mix) */
+.barList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+
+.barRow {
+  display: grid;
+  grid-template-columns: 5.5rem 1fr 3.5rem;
+  align-items: center;
+  gap: var(--sp-3);
+  font-size: 0.85rem;
+}
+
+.barLabel {
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.barTrack {
+  height: 14px;
+  background: var(--chart-track);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.barFill {
+  display: block;
+  height: 100%;
+  border-radius: 4px;
+  min-width: 2px;
+}
+
+.barValue {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  color: var(--text);
+}
