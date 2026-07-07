@@ -42,6 +42,19 @@ variable "fc_image_tag" {
   default     = "latest"
 }
 
+variable "rds_instance_type" {
+  description = "RDS PostgreSQL instance type. pg.n2.small.1 is the cheapest (free-tier eligible)."
+  type        = string
+  default     = "pg.n2.small.1"
+}
+
+variable "rds_password" {
+  description = "RDS PostgreSQL master password. Pass via TF_VAR_rds_password or secrets.tfvars. NEVER commit."
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
 # ---------------------------------------------------------------------------
 # OpenTofu auto-loads *.auto.tfvars or any *.tfvars passed via -var-file.
 # The convention here is: copy deploy/iac/secrets.tfvars.example -> secrets.tfvars,

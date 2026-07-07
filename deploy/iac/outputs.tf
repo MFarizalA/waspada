@@ -48,3 +48,19 @@ output "fc_execution_role_arn" {
   description = "ARN of the FC execution role."
   value       = alicloud_ram_role.fc_execution.arn
 }
+
+output "rds_connection_string" {
+  description = "RDS PostgreSQL connection string (for DATABASE_URL)."
+  value       = alicloud_db_instance.auth.connection_string
+}
+
+output "rds_port" {
+  description = "RDS PostgreSQL port."
+  value       = alicloud_db_instance.auth.port
+}
+
+output "rds_database_url" {
+  description = "Full DATABASE_URL for the app (postgres://user:pass@host:port/db). Constructed from RDS outputs."
+  value       = "postgres://waspada:${var.rds_password}@${alicloud_db_instance.auth.connection_string}:${alicloud_db_instance.auth.port}/waspada"
+  sensitive   = true
+}

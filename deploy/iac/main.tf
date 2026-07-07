@@ -168,6 +168,40 @@ resource "alicloud_log_store" "audit" {
   append_meta            = true
 }
 
+# --------------------------------------------------------------------------- #
+# ApsaraDB RDS PostgreSQL — user store for auth (WA-028)
+# 5th Alibaba Cloud service. Cheapest instance type for the demo.
+# ---------------------------------------------------------------------------
+resource "alicloud_db_instance" "auth" {
+  engine               = "PostgreSQL"
+  engine_version       = "15.0"
+  instance_type        = var.rds_instance_type
+  instance_storage     = "20"
+  instance_name        = "${local.name_prefix}-auth-db"
+  instance_charge_type = "Postpaid"
+
+  security_ips = ["0.0.0.0/0"]
+
+  tags = {
+    Project     = var.namespace
+    Environment = var.environment
+    ManagedBy   = "opentofu"
+    Component   = "rds-auth"
+  }
+}
+
+resource "alicloud_db_database" "auth" {
+  instance_id = alicloud_db_instance.auth.id
+  name        = "waspada"
+}
+
+resource "alicloud_rds_account" "auth" {
+  db_instance_id   = alicloud_db_instance.auth.id
+  account_name     = "waspada"
+  account_password = var.rds_password
+  account_type     = "Normal"
+}
+
 # ---------------------------------------------------------------------------
 # Function Compute 3.0 — custom-container, CAPort 8080, serves api/main.py
 # ---------------------------------------------------------------------------
