@@ -63,6 +63,36 @@
   border-radius: 999px;
 }
 
+/* Expected-loss headline card (WA-024). Mirrors the NPL card shape; the value
+   uses the risk-high tone so "rupiah at risk" reads as a loss, not a neutral
+   figure. The assumptions line is the credibility feature — always visible. */
+.elCard {
+  padding: var(--sp-5);
+  background: var(--surface-muted);
+  border-radius: var(--radius);
+}
+.elLabel {
+  margin: 0;
+  font-size: 0.75rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-subtle);
+}
+.elValue {
+  margin: var(--sp-1) 0 0;
+  font-size: 2rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+  color: var(--risk-high);
+}
+.elAssumptions {
+  margin: var(--sp-2) 0 0;
+  font-size: 0.72rem;
+  line-height: 1.45;
+  color: var(--text-muted);
+}
+
 /* Subsections */
 .subsection {
   display: flex;

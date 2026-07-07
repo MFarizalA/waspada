@@ -209,6 +209,14 @@
   gap: var(--sp-3);
 }
 
+/* A disputed account can be scrolled-to from the work-list (App anchor strip
+   + WorkList contested pill). Highlight the destination while it holds focus. */
+.dispute:focus-visible,
+.dispute:focus-within {
+  outline: var(--focus-ring);
+  outline-offset: 2px;
+}
+
 .disputeHead {
   display: flex;
   align-items: center;

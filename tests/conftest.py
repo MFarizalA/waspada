@@ -25,6 +25,9 @@ def _clean_env(monkeypatch):
         "OSS_BUCKET", "OSS_ENDPOINT", "OSS_KEY",
         "OSS_ACCESS_KEY_ID", "OSS_ACCESS_KEY_SECRET",
         "WASPADA_LANE",
+        # Strip live API keys so no test path reaches the network if a
+        # developer's .env happens to set them.
+        "DASHSCOPE_API_KEY", "GEMINI_API_KEY",
     ):
         monkeypatch.delenv(key, raising=False)
     monkeypatch.setenv("WASPADA_LLM_PROVIDER", "mock")

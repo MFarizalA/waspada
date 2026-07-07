@@ -82,11 +82,11 @@ class TestDashboardPayloadAgainstFixture:
         assert {"work_list", "portfolio_health", "alerts"} <= set(fixture_payload.keys())
 
     def test_fixture_work_list_records_match_contract(self, fixture_payload):
-        """F-PI-01: every work_list row has exactly the ScoredAccount fields."""
-        expected = {"loan_id", "p_default", "score_band", "segment", "recommended_action"}
+        """F-PI-01: every work_list row has the ScoredAccount fields (additive keys OK)."""
+        required = {"loan_id", "p_default", "score_band", "segment", "recommended_action"}
         for rec in fixture_payload["work_list"]:
-            assert set(rec.keys()) == expected, (
-                f"fixture row keys {set(rec.keys())} != contract {expected}"
+            assert required <= set(rec.keys()), (
+                f"fixture row keys {set(rec.keys())} missing required {required}"
             )
 
     def test_fixture_p_default_in_unit_interval(self, fixture_payload):

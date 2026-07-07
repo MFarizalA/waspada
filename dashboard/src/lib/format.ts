@@ -6,6 +6,24 @@ const PCT = new Intl.NumberFormat("en-US", {
   maximumFractionDigits: 1,
 });
 
+/**
+ * IDR currency formatter. The portfolio is Indonesian consumer credit, so EL
+ * is denominated in rupiah. We use the `en-ID` locale (thousands separators)
+ * with the ISO code "IDR" rather than the Rp symbol so it reads unambiguously in
+ * both light/dark themes and doesn't depend on a localised glyph rendering.
+ */
+const IDR = new Intl.NumberFormat("en-ID", {
+  style: "currency",
+  currency: "IDR",
+  minimumFractionDigits: 0,
+  maximumFractionDigits: 0,
+});
+
+/** 45_250_000 → "IDR 45,250,000". Rupiah is whole-rupiah — no fraction digits. */
+export function idr(v: number): string {
+  return IDR.format(Math.round(v));
+}
+
 /** 0.122 → "12.2%". Treats the input as a fraction in [0,1]. */
 export function pct(v: number): string {
   return PCT.format(v);

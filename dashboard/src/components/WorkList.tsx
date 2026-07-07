@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import type { ScoredAccount } from "@/types";
-import { segmentLabel } from "@/lib/format";
+import { segmentLabel, idr } from "@/lib/format";
 import { ActionBadge } from "@/components/ActionBadge";
 import { BandBadge, ScoreText } from "@/components/BandBadge";
 import styles from "./WorkList.module.css";
@@ -40,6 +40,9 @@ export function WorkList({ accounts, contestedLoanIds, onSelectAccount, onJumpTo
   const [sortDir, setSortDir] = useState<SortDir>("desc");
   const [topN, setTopN] = useState<(typeof TOP_N_OPTIONS)[number]>(25);
   const showContested = contestedLoanIds != null && contestedLoanIds.size > 0;
+  // WA-024: the EL column appears only when the payload carries expected_loss.
+  // Additive optional key — older payloads without it stay valid (graceful absence).
+  const showEl = accounts.some((a) => typeof a.expected_loss === "number");
 
   const sorted = useMemo(() => {
     const copy = [...accounts];
@@ -105,6 +108,9 @@ export function WorkList({ accounts, contestedLoanIds, onSelectAccount, onJumpTo
                 </button>
               </th>
               <th scope="col" className={styles.colBand}>Band</th>
+              {showEl && (
+                <th scope="col" className={styles.colEl}>Exp. loss</th>
+              )}
               <th scope="col">Action</th>
               {showContested && (
                 <th scope="col" className={styles.colContested}>
@@ -133,6 +139,13 @@ export function WorkList({ accounts, contestedLoanIds, onSelectAccount, onJumpTo
                 <td className={styles.segment}>{segmentLabel(account.segment)}</td>
                 <td className={styles.score}><ScoreText account={account} /></td>
                 <td className={styles.band}><BandBadge band={account.score_band} /></td>
+                {showEl && (
+                  <td className={styles.el}>
+                    {typeof account.expected_loss === "number"
+                      ? idr(account.expected_loss)
+                      : <span className={styles.elMissing}>—</span>}
+                  </td>
+                )}
                 <td><ActionBadge action={account.recommended_action} /></td>
                 {showContested && (
                   <td className={styles.colContested}>
@@ -158,6 +171,15 @@ export function WorkList({ accounts, contestedLoanIds, onSelectAccount, onJumpTo
           </tbody>
         </table>
       </div>
+
+      {showEl && (
+        <p className={styles.assumptions}>
+          <span className={styles.assumptionsLabel}>Expected loss assumptions:</span>{" "}
+          LGD&nbsp;=&nbsp;45% (Basel foundation-IRB, unsecured consumer).
+          EAD&nbsp;=&nbsp;outstanding_principal (amortizing installment).
+          EL&nbsp;=&nbsp;PD&nbsp;×&nbsp;LGD&nbsp;×&nbsp;EAD.
+        </p>
+      )}
     </section>
   );
 }

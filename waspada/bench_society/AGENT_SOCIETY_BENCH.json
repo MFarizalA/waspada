@@ -1,0 +1,133 @@
+{
+  "schema_version": "1",
+  "generated_at": "2026-07-07T17:36:37Z",
+  "n_accounts": 300,
+  "seed": 11,
+  "k_sweep": [
+    4,
+    8,
+    16
+  ],
+  "split": {
+    "method": "vintage",
+    "cutoff_year": 2023,
+    "train_years": [
+      2019,
+      2020,
+      2021,
+      2022
+    ],
+    "test_years": [
+      2023,
+      2024
+    ],
+    "note": "chronological vintage split (older \u2192 train, newer \u2192 test)"
+  },
+  "arms": {
+    "society": [
+      {
+        "arm": "society",
+        "status": "ran",
+        "reason": "",
+        "k": 4,
+        "n_test_accounts": 64,
+        "recall_at_call_tier": 0.5217391304347826,
+        "precision_at_call_tier": 0.9230769230769231,
+        "n_flagged_high_risk": 13,
+        "n_true_default": 23,
+        "n_true_default_caught": 12,
+        "llm_calls_total": 6,
+        "llm_calls_per_account": 0.09375,
+        "wall_clock_seconds": 0.8128337009693496,
+        "wall_clock_p50_seconds": 0.00020853600290138274,
+        "wall_clock_p95_seconds": 0.00034136429749196393,
+        "disputes_opened": 1,
+        "escalations": 1,
+        "escalation_rate": 1.0,
+        "brain": "sklearn+mock-deterministic"
+      },
+      {
+        "arm": "society",
+        "status": "ran",
+        "reason": "",
+        "k": 8,
+        "n_test_accounts": 64,
+        "recall_at_call_tier": 0.5217391304347826,
+        "precision_at_call_tier": 0.9230769230769231,
+        "n_flagged_high_risk": 13,
+        "n_true_default": 23,
+        "n_true_default_caught": 12,
+        "llm_calls_total": 10,
+        "llm_calls_per_account": 0.15625,
+        "wall_clock_seconds": 0.7860218730056658,
+        "wall_clock_p50_seconds": 0.0009056524868356064,
+        "wall_clock_p95_seconds": 0.0016302447431371546,
+        "disputes_opened": 1,
+        "escalations": 1,
+        "escalation_rate": 1.0,
+        "brain": "sklearn+mock-deterministic"
+      },
+      {
+        "arm": "society",
+        "status": "ran",
+        "reason": "",
+        "k": 16,
+        "n_test_accounts": 64,
+        "recall_at_call_tier": 0.5217391304347826,
+        "precision_at_call_tier": 0.9230769230769231,
+        "n_flagged_high_risk": 13,
+        "n_true_default": 23,
+        "n_true_default_caught": 12,
+        "llm_calls_total": 18,
+        "llm_calls_per_account": 0.28125,
+        "wall_clock_seconds": 0.487508724007057,
+        "wall_clock_p50_seconds": 0.0002043450076598674,
+        "wall_clock_p95_seconds": 0.0003132018056930974,
+        "disputes_opened": 1,
+        "escalations": 1,
+        "escalation_rate": 1.0,
+        "brain": "sklearn+mock-deterministic"
+      }
+    ],
+    "single_agent_baseline": {
+      "arm": "single_agent_baseline",
+      "status": "not_run",
+      "reason": "openai SDK not installed; install openai to run the live Qwen baseline.",
+      "k": null,
+      "n_test_accounts": 64,
+      "recall_at_call_tier": null,
+      "precision_at_call_tier": null,
+      "n_flagged_high_risk": 0,
+      "n_true_default": 0,
+      "n_true_default_caught": 0,
+      "llm_calls_total": 0,
+      "llm_calls_per_account": null,
+      "wall_clock_seconds": null,
+      "wall_clock_p50_seconds": null,
+      "wall_clock_p95_seconds": null,
+      "disputes_opened": 0,
+      "escalations": 0,
+      "escalation_rate": null,
+      "brain": "qwen3.7-plus"
+    }
+  },
+  "hero_number": {
+    "claim_shape": "society scores 100% of the book at the scoring tier with 0 LLM calls; bounded debate calls spent only on top-K contested accounts",
+    "society_llm_calls_per_account_min": 0.09375,
+    "society_llm_calls_per_account_k": 4,
+    "baseline_llm_calls_per_account": 1.0,
+    "calls_reduction_vs_baseline": 10.666666666666666,
+    "society_recall_at_call_tier": 0.5217391304347826,
+    "society_precision_at_call_tier": 0.9230769230769231,
+    "baseline_recall_at_call_tier": null,
+    "baseline_status": "not_run"
+  },
+  "notes": [
+    "Ground truth is label_default (eventual charge-off) \u2014 the cross-sectional label. Cure rates and true band migration are NOT computable from one snapshot and are never reported.",
+    "Society scoring tier is the real sklearn LogisticRegression (vintage-split, leakage-guarded); the debate tier uses a deterministic mock brain (model='mock-deterministic') grounded in real feature values \u2014 reproducible, not a coin flip.",
+    "Recall/precision are flat across K: the scoring tier is independent of K. K only raises the debate budget (calls/account) and escalation load \u2014 so the cheapest society point is the smallest K.",
+    "The single-agent baseline needs a live Qwen brain (DASHSCOPE_API_KEY + openai SDK). Without it the baseline reports not_run; its calls-per-account is 1.0 by construction (one call per account).",
+    "Multi-agent is NOT worth it for cheap, low-stakes decisions \u2014 loan-risk qualifies because each decision is high-value and tool-grounded. Naming the boundary is a credibility feature.",
+    "Baseline status=not_run: openai SDK not installed; install openai to run the live Qwen baseline."
+  ]
+}

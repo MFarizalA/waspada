@@ -74,6 +74,7 @@
 .colLoan { min-width: 7rem; }
 .colSegment { min-width: 10rem; }
 .colBand { width: 4.5rem; }
+.colEl { white-space: nowrap; }
 .colOpen { width: 2rem; }
 
 .sortBtn {
@@ -140,6 +141,30 @@
 
 .band {
   text-align: center;
+}
+
+/* Expected-loss column (WA-024): rupiah at risk, tabular for scan alignment. */
+.el {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.elMissing {
+  color: var(--text-subtle);
+}
+
+/* Assumptions footnote — the credibility feature; visible, not hidden in a tooltip. */
+.assumptions {
+  margin: 0;
+  padding: var(--sp-3) var(--sp-4) var(--sp-4);
+  font-size: 0.75rem;
+  line-height: 1.5;
+  color: var(--text-muted);
+  border-top: 1px solid var(--border);
+  background: var(--surface-muted);
+}
+.assumptionsLabel {
+  font-weight: 600;
+  color: var(--text);
 }
 
 .openHint {

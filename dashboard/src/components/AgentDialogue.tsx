@@ -70,7 +70,12 @@ function DisputeCard({ dispute }: { dispute: DisputeRecord }) {
   const res = RESOLUTIONS[dispute.resolution];
   const resolver = speakerOf(dispute.resolved_by);
   return (
-    <li className={styles.dispute} style={{ borderLeftColor: res.color }}>
+    <li
+      id={`debate-${dispute.loan_id}`}
+      className={styles.dispute}
+      style={{ borderLeftColor: res.color }}
+      tabIndex={-1}
+    >
       <div className={styles.disputeHead}>
         <span className={styles.loanId}>{dispute.loan_id}</span>
         <span className={styles.clash}>
@@ -134,7 +139,12 @@ export function AgentDialogue({ dialogue }: AgentDialogueProps) {
   if (dialogue === undefined) return null;
 
   return (
-    <section className={styles.panel} aria-labelledby="agent-dialogue-heading">
+    <section
+      id="agent-dialogue"
+      className={styles.panel}
+      aria-labelledby="agent-dialogue-heading"
+      tabIndex={-1}
+    >
       <header className={styles.header}>
         <div className={styles.headerText}>
           <h2 id="agent-dialogue-heading" className={styles.title}>
