@@ -1,7 +1,7 @@
 output "fc_url" {
   description = "Public Function Compute endpoint (fcapp.run). Append /api/health to verify."
   # http_trigger is a computed list of objects with url_internet.
-  value       = try("https://${alicloud_fcv3_trigger.http.http_trigger[0].url_internet}", "pending-deploy")
+  value = try("https://${alicloud_fcv3_trigger.http.http_trigger[0].url_internet}", "pending-deploy")
 }
 
 output "fc_function_name" {

@@ -2,11 +2,11 @@
 # Local values
 # ---------------------------------------------------------------------------
 locals {
-  name_prefix     = "${var.namespace}-${var.environment}"
-  acr_namespace   = replace(local.name_prefix, "-", "")
+  name_prefix   = "${var.namespace}-${var.environment}"
+  acr_namespace = replace(local.name_prefix, "-", "")
   # Personal Edition ACR default internet domain. Override via var.acr_registry_domain
   # if using Enterprise Edition or a different endpoint.
-  fc_image        = "${var.acr_registry_domain}/${local.acr_namespace}/api:${var.fc_image_tag}"
+  fc_image = "${var.acr_registry_domain}/${local.acr_namespace}/api:${var.fc_image_tag}"
 }
 
 # ---------------------------------------------------------------------------
@@ -64,8 +64,8 @@ resource "alicloud_cr_repo" "api" {
 # Uses the non-deprecated fields (role_name, assume_role_policy_document).
 # ---------------------------------------------------------------------------
 resource "alicloud_ram_role" "fc_execution" {
-  role_name                  = "${local.name_prefix}-fc-execution"
-  description                = "Execution role assumed by the WASPADA Function Compute app."
+  role_name                   = "${local.name_prefix}-fc-execution"
+  description                 = "Execution role assumed by the WASPADA Function Compute app."
   assume_role_policy_document = <<JSON
 {
   "Version": "1",
@@ -159,13 +159,13 @@ resource "alicloud_log_project" "audit" {
 }
 
 resource "alicloud_log_store" "audit" {
-  project_name           = alicloud_log_project.audit.project_name
-  logstore_name          = "audit"
-  retention_period       = 90 # days
-  shard_count            = 2
-  auto_split             = true
-  max_split_shard_count  = 4
-  append_meta            = true
+  project_name          = alicloud_log_project.audit.project_name
+  logstore_name         = "audit"
+  retention_period      = 90 # days
+  shard_count           = 2
+  auto_split            = true
+  max_split_shard_count = 4
+  append_meta           = true
 }
 
 # --------------------------------------------------------------------------- #
@@ -227,9 +227,9 @@ resource "alicloud_fcv3_function" "api" {
   role = alicloud_ram_role.fc_execution.arn
 
   log_config {
-    project                = alicloud_log_project.audit.project_name
-    logstore               = alicloud_log_store.audit.logstore_name
-    enable_request_metrics = true
+    project                 = alicloud_log_project.audit.project_name
+    logstore                = alicloud_log_store.audit.logstore_name
+    enable_request_metrics  = true
     enable_instance_metrics = false
   }
 
