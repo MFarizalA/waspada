@@ -71,13 +71,39 @@ export function App() {
           </p>
         )}
 
-        {state.status === "ready" && (
+        {state.status === "ready" && (() => {
+          const dialogue = state.payload.agent_dialogue ?? [];
+          const contestedIds = new Set(dialogue.map((d) => d.loan_id));
+          const jumpToDebate = (loanId: string) => {
+            document.getElementById(`debate-${loanId}`)?.scrollIntoView({
+              behavior: "smooth",
+              block: "center",
+            });
+          };
+          return (
           <>
+            {contestedIds.size > 0 && (
+              <div className={styles.contestAnchor}>
+                <button
+                  type="button"
+                  onClick={() =>
+                    document.getElementById("agent-dialogue-heading")?.scrollIntoView({
+                      behavior: "smooth",
+                      block: "start",
+                    })
+                  }
+                >
+                  ⚖ {contestedIds.size} {contestedIds.size === 1 ? "account" : "accounts"} contested — see debate ↓
+                </button>
+              </div>
+            )}
             <div className={styles.grid}>
               <div className={styles.colMain}>
                 <WorkList
                   accounts={state.payload.work_list}
+                  contestedLoanIds={contestedIds}
                   onSelectAccount={setSelected}
+                  onJumpToDebate={jumpToDebate}
                 />
               </div>
               <div className={styles.colSide}>
@@ -86,10 +112,11 @@ export function App() {
               </div>
             </div>
             <div className={styles.fullRow}>
-              <AgentDialogue dialogue={state.payload.agent_dialogue} />
+              <AgentDialogue dialogue={dialogue} />
             </div>
           </>
-        )}
+          );
+        })()}
       </main>
 
       <AccountDrawer account={selected} onClose={() => setSelected(null)} />

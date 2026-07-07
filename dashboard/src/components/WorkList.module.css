@@ -162,3 +162,24 @@
   line-height: 1.6;
   white-space: nowrap;
 }
+
+/* Contested pill — marks rows the Agent Society disputed. */
+.colContested {
+  white-space: nowrap;
+  text-align: center;
+}
+.contestedPill {
+  display: inline-block;
+  padding: 2px 8px;
+  border: 1px solid var(--sev-moderate);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--sev-moderate) 10%, transparent);
+  color: var(--text-primary);
+  font-size: 0.7rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.contestedPill:hover {
+  background: color-mix(in srgb, var(--sev-moderate) 20%, transparent);
+}

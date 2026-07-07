@@ -9,8 +9,12 @@ type SortDir = "asc" | "desc";
 
 interface WorkListProps {
   accounts: ScoredAccount[];
+  /** Loan_ids that the Agent Society disputed (agent_dialogue). Marked "contested". */
+  contestedLoanIds?: Set<string>;
   /** Controlled selection — opens the per-account drawer. */
   onSelectAccount: (account: ScoredAccount) => void;
+  /** Jump to the matching debate card in AgentDialogue (scrolls into view). */
+  onJumpToDebate?: (loanId: string) => void;
 }
 
 const TOP_N_OPTIONS = [10, 25, 50, 100] as const;
@@ -18,15 +22,24 @@ const TOP_N_OPTIONS = [10, 25, 50, 100] as const;
 /**
  * The ranked work-list. Sortable by p_default (the primary sort the analyst
  * uses: worst-first). Top-N selector caps the rendered rows — the work-list can
- * be large in production; we render only what's asked for, defaulting to top-10.
+ * be large in production; we render only what's asked for, defaulting to top-25
+ * so the Agent Society's contested rows surface alongside the standard ranking.
  *
  * Default sort is p_default DESC (highest-risk first), matching how the
  * pipeline emits the work_list (WA-006). The sort control lets the analyst flip
  * to ASC to surface the clean tail.
+ *
+ * Rows whose loan_id the Agent Society disputed are flagged "contested" — a pill
+ * that, when present, jumps to the matching debate card. The contest marker
+ * makes the audit/review outcome visible at a glance (e.g. an "Overridden" row
+ * no longer reads as a plain collector call). NOTE: the row's
+ * `recommended_action` itself is the frozen backend field (WA-006); reflecting
+ * the debate's resolved action in the work-list is a backend change (WA-014).
  */
-export function WorkList({ accounts, onSelectAccount }: WorkListProps) {
+export function WorkList({ accounts, contestedLoanIds, onSelectAccount, onJumpToDebate }: WorkListProps) {
   const [sortDir, setSortDir] = useState<SortDir>("desc");
-  const [topN, setTopN] = useState<(typeof TOP_N_OPTIONS)[number]>(10);
+  const [topN, setTopN] = useState<(typeof TOP_N_OPTIONS)[number]>(25);
+  const showContested = contestedLoanIds != null && contestedLoanIds.size > 0;
 
   const sorted = useMemo(() => {
     const copy = [...accounts];
@@ -93,6 +106,11 @@ export function WorkList({ accounts, onSelectAccount }: WorkListProps) {
               </th>
               <th scope="col" className={styles.colBand}>Band</th>
               <th scope="col">Action</th>
+              {showContested && (
+                <th scope="col" className={styles.colContested}>
+                  <span className="visually-hidden">Agent Society contest</span>
+                </th>
+              )}
               <th scope="col" className={styles.colOpen}><span className="visually-hidden">Open detail</span></th>
             </tr>
           </thead>
@@ -116,6 +134,24 @@ export function WorkList({ accounts, onSelectAccount }: WorkListProps) {
                 <td className={styles.score}><ScoreText account={account} /></td>
                 <td className={styles.band}><BandBadge band={account.score_band} /></td>
                 <td><ActionBadge action={account.recommended_action} /></td>
+                {showContested && (
+                  <td className={styles.colContested}>
+                    {contestedLoanIds!.has(account.loan_id) && (
+                      <button
+                        type="button"
+                        className={styles.contestedPill}
+                        title="This account was contested in the Agent Society debate"
+                        aria-label={`Account ${account.loan_id} was contested — jump to debate`}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onJumpToDebate?.(account.loan_id);
+                        }}
+                      >
+                        ⚖ contested
+                      </button>
+                    )}
+                  </td>
+                )}
                 <td className={styles.openHint} aria-hidden="true">›</td>
               </tr>
             ))}
