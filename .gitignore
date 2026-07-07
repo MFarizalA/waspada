@@ -45,3 +45,13 @@ Thumbs.db
 *.pptx
 .venv-qa/
 *.pdf
+
+# --- OpenTofu / Terraform (WA-027) ---
+# State files may contain sensitive values; never commit.
+*.tfstate
+*.tfstate.*
+# tfvars carry credentials (secrets.tfvars). Only *.tfvars.example is tracked.
+*.tfvars
+!secrets.tfvars.example
+.terraform/
+.terraform.lock.hcl
