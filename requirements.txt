@@ -21,3 +21,12 @@ mcp>=1.0                # local MCP server/client for the portfolio_stats tool
 
 # --- Utilities ---
 python-dotenv>=1.0
+
+# --- Auth (WA-028): JWT sessions + bcrypt password hashing ---
+PyJWT>=2.8
+passlib[bcrypt]>=1.7
+email-validator>=2.0
+# ApsaraDB RDS PostgreSQL driver. Only needed when DATABASE_URL points at a
+# postgres:// URL; the local-dev / test path uses stdlib sqlite3. Installed in
+# the deployed image (RDS) but optional for local dev.
+psycopg2-binary>=2.9

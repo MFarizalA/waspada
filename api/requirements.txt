@@ -9,3 +9,9 @@ python-dotenv>=1.0
 oss2>=2.18
 openai>=1.0
 mcp>=1.0
+PyJWT>=2.8
+passlib[bcrypt]>=1.7
+email-validator>=2.0
+# ApsaraDB RDS PostgreSQL driver (optional for local dev / tests, required when
+# DATABASE_URL points at postgres:// — see api/db.py).
+psycopg2-binary>=2.9

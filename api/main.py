@@ -15,9 +15,10 @@ from __future__ import annotations
 
 import json
 import sys
+from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 import uvicorn
@@ -32,7 +33,27 @@ from waspada.agents.base import ApprovalGate
 from waspada.agents.llm import MockLLM, get_llm
 from waspada.agents.protocol import AgentContext
 
-app = FastAPI(title="WASPADA API", version="1.0.0")
+# Auth (WA-028): JWT gate on protected routes + auth router.
+# ``init_db()`` is idempotent — it ensures the users / reset_tokens tables
+# exist on the configured store (ApsaraDB RDS PostgreSQL via DATABASE_URL,
+# or the SQLite local-dev fallback) before we try to seed.
+from api import db as db_mod
+from api.auth import current_user, router as auth_router, seed_default_user
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Create tables if needed, then seed a demo analyst on startup.
+
+    Idempotent: safe to run on every cold start against the same RDS instance.
+    """
+    db_mod.init_db()
+    seed_default_user()
+    yield
+
+
+app = FastAPI(title="WASPADA API", version="1.0.0", lifespan=lifespan)
+app.include_router(auth_router)
 
 # --- Serve the dashboard static files ---
 _DASHBOARD_DIST = _REPO / "dashboard" / "dist"
@@ -61,7 +82,7 @@ async def health():
 
 
 @app.post("/api/run")
-async def run_pipeline(brain: str = "mock"):
+async def run_pipeline(brain: str = "mock", _user: dict = Depends(current_user)):
     """Run the full agent pipeline on a synthetic snapshot.
 
     Returns the DashboardPayload + the plain-language analyst report.
