@@ -9,12 +9,14 @@ Lane-agnostic substrate both decision lanes build on:
     — the mockable reasoning surface (default brain is offline/deterministic).
   * Protocol: :class:`AgentContext`, :class:`AgentResult`, :class:`Handoff`,
     :class:`Step`, :class:`Status`.
+  * :class:`ArbiterAgent` — the Round-3 ruling agent (WA-016).
 
 WA-009 (pipeline agents) and WA-010 (orchestrator) cite these names
 verbatim. See :mod:`waspada.agents.protocol` for the wire contract.
 """
 from __future__ import annotations
 
+from .arbiter import ArbiterAgent
 from .base import Agent, ApprovalGate, Approved, Rejected, handoff
 from .ingest import IngestAgent
 from .insight import InsightAgent
@@ -44,6 +46,7 @@ __all__ = [
     "Step",
     "Status",
     # agents
+    "ArbiterAgent",
     "IngestAgent",
     "InsightAgent",
     "RiskAuditorAgent",

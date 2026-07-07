@@ -1,4 +1,4 @@
-"""Insight agent (WA-009 + WA-014) — work-list, portfolio health, alerts, summary.
+"""Insight agent (WA-009 + WA-014 + WA-016) — work-list, portfolio health, alerts, summary.
 
 Wraps :mod:`waspada.insight.ranking`. Reads the ScoredAccounts the risk-model
 agent published, builds the ranked work-list + portfolio health + alerts, and
@@ -6,13 +6,20 @@ assembles the :class:`~waspada.schema.DashboardPayload`. Calls the
 :class:`~waspada.agents.base.ApprovalGate` before publishing the work-list
 (humans in control). Always emits ≥1 human-readable alert string.
 
-WA-014 adds the dispute wiring: when the upstream :class:`RiskAuditorAgent`
+WA-014 added the dispute wiring: when the upstream :class:`RiskAuditorAgent`
 opened any :class:`~waspada.agents.protocol.Dispute`, they are serialized into
 ``payload["agent_dialogue"]`` (the frozen shape) and the agent additionally
 requests the ``resolve_risk_dispute`` gate action (distinct in the audit log
 from ``publish_work_list``). A run with open disputes returns
 :class:`~waspada.agents.protocol.Status.DISPUTED` so the orchestrator routes
 the run accordingly.
+
+WA-016 refinement: the orchestrator now closes every dispute (3-round debate)
+BEFORE insight runs. Insight therefore only requests ``resolve_risk_dispute``
+for genuinely OPEN disputes (those still carrying an empty ``resolution``) —
+closed disputes are serialized as-is into ``agent_dialogue`` without a
+redundant gate call. A caller running insight standalone with open disputes
+(the pre-WA-016 path) still gates them.
 """
 from __future__ import annotations
 
@@ -85,23 +92,30 @@ class InsightAgent(Agent):
             )
         self.step("approval_gate", notes=f"work-list approved (auto={decision.auto})")
 
-        # 5. Serialize any open disputes into agent_dialogue (the frozen shape).
+        # 5. Serialize all disputes (open or closed) into agent_dialogue.
         disputes: List[Dispute] = list(context.data_handles.get("risk_disputes") or [])
         dialogue = [d.to_dict() for d in disputes]
 
-        # 6. If disputes are live, request the resolve_risk_dispute gate action
-        #    (distinct from publish_work_list in the audit log). A rejection
-        #    here does NOT block the work-list (already released) — it leaves
-        #    the disputes open for a human to rule on; the run still completes,
-        #    flagged DISPUTED so the orchestrator surfaces it.
-        if disputes:
+        # 6. Gate only the genuinely OPEN disputes — those still carrying an
+        #    empty ``resolution`` (WA-016 closes disputes in the orchestrator
+        #    before insight runs; a standalone insight call with open disputes
+        #    still gates them). Closed disputes are already decided; re-gating
+        #    them would be a redundant audit-log entry.
+        open_disputes = [d for d in disputes if not d.resolution]
+        if open_disputes:
             disp_decision = self.gate.request(
                 "resolve_risk_dispute",
-                rationale=f"{len(disputes)} open dispute(s) need a human ruling",
+                rationale=f"{len(open_disputes)} open dispute(s) need a human ruling",
             )
             self.step(
                 "dispute_gate",
                 notes=f"resolve_risk_dispute {'approved' if isinstance(disp_decision, Approved) else 'left open'} (auto={getattr(disp_decision, 'auto', False)})",
+            )
+        elif disputes:
+            n_closed = len(disputes)
+            self.step(
+                "dispute_gate",
+                notes=f"{n_closed} dispute(s) already resolved upstream; no gate call",
             )
 
         # 7. Assemble the payload + the always-present alert summary string.
@@ -114,9 +128,10 @@ class InsightAgent(Agent):
         handle = "dashboard_payload"
         context.data_handles[handle] = payload
         context.data_handles["alert_summary"] = summary
-        # A run with open disputes is DISPUTED (the orchestrator routes it);
-        # otherwise OK. (Disputes opened in WA-014 Round 1 carry an open
-        # resolution; WA-016 closes them via the rebuttal/arbiter rounds.)
+        # A run with disputes is DISPUTED (the orchestrator routes it);
+        # otherwise OK. WA-016 closes disputes but they remain on the
+        # transcript (agent_dialogue) so the run is still flagged DISPUTED
+        # for routing — the payload carries the closed negotiation record.
         terminal = Status.DISPUTED if disputes else Status.OK
         return AgentResult(
             status=terminal, agent=self.name, artifact_ref=handle,
