@@ -90,6 +90,11 @@
   gap: var(--sp-6);
 }
 
+/* Full-width row below the grid (the Agent Society debate panel). */
+.fullRow {
+  margin-top: var(--sp-6);
+}
+
 @media (max-width: 960px) {
   .grid {
     grid-template-columns: minmax(0, 1fr);

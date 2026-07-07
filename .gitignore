@@ -42,4 +42,6 @@ bench/results/
 .DS_Store
 Thumbs.db
 
-*.pptx.venv-qa/
+*.pptx
+.venv-qa/
+*.pdf

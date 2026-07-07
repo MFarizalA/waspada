@@ -5,6 +5,7 @@ import { loadPayload } from "@/lib/payload";
 import { WorkList } from "@/components/WorkList";
 import { PortfolioHealth } from "@/components/PortfolioHealth";
 import { Alerts } from "@/components/Alerts";
+import { AgentDialogue } from "@/components/AgentDialogue";
 import { AccountDrawer } from "@/components/AccountDrawer";
 import styles from "./App.module.css";
 
@@ -71,18 +72,23 @@ export function App() {
         )}
 
         {state.status === "ready" && (
-          <div className={styles.grid}>
-            <div className={styles.colMain}>
-              <WorkList
-                accounts={state.payload.work_list}
-                onSelectAccount={setSelected}
-              />
+          <>
+            <div className={styles.grid}>
+              <div className={styles.colMain}>
+                <WorkList
+                  accounts={state.payload.work_list}
+                  onSelectAccount={setSelected}
+                />
+              </div>
+              <div className={styles.colSide}>
+                <PortfolioHealth health={state.payload.portfolio_health} />
+                <Alerts alerts={state.payload.alerts} />
+              </div>
             </div>
-            <div className={styles.colSide}>
-              <PortfolioHealth health={state.payload.portfolio_health} />
-              <Alerts alerts={state.payload.alerts} />
+            <div className={styles.fullRow}>
+              <AgentDialogue dialogue={state.payload.agent_dialogue} />
             </div>
-          </div>
+          </>
         )}
       </main>
 

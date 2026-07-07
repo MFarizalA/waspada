@@ -5,8 +5,8 @@ Lane-agnostic substrate both decision lanes build on:
   * :class:`Agent` — base class (name/role, tools registry, step log).
   * :class:`ApprovalGate` + :class:`Approved` / :class:`Rejected` — the
     human-in-loop checkpoint, with auto-approve logged distinctly.
-  * :class:`MockLLM` / :class:`GeminiLLM` / :func:`get_llm` — the mockable
-    reasoning surface (default brain is offline/deterministic).
+  * :class:`MockLLM` / :class:`GeminiLLM` / :class:`QwenLLM` / :func:`get_llm`
+    — the mockable reasoning surface (default brain is offline/deterministic).
   * Protocol: :class:`AgentContext`, :class:`AgentResult`, :class:`Handoff`,
     :class:`Step`, :class:`Status`.
 
@@ -16,8 +16,11 @@ verbatim. See :mod:`waspada.agents.protocol` for the wire contract.
 from __future__ import annotations
 
 from .base import Agent, ApprovalGate, Approved, Rejected, handoff
-from .llm import GeminiLLM, LLM, MockLLM, get_llm
-from .protocol import AgentContext, AgentResult, Handoff, Status, Step
+from .ingest import IngestAgent
+from .insight import InsightAgent
+from .llm import GeminiLLM, LLM, MockLLM, QwenLLM, get_llm
+from .protocol import AgentContext, AgentResult, Dispute, DisputeRound, Handoff, Status, Step
+from .risk_auditor import RiskAuditorAgent
 
 __all__ = [
     # base
@@ -30,11 +33,18 @@ __all__ = [
     "LLM",
     "MockLLM",
     "GeminiLLM",
+    "QwenLLM",
     "get_llm",
     # protocol
     "AgentContext",
     "AgentResult",
+    "Dispute",
+    "DisputeRound",
     "Handoff",
     "Step",
     "Status",
+    # agents
+    "IngestAgent",
+    "InsightAgent",
+    "RiskAuditorAgent",
 ]

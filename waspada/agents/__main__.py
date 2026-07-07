@@ -6,11 +6,11 @@ Runs the full orchestrated pipeline (ingest→analytics→risk-model→insight),
 prints the analyst report, and writes the dashboard payload JSON to
 ``data/dashboard-payload.json``.
 
-Offline by default: when BigQuery creds are absent the CLI loads a bundled
+Offline by default: when OSS creds are absent the CLI loads a bundled
 sample snapshot (``dashboard/fixtures/sample-payload.json`` is the *output*
 shape; for the *input* we synthesize a small RawLoans table so the whole
 pipeline runs end-to-end without network). When creds are present, the ingest
-agent uses the real BigQuery client.
+agent uses the real Alibaba Cloud OSS client.
 """
 from __future__ import annotations
 
@@ -26,8 +26,9 @@ import pyarrow as pa
 
 from ..config import COLLECTIONS, LANES
 from ..schema import RawLoans, schema_from_dataclass
+from .llm import get_llm
 from .orchestrator import Orchestrator
-from .protocol import AgentContext
+from .protocol import AgentContext, Status
 
 
 def _sample_raw_table(n: int = 200, seed: int = 11) -> pa.Table:
@@ -75,12 +76,13 @@ def _sample_raw_table(n: int = 200, seed: int = 11) -> pa.Table:
     return pa.table(cols, schema=schema_from_dataclass(RawLoans))
 
 
-def _bq_configured() -> bool:
+def _oss_configured() -> bool:
     return bool(
-        os.environ.get("BQ_PROJECT")
-        and os.environ.get("BQ_DATASET")
-        and os.environ.get("BQ_TABLE")
-        and os.environ.get("GOOGLE_APPLICATION_CREDENTIALS")
+        os.environ.get("OSS_BUCKET")
+        and os.environ.get("OSS_ENDPOINT")
+        and os.environ.get("OSS_KEY")
+        and os.environ.get("OSS_ACCESS_KEY_ID")
+        and os.environ.get("OSS_ACCESS_KEY_SECRET")
     )
 
 
@@ -100,7 +102,10 @@ def main(argv: Optional[list[str]] = None) -> int:
     args = parser.parse_args(argv)
 
     as_of = dt.date.fromisoformat(args.as_of)
-    orch = Orchestrator(as_of=as_of, top_n=args.top_n)
+    # WASPADA_LLM_PROVIDER selects the reasoning brain (mock/gemini/qwen);
+    # defaults to the offline mock so the CLI never reaches for the network
+    # unless a caller explicitly opts in via the env var.
+    orch = Orchestrator(get_llm(), as_of=as_of, top_n=args.top_n)
     # Auto-approve for the CLI smoke run unless a real gate channel is wired.
     if args.auto_approve or os.environ.get("WASPADA_AUTO_APPROVE", "").strip() in ("1", "true", "yes"):
         from .base import ApprovalGate
@@ -108,9 +113,9 @@ def main(argv: Optional[list[str]] = None) -> int:
 
     ctx = AgentContext(lane=args.lane, data_handles={}, meta={"as_of": args.as_of, "cli": True})
 
-    # Offline path: stub the ingest fetch with a synthetic snapshot when BQ
+    # Offline path: stub the ingest fetch with a synthetic snapshot when OSS
     # isn't configured, so the CLI runs end-to-end without network.
-    if not _bq_configured():
+    if not _oss_configured():
         from .ingest import IngestAgent  # local import to avoid cycle at module load
         sample = _sample_raw_table()
         # The orchestrator builds its own agents; register the stub on the
@@ -128,14 +133,20 @@ def main(argv: Optional[list[str]] = None) -> int:
                     a.register_tool("fetch", _stub_fetch)
             return agents
         orch._build_agents = _build_with_stub  # type: ignore[method-assign]
-        print(f"[waspada] BQ not configured — using synthetic {sample.num_rows}-row snapshot (offline demo).", file=sys.stderr)
+        print(f"[waspada] OSS not configured — using synthetic {sample.num_rows}-row snapshot (offline demo).", file=sys.stderr)
 
     orch.plan(args.lane)
     result = orch.run(ctx)
 
-    if not result.ok:
+    # OK and DISPUTED are both *completions* — a payload was produced. DISPUTED
+    # means the Skeptic opened live disputes (the payload carries them in
+    # ``agent_dialogue``); only ERROR/BLOCKED are real failures.
+    if result.status not in (Status.OK, Status.DISPUTED):
         print(f"[waspada] pipeline did not complete: {result.notes}", file=sys.stderr)
         return 2
+    if result.status == Status.DISPUTED:
+        n = len(getattr(orch, "_final_ctx", ctx).data_handles.get("risk_disputes") or [])
+        print(f"[waspada] run completed with {n} open dispute(s) routed to the gate.", file=sys.stderr)
 
     # Pull the payload from the final context the orchestrator stashed.
     payload = getattr(orch, "_final_ctx", ctx).data_handles.get(result.artifact_ref)

@@ -11,12 +11,12 @@ from waspada.config import Config, load_config
 
 
 def test_defaults_when_env_missing():
-    """With no env, load_config returns empty BQ fields + lane=collections."""
+    """With no env, load_config returns empty OSS fields + lane=collections."""
     cfg = load_config()
     assert cfg == Config(
-        bq_project="",
-        bq_dataset="",
-        bq_table="",
+        oss_bucket="",
+        oss_endpoint="",
+        oss_key="",
         lane="collections",
     )
 
@@ -43,13 +43,13 @@ def test_lane_is_case_insensitive(monkeypatch):
 
 
 def test_env_vars_flow_through(monkeypatch):
-    monkeypatch.setenv("BQ_PROJECT", "proj")
-    monkeypatch.setenv("BQ_DATASET", "ds")
-    monkeypatch.setenv("BQ_TABLE", "tbl")
+    monkeypatch.setenv("OSS_BUCKET", "bucket")
+    monkeypatch.setenv("OSS_ENDPOINT", "oss-ap-southeast-1.aliyuncs.com")
+    monkeypatch.setenv("OSS_KEY", "collections/loans.parquet")
     cfg = load_config()
-    assert cfg.bq_project == "proj"
-    assert cfg.bq_dataset == "ds"
-    assert cfg.bq_table == "tbl"
+    assert cfg.oss_bucket == "bucket"
+    assert cfg.oss_endpoint == "oss-ap-southeast-1.aliyuncs.com"
+    assert cfg.oss_key == "collections/loans.parquet"
 
 
 def test_module_level_config_reloadable(monkeypatch):

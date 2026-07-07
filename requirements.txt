@@ -1,21 +1,23 @@
 # WASPADA — Python dependencies
 # GPU deps (RAPIDS) need the NVIDIA package index. Install everything with:
 #   pip install --extra-index-url=https://pypi.nvidia.com -r requirements.txt
-# (RAPIDS runs on Linux/WSL — see HACKATHON.md, option A.)
+# (RAPIDS runs on Linux/WSL — see gpu/run_features.py + waspada/wsl.py.)
 
-# --- NVIDIA acceleration layer (the GPU pipeline) ---
+# --- NVIDIA acceleration layer (the GPU feature-engineering path) ---
 cudf-cu12>=26.6        # GPU dataframes (cudf.pandas)
 cuml-cu12>=26.6        # GPU ML (risk models)
 
-# --- Google Cloud data layer ---
-google-cloud-bigquery>=3.25
-google-cloud-bigquery-storage>=2.25   # fast BigQuery -> Arrow reads
-db-dtypes>=1.2                         # BigQuery types in pandas/cudf
+# --- Alibaba Cloud data layer ---
+oss2>=2.18              # OSS bucket client (the loan-portfolio Parquet object)
 
-# --- CPU baseline (for the GPU-vs-CPU acceleration benchmark) ---
+# --- Core pipeline (features + risk model) ---
 pandas>=2.2
 scikit-learn>=1.5
 pyarrow>=17
+
+# --- Agent Society (Qwen Cloud negotiation brain + MCP tool serving) ---
+openai>=1.0             # points at Alibaba Cloud DashScope's compatible-mode endpoint
+mcp>=1.0                # local MCP server/client for the portfolio_stats tool
 
 # --- Utilities ---
 python-dotenv>=1.0

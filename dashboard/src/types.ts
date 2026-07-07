@@ -51,11 +51,46 @@ export interface Alert {
   segment: Segment | null; // null = portfolio-wide
 }
 
-/** The frozen frontend hand-off: ranked work-list + health + alerts. */
+/**
+ * One turn in an agent-to-agent risk debate (DisputeRound dataclass).
+ * `model` is the LLM behind the turn (e.g. "qwen3.6-flash"); null = a
+ * deterministic speaker. `evidence` is the cited feature values / portfolio
+ * stats grounding the claim (see HACKATHON.md § debate protocol).
+ */
+export interface DisputeRound {
+  round_no: number;
+  speaker: string; // agent name, e.g. "risk_auditor"
+  model: string | null;
+  claim: string;
+  confidence: number | null; // speaker's stated confidence ∈ [0, 1]
+  evidence: string[];
+}
+
+/**
+ * A contested account's full negotiation record (Dispute dataclass, serialized
+ * per the shape frozen in HACKATHON.md — additive to the WA-001 contract).
+ */
+export interface DisputeRecord {
+  loan_id: string;
+  opened_by: string;
+  model_band: string; // the Actuary's band, e.g. "Q5"
+  auditor_view: string; // the Skeptic's independent read: "Low" | "Medium" | "High"
+  rounds: DisputeRound[];
+  resolution: "upheld" | "overridden" | "escalated_approved" | "escalated_rejected";
+  resolved_by: string; // "risk_model" (conceded) | "arbiter" | "human"
+  rationale: string;
+}
+
+/**
+ * The frozen frontend hand-off: ranked work-list + health + alerts.
+ * `agent_dialogue` is an ADDITIVE optional key (Qwen-pivot, HACKATHON.md):
+ * absent on older payloads, so the guard below does not require it.
+ */
 export interface DashboardPayload {
   work_list: ScoredAccount[];
   portfolio_health: PortfolioHealth;
   alerts: Alert[];
+  agent_dialogue?: DisputeRecord[];
 }
 
 /** Narrowing guard so a malformed fixture fails loudly at load, not in render. */

@@ -122,10 +122,12 @@ def test_run_executes_all_steps_in_order(raw_table):
     assert any("ingest" in n and "raw_loans" in n for n in run_notes)
     assert any("analytics" in n and "feature_frame" in n for n in run_notes)
     assert any("risk_model" in n and "scored_accounts" in n for n in run_notes)
+    assert any("risk_auditor" in n and "scored_accounts" in n for n in run_notes)
     assert any("insight" in n and "dashboard_payload" in n for n in run_notes)
-    # Handoffs recorded frm→to in order.
-    assert [h.frm for h in orch.handoffs] == ["ingest", "analytics", "risk_model"]
-    assert [h.to for h in orch.handoffs] == ["analytics", "risk_model", "insight"]
+    # Handoffs recorded frm→to in order. (risk_auditor sits between risk_model
+    # and insight — WA-014.)
+    assert [h.frm for h in orch.handoffs] == ["ingest", "analytics", "risk_model", "risk_auditor"]
+    assert [h.to for h in orch.handoffs] == ["analytics", "risk_model", "risk_auditor", "insight"]
 
 
 def test_run_invokes_approval_gate_before_payload(raw_table):
@@ -216,3 +218,43 @@ def test_cli_writes_dashboard_payload(tmp_path, monkeypatch):
     payload = json.loads(out.read_text())
     assert set(payload.keys()) == {"work_list", "portfolio_health", "alerts"}
     assert len(payload["work_list"]) <= 10
+
+
+def test_cli_completes_on_disputed_run(tmp_path, monkeypatch):
+    """A DISPUTED run (Skeptic opened disputes) is a *completion*: the CLI
+    writes the payload (with ``agent_dialogue``) and returns 0, not 2.
+
+    Exercises the WA-014 fix that OK and DISPUTED are both completions; only
+    ERROR/BLOCKED are real CLI failures.
+    """
+    import json as _json
+    from waspada.agents.__main__ import main
+    from waspada.agents.llm import MockLLM
+    from waspada.agents.orchestrator import Orchestrator
+    from waspada.agents.protocol import Status
+
+    # Force a challenge brain: every top-K audit returns a Low view → disputes
+    # open on every Q5 account the model produced.
+    challenge = _json.dumps({
+        "auditor_view": "Low", "confidence": 0.8,
+        "claim": "balance nearly settled", "evidence": ["payment_ratio=0.95"],
+    })
+    monkeypatch.setenv("WASPADA_LLM_PROVIDER", "mock")
+    monkeypatch.delenv("BQ_PROJECT", raising=False)
+
+    # Inject the scripted brain by patching get_llm used inside main().
+    import waspada.agents.llm as _llmmod
+    _orig_get_llm = _llmmod.get_llm
+    def _scripted(_=None):
+        return MockLLM(script=[challenge] * 50)
+    monkeypatch.setattr(_llmmod, "get_llm", _scripted)
+    # main() imports get_llm by name from its own module → patch there too.
+    import waspada.agents.__main__ as _mainmod
+    monkeypatch.setattr(_mainmod, "get_llm", _scripted, raising=False)
+
+    out = tmp_path / "disputed.json"
+    code = main(["--lane", "collections", "--auto-approve", "--top-n", "10", "--out", str(out)])
+    assert code == 0
+    payload = _json.loads(out.read_text())
+    assert payload.get("agent_dialogue"), "disputed run must serialize agent_dialogue"
+    assert payload["agent_dialogue"][0]["model_band"] == "Q5"

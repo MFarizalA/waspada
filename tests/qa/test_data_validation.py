@@ -1,4 +1,4 @@
-"""QA — Data validation: schema/null/range + BQ ingest path + portfolio DQ.
+"""QA — Data validation: schema/null/range + OSS ingest path + portfolio DQ.
 
 Findings from these tests are summarized in tests/qa/REPORT.md under the
 "Data validation" section. Each test names the finding ID it backs.
@@ -15,7 +15,7 @@ import pytest
 from waspada.schema import FeatureFrame, RawLoans, validate_table
 from waspada.features.collections import build_features, build_label
 
-from .conftest import bq_configured
+from .conftest import oss_configured
 
 # Range bounds reasoned from the LendingClub-derived domain (documented in
 # REPORT.md). Used to flag out-of-range synthetic values.
@@ -93,28 +93,28 @@ class TestFeatureFrameContract:
         assert all(0.0 <= x <= 1.0 for x in orr), f"outstanding_ratio out of [0,1]: {orr}"
 
 
-# ----------------------------------------------------------------- live BQ
-@pytest.mark.skipif(not bq_configured(),
-                    reason="BQ creds not configured; live data-quality tests skipped")
-class TestLiveBigQueryDataQuality:
+# ---------------------------------------------------------------- live OSS
+@pytest.mark.skipif(not oss_configured(),
+                    reason="OSS creds not configured; live data-quality tests skipped")
+class TestLiveOSSDataQuality:
     """Backs REPORT.md findings F-DV-* with numbers from the live 1M-row book.
 
-    These run real (cheap LIMIT/aggregate) queries against the sandbox. They
+    These run real (cheap LIMIT/aggregate) reads against the OSS bucket. They
     encode the data-quality invariants observed in the probe; if the upstream
     synthetic data regresses, these flag it.
     """
 
-    def test_fetch_loans_returns_rawloans_superset(self, bq_env):
-        from waspada.data import BigQueryClient
-        client = BigQueryClient()
+    def test_fetch_loans_returns_rawloans_superset(self, oss_env):
+        from waspada.data import OSSClient
+        client = OSSClient()
         table = client.fetch_loans(lane="collections", limit=50)
         assert isinstance(table, pa.Table)
         assert 0 < table.num_rows <= 50
         validate_table(table, RawLoans, name="live fetch_loans")
 
-    def test_live_book_has_no_nulls_in_contract_fields(self, bq_env):
-        from waspada.data import BigQueryClient
-        client = BigQueryClient()
+    def test_live_book_has_no_nulls_in_contract_fields(self, oss_env):
+        from waspada.data import OSSClient
+        client = OSSClient()
         # A 10k sample is enough to catch systemic null issues cheaply.
         table = client.fetch_loans(lane="collections", limit=10000)
         offenders = []
@@ -123,9 +123,9 @@ class TestLiveBigQueryDataQuality:
                 offenders.append(f.name)
         assert not offenders, f"nulls in live RawLoans fields: {offenders}"
 
-    def test_live_amounts_and_ratios_are_domain_clean(self, bq_env):
-        from waspada.data import BigQueryClient
-        client = BigQueryClient()
+    def test_live_amounts_and_ratios_are_domain_clean(self, oss_env):
+        from waspada.data import OSSClient
+        client = OSSClient()
         table = client.fetch_loans(lane="collections", limit=10000)
         amt = table.column("amount")
         assert pc.sum(pc.less_equal(amt, pa.scalar(0.0))).as_py() == 0, "amount <= 0"
@@ -133,50 +133,44 @@ class TestLiveBigQueryDataQuality:
         # outstanding_principal must never exceed amount (no over-advance).
         assert pc.sum(pc.greater(outp, amt)).as_py() == 0, "outstanding_principal > amount"
 
-    def test_live_label_distribution_via_aggregate_not_biased_limit(self, bq_env):
-        """F-DV-05 (MAJOR finding): the ``loans`` table is physically clustered
-        by ``current_status`` (offsets 0..88097 are all 'Charged Off'). Because
-        ``fetch_loans(limit=N)`` issues ``SELECT ... LIMIT N`` with no
-        ``ORDER BY``, a LIMIT sample returns a **100%-default** slice for
-        N <= 88098 — a wildly biased sample. The full-table default rate is
-        ~14.2%. This test computes the rate via an aggregate (unbiased) and
+    def test_live_label_distribution_via_full_read_not_biased_limit(self, oss_env):
+        """F-DV-05 (MAJOR finding): the loan-portfolio object is physically
+        clustered by ``current_status`` (offsets 0..88097 are all 'Charged
+        Off'). Because ``fetch_loans(limit=N)`` reads the whole object then
+        slices the first N rows client-side (no server-side query/ORDER BY),
+        a LIMIT sample returns a **100%-default** slice for N <= 88098 — a
+        wildly biased sample. The full-object default rate is ~14.2%. This
+        test computes the rate over the *entire* object (unbiased) and
         asserts it is plausible; the biased LIMIT rate is documented in the
         finding. Any sample-based check that trusts ``fetch_loans(limit=N)``
         to be representative is wrong — see REPORT.md F-DV-05.
         """
-        from waspada.data import BigQueryClient
-        from waspada.config import load_config
-        cfg = load_config().require_bq()
-        client = BigQueryClient(cfg)
-        table = f"{cfg.bq_project}.{cfg.bq_dataset}.{cfg.bq_table}"
-        rows = client.query(
-            f"SELECT COUNTIF(is_default) AS pos, COUNT(*) AS n FROM ("
-            f"SELECT current_status, "
-            f"LOWER(current_status) IN ('charged off','default') AS is_default "
-            f"FROM `{table}`)"
-        ).to_pylist()
-        rate = rows[0]["pos"] / rows[0]["n"]
-        assert 0.05 < rate < 0.30, f"full-table default rate {rate:.3f} outside band"
+        from waspada.data import OSSClient
+        client = OSSClient()
+        table = client.fetch_loans(lane="collections")  # no limit: the whole object
+        label = build_label(table)
+        n = len(label)
+        pos = pc.sum(pc.cast(label, pa.int64())).as_py()
+        rate = pos / n
+        assert 0.05 < rate < 0.30, f"full-object default rate {rate:.3f} outside band"
 
-    def test_live_limit_sample_is_biased_clustered_by_status(self, bq_env):
+    def test_live_limit_sample_is_biased_clustered_by_status(self, oss_env):
         """F-DV-05 (evidence): demonstrate the LIMIT bias concretely. A 5k LIMIT
-        sample is ~100% default while the full table is ~14%. This is the
+        sample is ~100% default while the full object is ~14%. This is the
         repro for the finding — it is expected to show the bias, hence the
         assertion encodes the bias rather than failing on it."""
-        from waspada.data import BigQueryClient
-        import pyarrow as pa
-        from waspada.features.collections import build_label
-        client = BigQueryClient()
+        from waspada.data import OSSClient
+        client = OSSClient()
         biased = client.fetch_loans(lane="collections", limit=5000)
         label = build_label(biased)
         n = len(label)
         pos = pc.sum(pc.cast(label, pa.int64())).as_py()
         biased_rate = pos / n
-        # Document: the LIMIT sample is ~100% default (clustered table).
+        # Document: the LIMIT sample is ~100% default (clustered object).
         # If this ever drops below 0.9, the clustering changed and the finding
         # should be re-evaluated.
         assert biased_rate >= 0.9, (
             f"expected the LIMIT-bias repro to show >=90% default rate; got "
-            f"{biased_rate:.3f}. Table clustering may have changed — re-check "
+            f"{biased_rate:.3f}. Object row order may have changed — re-check "
             f"finding F-DV-05."
         )

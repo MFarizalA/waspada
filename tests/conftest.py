@@ -14,9 +14,20 @@ import pytest
 
 @pytest.fixture(autouse=True)
 def _clean_env(monkeypatch):
-    """Ensure tests see a deterministic env (no leaked .env values)."""
-    for key in ("BQ_PROJECT", "BQ_DATASET", "BQ_TABLE", "WASPADA_LANE"):
+    """Ensure tests see a deterministic env (no leaked .env values).
+
+    Tests must run offline. ``WASPADA_LLM_PROVIDER`` is forced to ``mock``
+    so no test path that goes through :func:`get_llm` reaches the network if
+    a developer's ``.env`` happens to set qwen/gemini. Individual tests that
+    need a specific brain inject it directly (not via the env var).
+    """
+    for key in (
+        "OSS_BUCKET", "OSS_ENDPOINT", "OSS_KEY",
+        "OSS_ACCESS_KEY_ID", "OSS_ACCESS_KEY_SECRET",
+        "WASPADA_LANE",
+    ):
         monkeypatch.delenv(key, raising=False)
+    monkeypatch.setenv("WASPADA_LLM_PROVIDER", "mock")
     yield
 
 

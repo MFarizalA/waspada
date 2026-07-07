@@ -29,6 +29,7 @@ if str(_REPO) not in sys.path:
 
 from waspada.agents.orchestrator import Orchestrator
 from waspada.agents.base import ApprovalGate
+from waspada.agents.llm import MockLLM, get_llm
 from waspada.agents.protocol import AgentContext
 
 app = FastAPI(title="WASPADA API", version="1.0.0")
@@ -37,6 +38,12 @@ app = FastAPI(title="WASPADA API", version="1.0.0")
 _DASHBOARD_DIST = _REPO / "dashboard" / "dist"
 if _DASHBOARD_DIST.exists():
     app.mount("/assets", StaticFiles(directory=str(_DASHBOARD_DIST / "assets")), name="assets")
+
+# --- Serve the committed fixture (dashboard fetches this as a static file,
+# matching how Vite's dev server serves dashboard/public/ at the root) ---
+_FIXTURES_DIR = _REPO / "dashboard" / "fixtures"
+if _FIXTURES_DIR.exists():
+    app.mount("/fixtures", StaticFiles(directory=str(_FIXTURES_DIR)), name="fixtures")
 
 
 @app.get("/")
@@ -54,24 +61,28 @@ async def health():
 
 
 @app.post("/api/run")
-async def run_pipeline():
+async def run_pipeline(brain: str = "mock"):
     """Run the full agent pipeline on a synthetic snapshot.
 
     Returns the DashboardPayload + the plain-language analyst report.
-    Runs offline (no BQ, no GPU, no network) in ~3-5 seconds.
+    Runs offline (no BQ, no GPU, no network) in ~3-5 seconds by default.
+
+    ``brain`` selects the reasoning LLM for the risk-auditor negotiation
+    step (``mock`` default = fast/free/deterministic; ``qwen`` = real Qwen
+    calls via DashScope, opt-in only — this adds real network latency and
+    should not be the default every visitor's first click triggers).
     """
-    try:
-        # Import the synthetic table generator from the CLI module
-        from waspada.agents.__main__ import _sample_raw_table, _stub_fetch_factory  # type: ignore
-    except ImportError:
-        # Fallback: inline the stub
-        from waspada.agents.__main__ import _sample_raw_table
-        from waspada.agents.ingest import IngestAgent
+    from waspada.agents.__main__ import _sample_raw_table
+    from waspada.agents.ingest import IngestAgent
 
     import datetime as dt
 
-    # Build the orchestrator with auto-approve (demo mode)
+    # Build the orchestrator with auto-approve (demo mode). WASPADA_LLM_PROVIDER
+    # stays mock by default; `?brain=qwen` opts into real Qwen reasoning for
+    # the negotiation step, deliberately not the default hot path.
+    llm = get_llm(brain) if brain and brain != "mock" else MockLLM()
     orch = Orchestrator(
+        llm,
         as_of=dt.date(2024, 12, 1),
         top_n=20,
     )
@@ -120,11 +131,22 @@ async def run_pipeline():
     report = orch.report(payload)
     summary = final_ctx.data_handles.get("alert_summary", "")
 
-    # Collect the step log for the audit trail
-    steps = []
-    for agent in orch._build_agents.__wrapped__() if hasattr(orch._build_agents, '__wrapped__') else []:
-        pass  # agents are rebuilt; steps are on the orchestrator
-    steps = [
+    # Collect the orchestrator's own step log + each pipeline agent's own
+    # detailed ``.steps`` for the audit trail. The orchestrator's ``orch.steps``
+    # is the orchestration-level view (run_start / run_done / hops); the
+    # per-agent steps (e.g. the risk_auditor's audit-parse-fail notes, the
+    # insight agent's dispute_gate entry) carry the negotiation detail that
+    # ``agent_dialogue`` serializes into the payload. Both surface here so the
+    # audit trail is complete (the current ``orch.steps``-only collection missed
+    # the per-agent transcript).
+    pipeline_steps = []
+    for agent in getattr(orch, "_pipeline_agents", []):
+        for s in getattr(agent, "steps", []):
+            pipeline_steps.append({
+                "agent": s.agent, "action": s.action, "status": s.status,
+                "notes": s.notes, "rationale": s.rationale, "auto": s.auto,
+            })
+    orch_steps = [
         {"agent": s.agent, "action": s.action, "status": s.status, "notes": s.notes, "auto": s.auto}
         for s in orch.steps
     ]
@@ -133,7 +155,7 @@ async def run_pipeline():
         "payload": payload,
         "report": report,
         "alert_summary": summary,
-        "steps": steps,
+        "steps": orch_steps + pipeline_steps,
     }
 
 

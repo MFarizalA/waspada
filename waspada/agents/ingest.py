@@ -1,10 +1,10 @@
 """Ingest agent (WA-009) — the data door.
 
-Wraps :func:`waspada.data.bq.fetch_loans`. Runs freshness/schema checks and
+Wraps :func:`waspada.data.oss.fetch_loans`. Runs freshness/schema checks and
 returns a :class:`~waspada.agents.protocol.AgentResult` whose
 ``artifact_ref`` points to the RawLoans handle the analytics agent consumes.
 
-Offline by design: the real BQ call is injected as a tool (``fetch``) so the
+Offline by design: the real OSS call is injected as a tool (``fetch``) so the
 integration test stubs it. With no tool registered the agent falls back to
 the real client, which raises a clear error when creds are absent (so a
 misconfigured run fails loud, not silent).
@@ -15,7 +15,7 @@ from typing import Any, Callable, Optional
 
 import pyarrow as pa
 
-from ..data.bq import fetch_loans as _real_fetch_loans
+from ..data.oss import fetch_loans as _real_fetch_loans
 from ..schema import RawLoans, validate_table
 from .base import Agent
 from .protocol import AgentContext, AgentResult, Status
@@ -24,10 +24,10 @@ __all__ = ["IngestAgent"]
 
 
 class IngestAgent(Agent):
-    """Pull the RawLoans snapshot from BigQuery, with freshness/schema checks."""
+    """Pull the RawLoans snapshot from Alibaba Cloud OSS, with freshness/schema checks."""
 
     name = "ingest"
-    role = "ingest the RawLoans snapshot from BigQuery"
+    role = "ingest the RawLoans snapshot from Alibaba Cloud OSS"
 
     def __init__(self, llm: Optional[Any] = None, *, limit: Optional[int] = None) -> None:
         super().__init__(llm=llm)

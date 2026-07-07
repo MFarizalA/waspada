@@ -7,7 +7,8 @@ simple truthiness checks, and raises ``ValueError`` for an invalid lane so a
 typo fails loudly instead of silently picking a lane.
 
 Vars (see ``.env.example``):
-  * ``BQ_PROJECT``, ``BQ_DATASET``, ``BQ_TABLE`` — BigQuery location of the loans table.
+  * ``OSS_BUCKET``, ``OSS_ENDPOINT``, ``OSS_KEY`` — Alibaba Cloud OSS location
+    of the committed loan-portfolio Parquet object.
   * ``WASPADA_LANE`` — decision lane: ``collections`` (default) or ``origination``.
 """
 from __future__ import annotations
@@ -31,20 +32,20 @@ load_dotenv()
 class Config:
     """Snapshot of the active WASPADA configuration.
 
-    BQ fields default to empty string (not None) so callers can use simple
+    OSS fields default to empty string (not None) so callers can use simple
     truthiness checks; ``lane`` defaults to ``collections``.
     """
 
     lane: str
-    bq_project: str
-    bq_dataset: str
-    bq_table: str
+    oss_bucket: str
+    oss_endpoint: str
+    oss_key: str
 
-    def require_bq(self) -> "Config":
-        """Return self if BigQuery is fully configured, else raise RuntimeError."""
-        if not (self.bq_project and self.bq_dataset and self.bq_table):
+    def require_oss(self) -> "Config":
+        """Return self if OSS is fully configured, else raise RuntimeError."""
+        if not (self.oss_bucket and self.oss_endpoint and self.oss_key):
             raise RuntimeError(
-                "BigQuery not configured: set BQ_PROJECT, BQ_DATASET, BQ_TABLE "
+                "OSS not configured: set OSS_BUCKET, OSS_ENDPOINT, OSS_KEY "
                 "(see .env.example)."
             )
         return self
@@ -68,9 +69,9 @@ def load_config() -> Config:
     """
     return Config(
         lane=_resolve_lane(),
-        bq_project=os.environ.get("BQ_PROJECT", ""),
-        bq_dataset=os.environ.get("BQ_DATASET", ""),
-        bq_table=os.environ.get("BQ_TABLE", ""),
+        oss_bucket=os.environ.get("OSS_BUCKET", ""),
+        oss_endpoint=os.environ.get("OSS_ENDPOINT", ""),
+        oss_key=os.environ.get("OSS_KEY", ""),
     )
 
 

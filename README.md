@@ -1,8 +1,8 @@
 # WASPADA
 
 **W**arning **&** **A**pproval **S**ystem for **P**ortfolio **A**nd **D**efault
-**A**nalytics — an autonomous **multi-agent, GPU-accelerated risk decision-support
-system** for a multifinance lender's data analyst.
+**A**nalytics — an autonomous **multi-agent risk decision-support system** for
+a multifinance lender's data analyst.
 
 WASPADA spans **two decisions in the loan lifecycle on one shared risk engine**:
 
@@ -14,14 +14,15 @@ The **Collections/EWS lane is built end-to-end** (ingest → features → model 
 rank → dashboard) with a coordinating multi-agent layer and a human approval
 gate. Origination is architected as an additive second lane (deferred).
 
-**Stack:** BigQuery (data warehouse) · cuDF + cuML / RAPIDS (GPU pipeline,
-runs in WSL2 on an NVIDIA MX570) · a multi-agent layer (orchestrator + four
-specialized agents) over a mockable LLM brain (Gemini-ready, mock by default) ·
+**Stack:** Alibaba Cloud OSS (data warehouse) · Qwen models via Alibaba Cloud
+Model Studio/DashScope (the Agent Society negotiation brain) · a multi-agent
+layer (orchestrator + specialized agents) over a mockable LLM brain (mock by
+default) · optional cuDF/cuML on GPU (runs in WSL2) for feature engineering ·
 React/TypeScript dashboard.
 
 > Built by an autonomous AI software company — Stefanie (PM) · Bimo (backend) ·
 > Kirana (frontend) · Reza (QA). Agents building agents, humans on the sign-off
-> gate at every layer. See **[HACKATHON.md](HACKATHON.md)** for the full brief.
+> gate at every layer.
 
 ---
 
@@ -34,11 +35,11 @@ hours of work, so the work-list is stale before it's used.
 
 WASPADA automates that loop:
 
-1. **Ingest** the loan book from BigQuery (freshness + schema-checked).
-2. **Feature-engineer** with cuDF on GPU (DPD buckets, payment ratios, tenure,
-   product/region, delinquency trend).
-3. **Model** default probability per account (cuML on GPU; sklearn CPU path
-   ships now — GPU is a drop-in).
+1. **Ingest** the loan book from Alibaba Cloud OSS (freshness + schema-checked).
+2. **Feature-engineer** (DPD buckets, payment ratios, tenure, product/region,
+   delinquency trend) — CPU/pyarrow ships now, with an optional cuDF-on-GPU
+   path via WSL2.
+3. **Model** default probability per account (sklearn CPU path ships now).
 4. **Rank & segment** → a ranked collections work-list + portfolio health +
    cohort deterioration alerts.
 5. **Approve** — a human reviews and releases the work-list (the approval gate).
@@ -59,9 +60,9 @@ we build one engine + one set of agents and run it in two lanes.
 
 ```mermaid
 flowchart LR
-    O["Orchestrator<br/>plans · runs · holds the gate"] --> I["Ingest agent<br/>BigQuery"]
-    I -->|RawLoans| A["Analytics agent<br/>cuDF"]
-    A -->|FeatureFrame| R["Risk-Model agent<br/>cuML"]
+    O["Orchestrator<br/>plans · runs · holds the gate"] --> I["Ingest agent<br/>Alibaba OSS"]
+    I -->|RawLoans| A["Analytics agent<br/>cuDF / pyarrow"]
+    A -->|FeatureFrame| R["Risk-Model agent<br/>sklearn"]
     R -->|ScoredAccounts| N["Insight agent<br/>rank + alert"]
     N --> G["Approval Gate<br/>human"]
     G --> D["Dashboard"]
@@ -72,7 +73,7 @@ ticket cites the same shapes verbatim:
 
 | Contract | Shape | Built by |
 |---|---|---|
-| `RawLoans` | one row per loan (cross-sectional snapshot) | WA-002/003 (BigQuery ingest) |
+| `RawLoans` | one row per loan (cross-sectional snapshot) | WA-002/003 (OSS ingest) |
 | `FeatureFrame` | per-loan features + `label_default` | WA-004 (cuDF/sklearn features) |
 | `ScoredAccounts` | `p_default` + band/segment/action | WA-005 (risk model) |
 | `DashboardPayload` | ranked work-list + health + alerts (JSON) | WA-006 (ranking) |
@@ -103,69 +104,30 @@ envelopes (frm→to) so a full run can be reconstructed.
 
 ---
 
-## Acceleration evidence — the "why GPU" proof (measured, honestly)
-
-The CPU-vs-GPU benchmark lives in [`bench/LAST_RUN.json`](bench/LAST_RUN.json),
-produced by the reproducible harness `waspada/bench/harness.py`
-(`python bench/run_bench.py`). It runs the **real collections pipeline**
-(`build_features` → `train`/`predict`) on the synthetic 1M-loan portfolio at two
-row counts, timing each stage on each stack.
-
-Last real run (CPU only — see honesty note below):
-
-| Rows | Stage | CPU (pyarrow/sklearn) | GPU (cuDF/cuML) | Speedup |
-|---|---|---|---|---|
-| 100k | Feature engineering | ~0.21 s | not run here | — |
-| 100k | Model (train+predict) | ~12.0 s | not run here | — |
-| 1M | Feature engineering | ~1.46 s | not run here | — |
-| 1M | Model (train+predict) | ~27.1 s | not run here | — |
-
-**Honesty note (what was measured and what wasn't):** the worker container that
-runs CI has no GPU and no WSL launcher, so the GPU column here is
-`not_run`, **not** a fabricated time. The harness *requests* the GPU column on
-every run (`gpu=True`); on a host with WSL+RAPIDS the same call produces live
-cuDF feature numbers with no code change (`waspada/wsl.py:run_gpu` →
-`gpu/run_features.py`). The cuML **model** stage is not yet wired as code — the
-GPU estimator is a drop-in once added (`train`/`predict` keep their signatures),
-and until then the model stage is CPU-only and reported plainly. Exact numbers
-for your machine: `python bench/run_bench.py` (writes `bench/LAST_RUN.json`).
-
-The HACKATHON brief flags the GPU risk explicitly: *"Weak speedup on trivial
-ops — the real GPU win needs heavier compute (joins, many-feature engineering,
-tree models)."* The harness is built around the real collections workload
-(many-feature engineering + standardized one-hot + L2 logistic fit), so when the
-GPU column runs on the host the speedup it reports is the honest one for *this*
-workload — including a sub-1× result if cuDF's per-op overhead exceeds the
-compute saved at this scale.
-
----
-
 ## Project layout
 
 ```
 waspada/
 ├── schema.py              # FROZEN data contract (RawLoans, FeatureFrame, ScoredAccounts, DashboardPayload)
 ├── config.py              # env/lane loading (collections | origination)
-├── wsl.py                 # run_gpu() helper for the WSL/cuML path
-├── data/bq.py             # BigQuery client → RawLoans-shaped Arrow (WA-002)
+├── wsl.py                 # run_gpu() helper for the optional WSL/cuDF path
+├── data/oss.py            # Alibaba Cloud OSS client → RawLoans-shaped Arrow (WA-002)
 ├── features/collections.py# cross-sectional FeatureFrame + label (WA-004)
 ├── model/risk.py          # sklearn LogisticRegression, vintage split, no-leakage (WA-005, CPU)
 ├── insight/ranking.py     # rank + portfolio health + alerts + payload (WA-006)
 └── agents/
     ├── base.py            # Agent base + ApprovalGate (WA-008)
-    ├── protocol.py        # AgentContext / AgentResult / Handoff / Step / Status
-    ├── llm.py             # MockLLM (offline) / GeminiLLM (lazy SDK import)
-    ├── ingest.py          # IngestAgent — wraps BigQuery (WA-009)
+    ├── protocol.py        # AgentContext / AgentResult / Handoff / Step / Status / Dispute
+    ├── llm.py             # MockLLM (offline) / GeminiLLM / QwenLLM (lazy SDK imports)
+    ├── ingest.py          # IngestAgent — wraps Alibaba Cloud OSS (WA-009)
     ├── analytics.py       # AnalyticsAgent — wraps features (WA-009)
     ├── risk_model.py      # RiskModelAgent — wraps model.risk (WA-009)
     ├── insight.py         # InsightAgent — wraps ranking + gate (WA-009)
     ├── orchestrator.py    # Orchestrator — plans/runs/reports (WA-010)
     └── __main__.py        # CLI: python -m waspada.agents (WA-010)
 dashboard/                 # React/TS EWS dashboard (Kirana, WA-011)
-gpu/                       # WSL entry points for cuDF/cuML (on hold)
-bench/                     # WA-007 benchmark harness + committed LAST_RUN.json
-tests/                     # 108 passing tests (1 skipped: live BQ smoke)
-data/benchmark.json        # stale placeholder — real numbers in bench/LAST_RUN.json
+gpu/                       # optional WSL entry points for cuDF feature engineering
+tests/                     # passing tests (live-only smoke tests skip without creds)
 backlog/                   # ticket specs (WA-001..WA-012)
 ```
 
@@ -176,8 +138,9 @@ backlog/                   # ticket specs (WA-001..WA-012)
 ### Prerequisites
 - Python 3.11+ (developed on 3.11; tested on 3.12)
 - A virtualenv
-- (optional) Google Cloud creds for live BigQuery; (optional) an NVIDIA GPU +
-  WSL2 for the cuDF/cuML path; (optional) a Gemini API key for the real LLM brain
+- (optional) Alibaba Cloud OSS creds for live data; (optional) an NVIDIA GPU +
+  WSL2 for the cuDF feature-engineering path; (optional) a DashScope API key
+  for the real Qwen negotiation brain (or a Gemini API key)
 
 ### Install
 ```bash
@@ -190,14 +153,14 @@ pip install -r requirements.txt
 ### Configure
 ```bash
 cp .env.example .env
-# Fill in BQ_PROJECT / BQ_DATASET / BQ_TABLE / GOOGLE_APPLICATION_CREDENTIALS
-# (optional) WASPADA_LLM_PROVIDER=gemini + GEMINI_API_KEY
+# Fill in OSS_BUCKET / OSS_ENDPOINT / OSS_KEY / OSS_ACCESS_KEY_ID / OSS_ACCESS_KEY_SECRET
+# (optional) WASPADA_LLM_PROVIDER=qwen + DASHSCOPE_API_KEY (or gemini + GEMINI_API_KEY)
 # (optional) WASPADA_AUTO_APPROVE=1 for smoke runs
 ```
 
 ### Run the pipeline (CLI)
 ```bash
-# Offline (no BQ creds): runs end-to-end on a synthetic snapshot, writes the payload.
+# Offline (no OSS creds): runs end-to-end on a synthetic snapshot, writes the payload.
 python -m waspada.agents --lane collections --auto-approve --top-n 50
 
 # Output (stdout): the analyst report.
@@ -212,7 +175,7 @@ cd dashboard && npm install && npm run dev
 
 ### Run the tests
 ```bash
-python -m pytest tests/ -v          # 101 passed, 1 skipped (live BQ smoke)
+python -m pytest tests/ -v          # live-only smoke tests skip without OSS creds
 ```
 
 ---
@@ -242,12 +205,12 @@ python -m pytest tests/ -v          # 101 passed, 1 skipped (live BQ smoke)
 | Ticket | Deliverable | Status |
 |---|---|---|
 | WA-001 | Repo scaffold + frozen data contract | ✅ done |
-| WA-002 | BigQuery ingest layer (Arrow client) | ✅ done |
-| WA-003 | LendingClub → BigQuery mapping | ✅ done |
+| WA-002 | Alibaba Cloud OSS ingest layer (Arrow client) | ✅ done |
+| WA-003 | LendingClub → OSS mapping | ✅ done |
 | WA-004 | Collections features + label (cuDF + pyarrow) | ✅ done |
 | WA-005 | Risk model (CPU adaptation) | ✅ done |
 | WA-006 | Ranking, segmentation, work-list, alerts | ✅ done |
-| WA-007 | CPU-vs-GPU benchmark harness | ✅ done (CPU measured; GPU wired via WSL) |
+| WA-007 | CPU-vs-GPU benchmark harness | removed (out of scope for the Qwen Cloud hackathon) |
 | WA-008 | Agent framework + ApprovalGate | ✅ done |
 | WA-009 | Pipeline agents (ingest/analytics/risk-model/insight) | ✅ done |
 | WA-010 | Orchestrator + CLI | ✅ done |
@@ -258,6 +221,7 @@ python -m pytest tests/ -v          # 101 passed, 1 skipped (live BQ smoke)
 
 ## License & data
 
-Built for the Gen AI Academy APAC hackathon. Data is the public LendingClub loan
-snapshot (no private portfolios). Secrets and credentials are never committed
-(see `.gitignore`); `models/`, `*.pkl`, and `/data/` dumps are gitignored.
+MIT licensed (see `LICENSE`). Built for the Global AI Hackathon with Qwen Cloud
+(Track 3: Agent Society). Data is the public LendingClub loan snapshot (no
+private portfolios). Secrets and credentials are never committed (see
+`.gitignore`); `models/`, `*.pkl`, and `/data/` dumps are gitignored.

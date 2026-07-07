@@ -1,0 +1,353 @@
+.panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: var(--sp-5) var(--sp-6);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+}
+
+.header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--sp-4);
+}
+
+.headerText {
+  min-width: 0;
+}
+
+.actions {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  flex-shrink: 0;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.runBtn,
+.resetBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  font-size: 0.82rem;
+  font-weight: 600;
+  padding: 6px var(--sp-3);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--pasar-teal-600);
+  background: var(--pasar-teal-600);
+  color: #fff;
+  cursor: pointer;
+  transition: background 0.12s ease;
+}
+
+.runBtn:hover:not(:disabled) {
+  background: var(--pasar-teal-700);
+}
+
+.runBtn:disabled {
+  background: var(--surface-muted);
+  border-color: var(--border-strong);
+  color: var(--text-muted);
+  cursor: progress;
+}
+
+.resetBtn {
+  background: var(--surface);
+  color: var(--text-muted);
+  border-color: var(--border-strong);
+}
+
+.resetBtn:hover {
+  color: var(--text);
+  border-color: var(--text-subtle);
+}
+
+/* Spinner — CSS-only, respects prefers-reduced-motion via tokens.css. */
+.spinner,
+.spinnerLarge {
+  display: inline-block;
+  border-radius: 50%;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  animation: agent-spin 0.7s linear infinite;
+}
+
+.spinner {
+  width: 0.85rem;
+  height: 0.85rem;
+}
+
+.spinnerLarge {
+  width: 1.4rem;
+  height: 1.4rem;
+  color: var(--pasar-teal-600);
+}
+
+@keyframes agent-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.liveBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px var(--sp-3);
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 650;
+  background: var(--surface-muted);
+  color: var(--text-muted);
+  border: 1px solid var(--border-strong);
+}
+
+.liveDot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--sev-high);
+  /* Soft pulse — decorative; reduced-motion disables via tokens.css. */
+  animation: agent-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes agent-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+.runError {
+  margin: 0;
+  padding: var(--sp-3) var(--sp-4);
+  font-size: 0.82rem;
+  color: var(--text);
+  background: color-mix(in srgb, var(--sev-critical) 12%, var(--surface));
+  border: 1px solid var(--sev-critical);
+  border-radius: var(--radius-sm);
+}
+
+.runError strong {
+  color: var(--sev-critical);
+}
+
+.runningState {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-6) var(--sp-4);
+  text-align: center;
+  font-size: 0.88rem;
+  color: var(--text-muted);
+  background: var(--surface-muted);
+  border-radius: var(--radius-sm);
+}
+
+.visuallyHidden {
+  position: absolute !important;
+  width: 1px; height: 1px;
+  padding: 0; margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.title {
+  margin: 0;
+  font-size: 1.125rem;
+  font-weight: 650;
+}
+
+.subtitle {
+  margin: var(--sp-1) 0 0;
+  font-size: 0.8rem;
+  color: var(--text-subtle);
+  max-width: 60ch;
+}
+
+.countBadge {
+  flex-shrink: 0;
+  padding: 2px var(--sp-3);
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 650;
+  background: var(--pasar-teal-100);
+  color: var(--pasar-teal-700);
+  white-space: nowrap;
+}
+
+.empty {
+  margin: 0;
+  padding: var(--sp-4);
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  background: var(--surface-muted);
+  border-radius: var(--radius-sm);
+}
+
+.disputeList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+}
+
+.dispute {
+  background: var(--surface-muted);
+  border-radius: var(--radius-sm);
+  border-left: 4px solid var(--border-strong);
+  padding: var(--sp-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+}
+
+.disputeHead {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  flex-wrap: wrap;
+}
+
+.loanId {
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  font-weight: 650;
+}
+
+.clash {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  margin-right: auto;
+}
+
+.clashSide strong {
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.vs {
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-subtle);
+}
+
+.rounds {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+}
+
+.round {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: var(--sp-3) var(--sp-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+
+.roundHead {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
+}
+
+.agentName {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  color: var(--text-subtle);
+}
+
+.modelTag {
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  padding: 1px var(--sp-2);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text-muted);
+  background: var(--surface-muted);
+}
+
+.confidence {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  font-size: 0.72rem;
+  color: var(--text-subtle);
+  font-variant-numeric: tabular-nums;
+}
+
+.confidenceTrack {
+  display: inline-block;
+  width: 48px;
+  height: 4px;
+  border-radius: 999px;
+  background: var(--chart-track);
+  overflow: hidden;
+}
+
+.confidenceFill {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+}
+
+.claim {
+  margin: 0;
+  font-size: 0.85rem;
+  line-height: 1.45;
+  color: var(--text);
+}
+
+.evidenceList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+}
+
+.evidence {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  padding: 2px var(--sp-2);
+  border-radius: 4px;
+  background: var(--surface-muted);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.rationale {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  line-height: 1.45;
+}
+
+.rationaleLabel {
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-weight: 700;
+  color: var(--text-subtle);
+}

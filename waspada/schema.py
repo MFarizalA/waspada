@@ -146,11 +146,19 @@ class Alert(TypedDict):
 
 
 class DashboardPayload(TypedDict):
-    """The frozen frontend hand-off: ranked work-list + health + alerts."""
+    """The frozen frontend hand-off: ranked work-list + health + alerts.
+
+    ``agent_dialogue`` is an ADDITIVE optional key (the Qwen-pivot debate
+    protocol, HACKATHON.md): absent on older payloads, so validation does not
+    require it. When present it is the serialized
+    :class:`~waspada.agents.protocol.Dispute` list (one entry per contested
+    account). Older payloads without it stay valid.
+    """
 
     work_list: List[Dict[str, object]]     # ScoredAccounts rows as JSON records
     portfolio_health: PortfolioHealth
     alerts: List[Alert]
+    agent_dialogue: Optional[List[Dict[str, object]]]
 
 
 # ---------------------------------------------------------------------------

@@ -1,7 +1,7 @@
 """Shared fixtures/helpers for the QA suite.
 
 Puts the repo root on PYTHONPATH so ``import waspada`` works from the Linux
-worker (the checked-in venv is a Windows venv), seeds BQ env from ``.env`` at
+worker (the checked-in venv is a Windows venv), seeds OSS env from ``.env`` at
 collection time for the live tests, and exposes the synthetic RawLoans table
 that the feature/pipeline tests reuse.
 """
@@ -21,7 +21,7 @@ _REPO_ROOT = Path(__file__).resolve().parents[2]  # tests/qa -> repo root
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
-# Seed env from .env so the live BQ tests see creds at collection time.
+# Seed env from .env so the live OSS tests see creds at collection time.
 try:
     from dotenv import load_dotenv
     load_dotenv(_REPO_ROOT / ".env")
@@ -31,33 +31,35 @@ except Exception:
 from waspada.schema import RawLoans, schema_from_dataclass  # noqa: E402
 
 
-def _bq_configured() -> bool:
+def _oss_configured() -> bool:
     return bool(
-        os.environ.get("BQ_PROJECT")
-        and os.environ.get("BQ_DATASET")
-        and os.environ.get("BQ_TABLE")
-        and os.environ.get("GOOGLE_APPLICATION_CREDENTIALS")
+        os.environ.get("OSS_BUCKET")
+        and os.environ.get("OSS_ENDPOINT")
+        and os.environ.get("OSS_KEY")
+        and os.environ.get("OSS_ACCESS_KEY_ID")
+        and os.environ.get("OSS_ACCESS_KEY_SECRET")
     )
 
 
-# Capture live BQ env at module load (conftest's _clean_env strips it for the
+# Capture live OSS env at module load (conftest's _clean_env strips it for the
 # unit tests; restore it for the live QA tests).
-_BQ_ENV = {k: os.environ.get(k, "") for k in (
-    "BQ_PROJECT", "BQ_DATASET", "BQ_TABLE", "GOOGLE_APPLICATION_CREDENTIALS",
+_OSS_ENV = {k: os.environ.get(k, "") for k in (
+    "OSS_BUCKET", "OSS_ENDPOINT", "OSS_KEY",
+    "OSS_ACCESS_KEY_ID", "OSS_ACCESS_KEY_SECRET",
 )}
 
 
 @pytest.fixture
-def bq_env(monkeypatch):
-    """Restore BQ creds for a live test (no-op when not configured)."""
-    for k, v in _BQ_ENV.items():
+def oss_env(monkeypatch):
+    """Restore OSS creds for a live test (no-op when not configured)."""
+    for k, v in _OSS_ENV.items():
         if v:
             monkeypatch.setenv(k, v)
-    yield _bq_configured()
+    yield _oss_configured()
 
 
-def bq_configured() -> bool:
-    return _bq_configured()
+def oss_configured() -> bool:
+    return _oss_configured()
 
 
 # ----------------------------------------------------------------------- data

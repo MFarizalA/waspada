@@ -24,13 +24,17 @@ from .base import Agent, ApprovalGate
 from .ingest import IngestAgent
 from .insight import InsightAgent
 from .protocol import AgentContext, AgentResult, Handoff, Status
+from .risk_auditor import RiskAuditorAgent
 from .risk_model import RiskModelAgent
 
 __all__ = ["Orchestrator", "COLLECTIONS_STEP_ORDER"]
 
 
-# The canonical Collections-lane step order (agent names).
-COLLECTIONS_STEP_ORDER = ("ingest", "analytics", "risk_model", "insight")
+# The canonical Collections-lane step order (agent names). The risk_auditor
+# (WA-014, the Skeptic) runs AFTER the classical-ML model scores the book and
+# BEFORE insight packages the payload — it audits the top-K riskiest accounts
+# and opens Disputes where its view diverges from the model's band.
+COLLECTIONS_STEP_ORDER = ("ingest", "analytics", "risk_model", "risk_auditor", "insight")
 
 
 class Orchestrator(Agent):
@@ -47,14 +51,17 @@ class Orchestrator(Agent):
         as_of=None,
         top_n: int = 50,
         ingest_limit: Optional[int] = None,
+        audit_k: int = 8,
     ) -> None:
         super().__init__(llm=llm)
         self.gate = gate or ApprovalGate()
         self.as_of = as_of
         self.top_n = top_n
         self.ingest_limit = ingest_limit
+        self.audit_k = audit_k  # Skeptic audits top-K riskiest accounts
         self.handoffs: List[Handoff] = []
         self._steps_order: List[str] = []
+        self._pipeline_agents: List[Agent] = []
 
     # ------------------------------------------------------------------ plan
     def plan(self, lane: str = COLLECTIONS) -> List[str]:
@@ -75,11 +82,23 @@ class Orchestrator(Agent):
 
     # ------------------------------------------------------------------- run
     def _build_agents(self) -> List[Agent]:
-        """Construct the four pipeline agents with shared config."""
+        """Construct the pipeline agents with shared config.
+
+        Model tiering by cognitive load (HACKATHON.md § Judging rubric): the
+        shared ``llm`` is the default tier; the Skeptic gets a cheaper
+        ``qwen3.6-flash`` clone (it only challenges — one-shot JSON), and the
+        rebuttal/arbiter tiers (plus/max) land in WA-016 via the same
+        :meth:`~waspada.agents.llm.LLM.with_model` mechanism. Single-model
+        brains (MockLLM) ignore the override and return ``self``.
+        """
+        # Skeptic challenges with flash — the cheapest tier sufficient for a
+        # one-shot structured challenge. ``with_model`` is a no-op on MockLLM.
+        auditor_brain = self.llm.with_model("qwen3.6-flash")
         return [
             IngestAgent(self.llm, limit=self.ingest_limit),
             AnalyticsAgent(self.llm, as_of=self.as_of),
             RiskModelAgent(self.llm),
+            RiskAuditorAgent(auditor_brain, k=self.audit_k),
             InsightAgent(self.llm, gate=self.gate, top_n=self.top_n),
         ]
 
@@ -87,14 +106,18 @@ class Orchestrator(Agent):
         """Execute the planned sequence, threading artifacts via context.
 
         Returns the terminal :class:`AgentResult` (the insight agent's on
-        success, or an ERROR/BLOCKED result on failure). Each hop is recorded
-        as a :class:`Handoff` for audit.
+        success, or an ERROR/BLOCKED result on failure). A run where the
+        Skeptic opened disputes completes with :class:`Status.DISPUTED`
+        (a *completion*, not a failure — the pipeline still produces its
+        payload; the disputes are flagged for the human gate). Each hop is
+        recorded as a :class:`Handoff` for audit.
         """
         if not self._steps_order:
             self.plan(context.lane)
         self.step("run_start", notes=f"lane={context.lane}")
 
         agents = self._build_agents()
+        self._pipeline_agents = agents  # surfaced for the API audit trail
         ctx = context
         last: Optional[AgentResult] = None
         prev_agent: Optional[Agent] = None
@@ -117,8 +140,13 @@ class Orchestrator(Agent):
                 ))
             prev_agent = agent
 
-            if not res.ok:
-                # Failure (ERROR or BLOCKED) short-circuits with a clear message.
+            # ERROR / BLOCKED are failures → short-circuit. DISPUTED is a
+            # *completion* with live disputes: it is NOT a failure — the
+            # terminal agent (insight) still produced a payload. We keep
+            # stepping here only because insight is last; if a non-terminal
+            # agent ever returns DISPUTED we treat it like OK for flow control
+            # (the status is re-surfaced from the final result below).
+            if res.status in (Status.ERROR, Status.BLOCKED):
                 self.step(
                     "run", status=res.status,
                     notes=f"{agent.name} did not produce artifact: {res.notes}",
@@ -136,11 +164,15 @@ class Orchestrator(Agent):
         # Stash the final payload on the context for the CLI / report.
         payload_handle = last.artifact_ref if last else None
         self._final_ctx = ctx
-        self.step("run_done", notes=f"payload={payload_handle}")
+        # Terminal status mirrors the last agent's: DISPUTED if disputes were
+        # opened, OK otherwise. Both are completions (a payload exists).
+        terminal = last.status if last is not None else Status.OK
+        self.step("run_done", status=terminal, notes=f"payload={payload_handle} status={terminal}")
         return AgentResult(
-            status=Status.OK, agent=self.name,
+            status=terminal, agent=self.name,
             artifact_ref=payload_handle,
-            notes="orchestrated run complete",
+            notes=("orchestrated run complete" if terminal != Status.DISPUTED
+                   else f"orchestrated run complete with {len(ctx.data_handles.get('risk_disputes') or [])} open dispute(s)"),
         )
 
     # --------------------------------------------------------------- report

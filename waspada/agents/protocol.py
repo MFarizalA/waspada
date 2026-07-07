@@ -43,6 +43,7 @@ class Status:
     OK = "ok"            # agent produced its artifact
     BLOCKED = "blocked"  # agent could not proceed (e.g. approval rejected)
     ERROR = "error"      # agent raised / failed
+    DISPUTED = "disputed"  # a downstream agent contests an upstream result
 
 
 # --------------------------------------------------------------------------- #
@@ -137,3 +138,80 @@ class Handoff:
     to: str
     result: AgentResult
     rationale: str = ""
+
+
+# --------------------------------------------------------------------------- #
+# Dispute — the agent-to-agent negotiation record (Agent Society)
+# --------------------------------------------------------------------------- #
+@dataclass
+class DisputeRound:
+    """One turn in a bounded agent-to-agent negotiation.
+
+    ``speaker`` is the agent name (e.g. ``"risk_auditor"``, ``"risk_model"``).
+    ``confidence`` is that speaker's own stated confidence (0-1) in ``claim``,
+    when it gave one — ``None`` if the speaker didn't (or couldn't) state one.
+    ``model`` is the LLM behind the turn (e.g. ``"qwen3.6-flash"``); ``None``
+    marks a deterministic speaker (the Actuary is the sklearn model — no brain).
+    ``evidence`` is the cited feature values / portfolio stats grounding the
+    claim (HACKATHON.md § debate protocol — every claim cites evidence).
+    """
+
+    round_no: int
+    speaker: str
+    claim: str
+    confidence: Optional[float] = None
+    model: Optional[str] = None
+    evidence: List[str] = field(default_factory=list)
+
+
+@dataclass
+class Dispute:
+    """A single account's negotiation record: who opened it, what was said,
+    and how it was resolved.
+
+    ``model_band`` is the Actuary's band for the account (e.g. ``"Q5"``);
+    ``auditor_view`` is the Skeptic's independent read (``"Low"`` |
+    ``"Medium"`` | ``"High"``). A dispute is opened only where these diverge
+    beyond the admissibility rule (see :class:`~waspada.agents.risk_auditor`).
+
+    ``resolution`` is one of ``"upheld"`` (auditor agreed after all),
+    ``"overridden"`` (risk_model conceded the auditor's critique), or
+    ``"escalated_approved"`` / ``"escalated_rejected"`` (unresolved after the
+    bounded rounds, sent to the human :class:`~waspada.agents.base.ApprovalGate`).
+    """
+
+    loan_id: str
+    opened_by: str
+    rounds: List[DisputeRound] = field(default_factory=list)
+    resolution: str = ""
+    resolved_by: str = ""
+    rationale: str = ""
+    model_band: str = ""
+    auditor_view: str = ""
+
+    @staticmethod
+    def round_to_dict(r: "DisputeRound") -> Dict[str, Any]:
+        return {
+            "round_no": r.round_no,
+            "speaker": r.speaker,
+            "model": r.model,
+            "claim": r.claim,
+            "confidence": r.confidence,
+            "evidence": list(r.evidence),
+        }
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Serialize to the frozen shape (HACKATHON.md § dispute record /
+        ``dashboard/src/types.ts`` / ``sample-payload.json``). Field order is
+        stable so a diff against the fixture reads cleanly.
+        """
+        return {
+            "loan_id": self.loan_id,
+            "opened_by": self.opened_by,
+            "model_band": self.model_band,
+            "auditor_view": self.auditor_view,
+            "rounds": [self.round_to_dict(r) for r in self.rounds],
+            "resolution": self.resolution,
+            "resolved_by": self.resolved_by,
+            "rationale": self.rationale,
+        }

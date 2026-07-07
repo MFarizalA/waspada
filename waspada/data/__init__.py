@@ -1,12 +1,12 @@
 """Data layer for WASPADA — the shared engine's data door.
 
-WA-002 ships :class:`~waspada.data.bq.BigQueryClient` and
-:func:`~waspada.data.bq.fetch_loans` for reading raw loans from BigQuery as
-Arrow. The package is import-safe without the google-cloud SDK installed: only
-the actual query path imports the SDK.
+Ships :class:`~waspada.data.oss.OSSClient` and
+:func:`~waspada.data.oss.fetch_loans` for reading the raw loans snapshot from
+Alibaba Cloud OSS as Arrow. The package is import-safe without the ``oss2``
+SDK installed: only the actual fetch path imports the SDK.
 """
 from __future__ import annotations
 
-from .bq import BigQueryClient, fetch_loans
+from .oss import OSSClient, fetch_loans
 
-__all__ = ["BigQueryClient", "fetch_loans"]
+__all__ = ["OSSClient", "fetch_loans"]
