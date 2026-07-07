@@ -74,7 +74,7 @@ export interface DisputeRecord {
   loan_id: string;
   opened_by: string;
   model_band: string; // the Actuary's band, e.g. "Q5"
-  auditor_view: string; // the Skeptic's independent read: "Low" | "Medium" | "High"
+  auditor_view: string; // the Risk Auditor's independent read: "Low" | "Medium" | "High"
   rounds: DisputeRound[];
   resolution: "upheld" | "overridden" | "escalated_approved" | "escalated_rejected";
   resolved_by: string; // "risk_model" (conceded) | "arbiter" | "human"

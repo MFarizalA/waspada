@@ -11,9 +11,9 @@ interface AgentDialogueProps {
 
 /** Character card per speaker — display name + chip color (tokens only). */
 const SPEAKERS: Record<string, { label: string; color: string }> = {
-  risk_auditor: { label: "The Skeptic", color: "var(--sev-high)" },
-  risk_model: { label: "The Actuary", color: "var(--sev-info)" },
-  arbiter: { label: "The Judge", color: "var(--pasar-teal-700)" },
+  risk_auditor: { label: "Risk Auditor", color: "var(--sev-high)" },
+  risk_model: { label: "Actuary", color: "var(--sev-info)" },
+  arbiter: { label: "Credit Arbiter", color: "var(--pasar-teal-700)" },
   human: { label: "Analyst", color: "var(--pasar-teal-500)" },
 };
 
@@ -81,7 +81,7 @@ function DisputeCard({ dispute }: { dispute: DisputeRecord }) {
             vs
           </span>
           <span className={styles.clashSide}>
-            Skeptic <strong>{dispute.auditor_view}</strong>
+            Risk Auditor <strong>{dispute.auditor_view}</strong>
           </span>
         </span>
         <span className="badge" style={{ background: res.color, color: "#fff" }}>
@@ -141,7 +141,7 @@ export function AgentDialogue({ dialogue }: AgentDialogueProps) {
             Agent Society · Risk Debate
           </h2>
           <p className={styles.subtitle}>
-            The Skeptic audits the riskiest scores; contested calls are argued, ruled, and — when
+            The Risk Auditor audits the riskiest scores; contested calls are argued, ruled, and — when
             unresolved — escalated to the analyst.
           </p>
         </div>
@@ -205,7 +205,7 @@ export function AgentDialogue({ dialogue }: AgentDialogueProps) {
         <div className={styles.runningState} aria-hidden="true">
           <span className={styles.spinnerLarge} />
           <p>
-            The Skeptic, Actuary, and Judge are debating the riskiest accounts over Qwen…
+            The Risk Auditor, Actuary, and Credit Arbiter are debating the riskiest accounts over Qwen…
           </p>
         </div>
       ) : effective.length === 0 ? (
