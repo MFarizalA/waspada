@@ -223,12 +223,12 @@ the write-up and video use exactly this framing.
 ```mermaid
 flowchart TB
     subgraph QC["Qwen Cloud (dashscope-intl · compatible-mode/v1)"]
-        F["qwen3.6-flash<br/>challenges"]
-        P["qwen3.7-plus<br/>rebuttals"]
+        F["qwen3.6-flash<br/>challenges + data engineering"]
+        P["qwen3.7-plus<br/>rebuttals + data analysis"]
         M["qwen3.7-max<br/>rulings"]
     end
     subgraph FC["Alibaba Cloud Function Compute (FastAPI · Docker · CAPort 8080)"]
-        O["Orchestrator + 6 agents<br/>(waspada/agents)"]
+        O["Orchestrator + AI agents<br/>(Data Engineer · Data Analyst · Risk Auditor · Actuary · Arbiter)"]
         MCP["MCP server<br/>portfolio_stats · lookup_account"]
         O -- "MCP protocol (stdio)" --> MCP
     end
@@ -258,6 +258,38 @@ flowchart TB
 - **Modularity/scalability:** lane-agnostic agent substrate (origination =
   same society, different features/label); OSS object swap scales the book;
   FC scales the backend; K and model tiers are config.
+
+## Lakehouse data layer (WA-029/030 — the architecture upgrade)
+
+The data layer is a proper **data lakehouse**, not a bulk download:
+
+- **OSS (data lake):** `loans.parquet` as the source of truth in Alibaba Cloud
+  OSS. dlt's `filesystem` source reads it via the S3-compatible API
+  (`endpoint_url`), with incremental loading + merge dedup on re-runs.
+- **DuckDB (query engine):** the in-process SQL engine that reads Parquet
+  directly (via `httpfs` for remote, or locally). Agents run SQL queries
+  instead of Python aggregation — `SELECT grade, avg(dti) ... GROUP BY grade`
+  pushes computation down. DuckDB also federates to RDS PostgreSQL via
+  `postgres_scanner`, enabling cross-source joins (loan book ↔ dispute memory).
+- **RDS PostgreSQL (operational warehouse):** user auth (WA-028), dispute
+  memory (WA-026), audit trail. DuckDB joins OSS analytics with RDS
+  operational data in a single query — the lakehouse pattern.
+- **dlt pipeline:** schema contracts freeze the RawLoans shape (reject drift),
+  incremental cursors track what's loaded, `load_info` carries the audit
+  metadata. Swappable destination: DuckDB for local/dev, PostgreSQL for prod.
+
+Two pipeline agents become **AI agents** powered by Qwen function calling:
+- **Data Engineer** (qwen3.6-flash) — validates, profiles, quality-checks the
+  snapshot. Decides which checks to run via tool-calling loop
+  (validate_schema → null_rates → profile_column → detect_anomalies).
+- **Data Analyst** (qwen3.7-plus) — builds features, explores the data,
+  surfaces insights. Runs DuckDB SQL via function calling (query →
+  correlation → distribution → build_feature).
+
+Both use the same Qwen native function-calling loop as the Risk Auditor —
+multi-hop tool calls where Qwen decides which query to run next. This is
+genuine AI-powered analytics: the agents reason about what to explore, they
+don't execute a fixed script.
 
 ## Analytics (feeds the debate — not a separate showpiece)
 
