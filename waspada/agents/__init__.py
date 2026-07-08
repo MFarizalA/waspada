@@ -18,6 +18,13 @@ from __future__ import annotations
 
 from .arbiter import ArbiterAgent
 from .base import Agent, ApprovalGate, Approved, Rejected, handoff
+from .data_engineer import DataEngineerAgent
+from .dispute_memory import (
+    DisputeMemory,
+    InMemoryMemory,
+    LocalFileMemory,
+    MemoryBackend,
+)
 from .ingest import IngestAgent
 from .insight import InsightAgent
 from .llm import GeminiLLM, LLM, MockLLM, QwenLLM, get_llm
@@ -45,8 +52,14 @@ __all__ = [
     "Handoff",
     "Step",
     "Status",
+    # memory (WA-026)
+    "DisputeMemory",
+    "MemoryBackend",
+    "InMemoryMemory",
+    "LocalFileMemory",
     # agents
     "ArbiterAgent",
+    "DataEngineerAgent",
     "IngestAgent",
     "InsightAgent",
     "RiskAuditorAgent",

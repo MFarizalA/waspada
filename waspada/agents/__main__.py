@@ -113,23 +113,23 @@ def main(argv: Optional[list[str]] = None) -> int:
 
     ctx = AgentContext(lane=args.lane, data_handles={}, meta={"as_of": args.as_of, "cli": True})
 
-    # Offline path: stub the ingest fetch with a synthetic snapshot when OSS
-    # isn't configured, so the CLI runs end-to-end without network.
+    # Offline path: stub the data-engineer fetch with a synthetic snapshot when
+    # OSS isn't configured, so the CLI runs end-to-end without network.
     if not _oss_configured():
-        from .ingest import IngestAgent  # local import to avoid cycle at module load
+        from .data_engineer import DataEngineerAgent  # local import to avoid cycle
         sample = _sample_raw_table()
         # The orchestrator builds its own agents; register the stub on the
-        # ingest agent via a tool-injection hook before run().
-        # (The orchestrator's IngestAgent reads tools["fetch"]; we pre-seed it.)
+        # data-engineer agent via a tool-injection hook before run().
+        # (DataEngineerAgent reads tools["fetch"] for the raw snapshot.)
         _stub_fetch = (lambda tbl: (lambda *, lane="collections", limit=None: tbl))(sample)
 
-        # Patch the IngestAgent class so the instance the orchestrator builds
-        # picks up the stub. Smallest-correct way to keep the CLI offline.
+        # Patch the build hook so the instance the orchestrator builds picks up
+        # the stub. Smallest-correct way to keep the CLI offline.
         _orig_build = orch._build_agents
         def _build_with_stub():
             agents = _orig_build()
             for a in agents:
-                if isinstance(a, IngestAgent):
+                if isinstance(a, DataEngineerAgent):
                     a.register_tool("fetch", _stub_fetch)
             return agents
         orch._build_agents = _build_with_stub  # type: ignore[method-assign]

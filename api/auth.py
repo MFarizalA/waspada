@@ -243,6 +243,12 @@ async def reset_password(body: _ResetIn):
     return _MsgOut(message="password updated")
 
 
+@router.get("/me")
+async def whoami(user: dict = Depends(current_user)):
+    """Return the authenticated user's email (Bearer token validation)."""
+    return user
+
+
 def _expiry_iso() -> str:
     """ISO timestamp for a fresh reset token's expiry (1h TTL)."""
     return (datetime.now(timezone.utc) + timedelta(hours=1)).isoformat()

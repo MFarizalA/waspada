@@ -10,6 +10,10 @@ cuml-cu12>=26.6        # GPU ML (risk models)
 # --- Alibaba Cloud data layer ---
 oss2>=2.18              # OSS bucket client (the loan-portfolio Parquet object)
 
+# --- Lakehouse access layer (WA-029): dlt load + DuckDB for the Data Engineer agent ---
+dlt[duckdb]>=1.4        # dlt load (filesystem source over OSS/S3 endpoint) + DuckDB destination
+duckdb>=1.0             # in-process SQL engine the Data Engineer quality tools query
+
 # --- Core pipeline (features + risk model) ---
 pandas>=2.2
 scikit-learn>=1.5

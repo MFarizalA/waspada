@@ -33,7 +33,7 @@ NOT self-improvement.
 """
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 import pyarrow as pa
 
@@ -41,6 +41,7 @@ from ..config import COLLECTIONS, LANES
 from .analytics import AnalyticsAgent
 from .arbiter import ArbiterAgent
 from .base import Agent, ApprovalGate, Approved
+from .data_engineer import DataEngineerAgent
 from .dispute_memory import DisputeMemory, MemoryBackend
 from .ingest import IngestAgent
 from .insight import InsightAgent
@@ -51,11 +52,14 @@ from .risk_model import RiskModelAgent
 __all__ = ["Orchestrator", "COLLECTIONS_STEP_ORDER"]
 
 
-# The canonical Collections-lane step order (agent names). The risk_auditor
+# The canonical Collections-lane step order (agent names). WA-029 promotes the
+# deterministic ingest step into a Tier-2 Data Engineer agent (``data_engineer``)
+# that runs the same freshness/schema gate INSIDE it, then adds a qwen3.6-flash
+# function-calling reasoning loop over data quality. The risk_auditor
 # (WA-014, the Skeptic) runs AFTER the classical-ML model scores the book and
 # BEFORE insight packages the payload — it audits the top-K riskiest accounts
 # and opens Disputes where its view diverges from the model's band.
-COLLECTIONS_STEP_ORDER = ("ingest", "analytics", "risk_model", "risk_auditor", "insight")
+COLLECTIONS_STEP_ORDER = ("data_engineer", "analytics", "risk_model", "risk_auditor", "insight")
 
 
 class Orchestrator(Agent):
@@ -77,6 +81,8 @@ class Orchestrator(Agent):
         enable_arbiter: bool = True,
         memory: Optional[DisputeMemory] = None,
         memory_backend: Optional[MemoryBackend] = None,
+        on_round_complete: Optional[Callable[["Dispute", "DisputeRound"], None]] = None,
+        on_dispute_resolved: Optional[Callable[["Dispute"], None]] = None,
     ) -> None:
         super().__init__(llm=llm)
         self.gate = gate or ApprovalGate()
@@ -109,6 +115,36 @@ class Orchestrator(Agent):
         # memory is falsy and ``memory or ...`` would discard it.
         self.memory: DisputeMemory = (
             memory if memory is not None else DisputeMemory(memory_backend))
+        # WA-022: streaming hooks (default None → no behavior change). The
+        # /api/run/stream SSE endpoint sets these so each debate round /
+        # terminal resolution is emitted as a Server-Sent Event as it happens.
+        # Both callbacks receive the in-progress Dispute (mutated in place —
+        # read but don't mutate). Kept off the hot path: a None callback is a
+        # pure no-op, so every existing run is byte-for-byte unchanged.
+        self.on_round_complete = on_round_complete
+        self.on_dispute_resolved = on_dispute_resolved
+
+    def _emit_round(self, d: Dispute, r: DisputeRound) -> None:
+        """Fire ``on_round_complete`` if wired (no-op otherwise)."""
+        cb = self.on_round_complete
+        if cb is None:
+            return
+        try:
+            cb(d, r)
+        except Exception as exc:  # a stream hook never fails the run
+            self.step("stream_hook_error", status=Status.ERROR,
+                      notes=f"on_round_complete raised: {exc}")
+
+    def _emit_resolved(self, d: Dispute) -> None:
+        """Fire ``on_dispute_resolved`` if wired (no-op otherwise)."""
+        cb = self.on_dispute_resolved
+        if cb is None:
+            return
+        try:
+            cb(d)
+        except Exception as exc:  # a stream hook never fails the run
+            self.step("stream_hook_error", status=Status.ERROR,
+                      notes=f"on_dispute_resolved raised: {exc}")
 
     # ------------------------------------------------------------------ plan
     def plan(self, lane: str = COLLECTIONS) -> List[str]:
@@ -141,6 +177,12 @@ class Orchestrator(Agent):
         # Skeptic challenges with flash — the cheapest tier sufficient for a
         # one-shot structured challenge. ``with_model`` is a no-op on MockLLM.
         auditor_brain = self.llm.with_model("qwen3.6-flash")
+        # Data Engineer (WA-029) also reasons on flash — same cheap tier, a
+        # function-calling loop over data quality. Tiered separately from the
+        # debate brain so a shared MockLLM script isn't consumed by the DE's
+        # loop (tests inject a fresh MockLLM for the DE; production gets a
+        # flash clone sharing the Qwen client).
+        de_brain = self.llm.with_model("qwen3.6-flash")
         risk_model = RiskModelAgent(self.llm)
         # Remember the risk-model agent so the dispute-resolution step can
         # call its defend_score() (the Actuary speaks Round 2).
@@ -152,7 +194,7 @@ class Orchestrator(Agent):
         else:
             self._arbiter_agent = None
         return [
-            IngestAgent(self.llm, limit=self.ingest_limit),
+            DataEngineerAgent(de_brain, limit=self.ingest_limit),
             AnalyticsAgent(self.llm, as_of=self.as_of),
             risk_model,
             RiskAuditorAgent(auditor_brain, k=self.audit_k),
@@ -293,6 +335,12 @@ class Orchestrator(Agent):
         self.memory.reset_counters()
 
         for d in disputes:
+            # --- WA-022: stream the auditor's Round-1 challenge (always present;
+            # it's what opened the dispute). Emitted before the memory check so
+            # even a short-circuited dispute shows why it was opened. ---
+            if d.rounds:
+                self._emit_round(d, d.rounds[0])
+
             # --- WA-026: consult cross-run memory BEFORE debating. ---
             recalled = self.memory.short_circuit(d)
             if recalled is not None:
@@ -306,6 +354,7 @@ class Orchestrator(Agent):
             # --- Round 2: the Actuary rebuts. ---
             r2 = self._risk_model_agent.defend_score(d, scored, features)
             d.rounds.append(r2)
+            self._emit_round(d, r2)
             verdict = self._rebuttal_verdict(r2.claim)
             if verdict == "concede":
                 # Concession closes the dispute — auditor's critique wins.
@@ -315,6 +364,7 @@ class Orchestrator(Agent):
                 counts["overridden"] += 1
                 self.step("dispute_resolved",
                           notes=f"{d.loan_id} overridden (risk_model conceded)")
+                self._emit_resolved(d)
                 continue
             if verdict == "unparsable":
                 # Unparsable rebuttal → safe degrade to the gate.
@@ -329,6 +379,7 @@ class Orchestrator(Agent):
             # --- Round 3: the Arbiter rules. ---
             ruling, rationale, _conf, r3 = self._arbiter_agent.rule(d)
             d.rounds.append(r3)
+            self._emit_round(d, r3)
             if ruling == "uphold":
                 d.resolution = "upheld"
                 d.resolved_by = "arbiter"
@@ -336,6 +387,7 @@ class Orchestrator(Agent):
                 counts["upheld"] += 1
                 self.step("dispute_resolved",
                           notes=f"{d.loan_id} upheld (arbiter)")
+                self._emit_resolved(d)
             elif ruling == "override":
                 d.resolution = "overridden"
                 d.resolved_by = "arbiter"
@@ -343,6 +395,7 @@ class Orchestrator(Agent):
                 counts["overridden"] += 1
                 self.step("dispute_resolved",
                           notes=f"{d.loan_id} overridden (arbiter)")
+                self._emit_resolved(d)
             else:  # escalate
                 escalations.append(d)
 
@@ -393,6 +446,10 @@ class Orchestrator(Agent):
         counts[outcome] += 1
         self.step("dispute_recalled",
                   notes=f"{d.loan_id} {outcome} (recalled from memory)")
+        # WA-022: stream the synthetic recall round + the reused resolution so
+        # the live view shows the memory short-circuit, not a silent skip.
+        self._emit_round(d, d.rounds[-1])
+        self._emit_resolved(d)
 
     def _inject_precedent(self, d: Dispute) -> None:
         """Stamp any non-short-circuiting prior ruling onto the dispute.
@@ -448,6 +505,9 @@ class Orchestrator(Agent):
             d.resolved_by = "human"
             d.rationale = (d.rationale or "") + f" escalated; gate {outcome}."
             counts[outcome] += 1
+            # WA-022: stream the human-gate resolution (no new round is appended
+            # here — the rounds were already streamed in the main loop).
+            self._emit_resolved(d)
 
     @staticmethod
     def _rebuttal_verdict(claim: str) -> str:

@@ -94,7 +94,7 @@ async def run_pipeline(brain: str = "mock", _user: dict = Depends(current_user))
     should not be the default every visitor's first click triggers).
     """
     from waspada.agents.__main__ import _sample_raw_table
-    from waspada.agents.ingest import IngestAgent
+    from waspada.agents.data_engineer import DataEngineerAgent
 
     import datetime as dt
 
@@ -115,16 +115,15 @@ async def run_pipeline(brain: str = "mock", _user: dict = Depends(current_user))
         meta={"source": "cloud-run-demo"},
     )
 
-    # Stub the ingest with a synthetic snapshot so no BQ is needed
+    # Stub the data-engineer fetch with a synthetic snapshot so no OSS is needed
     sample = _sample_raw_table(n=200)
     _stub = (lambda tbl: (lambda *, lane="collections", limit=None: tbl))(sample)
 
-    from waspada.agents.ingest import IngestAgent
     _orig_build = orch._build_agents
     def _build_with_stub():
         agents = _orig_build()
         for a in agents:
-            if isinstance(a, IngestAgent):
+            if isinstance(a, DataEngineerAgent):
                 a.register_tool("fetch", _stub)
         return agents
     orch._build_agents = _build_with_stub  # type: ignore

@@ -31,6 +31,7 @@ from waspada.agents.arbiter import (
     ArbiterAgent, ARBITER_CONFIDENCE_THRESHOLD, _parse_ruling_json,
 )
 from waspada.agents.ingest import IngestAgent
+from waspada.agents.data_engineer import DataEngineerAgent
 from waspada.agents.orchestrator import Orchestrator
 from waspada.agents.risk_auditor import RiskAuditorAgent
 from waspada.agents.risk_model import RiskModelAgent, _parse_verdict_json
@@ -309,8 +310,13 @@ def _orch_with_brain(raw: pa.Table, brain: MockLLM, *, gate=None,
     def _build():
         agents = _orig()
         for a in agents:
-            if isinstance(a, IngestAgent):
+            if isinstance(a, DataEngineerAgent):
+                # Offline fetch stub + a FRESH brain so the DE's function-calling
+                # loop doesn't consume the shared debate script. The DE runs its
+                # default check set (unparsable brain) — data quality still
+                # happens, downstream debate replies stay aligned.
                 a.register_tool("fetch", _stub_fetch(raw))
+                a.llm = MockLLM()
         return agents
     orch._build_agents = _build  # type: ignore[method-assign]
     return orch

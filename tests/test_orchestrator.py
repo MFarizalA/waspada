@@ -14,7 +14,7 @@ import pyarrow as pa
 import pytest
 
 from waspada.agents import AgentContext, ApprovalGate, Approved, MockLLM, Rejected, Status
-from waspada.agents.ingest import IngestAgent
+from waspada.agents.data_engineer import DataEngineerAgent
 from waspada.agents.orchestrator import COLLECTIONS_STEP_ORDER, Orchestrator
 from waspada.schema import RawLoans, schema_from_dataclass
 
@@ -63,14 +63,14 @@ def _raw_table(n: int = 80, seed: int = 11) -> pa.Table:
 
 
 def _orchestrator_with_stub(raw: pa.Table, *, gate: ApprovalGate) -> Orchestrator:
-    """Build an orchestrator whose ingest fetch is stubbed (offline)."""
+    """Build an orchestrator whose data-engineer fetch is stubbed (offline)."""
     orch = Orchestrator(MockLLM(), gate=gate, as_of=dt.date(2024, 12, 1), top_n=15)
     _stub = (lambda tbl: (lambda *, lane="collections", limit=None: tbl))(raw)
     _orig_build = orch._build_agents
     def _build():
         agents = _orig_build()
         for a in agents:
-            if isinstance(a, IngestAgent):
+            if isinstance(a, DataEngineerAgent):
                 a.register_tool("fetch", _stub)
         return agents
     orch._build_agents = _build  # type: ignore[method-assign]
@@ -89,7 +89,7 @@ def test_plan_returns_collections_step_order():
     orch = Orchestrator(MockLLM())
     steps = orch.plan("collections")
     assert steps == list(COLLECTIONS_STEP_ORDER)
-    assert steps[0] == "ingest" and steps[-1] == "insight"
+    assert steps[0] == "data_engineer" and steps[-1] == "insight"
 
 
 def test_plan_rejects_unknown_lane():
@@ -119,14 +119,14 @@ def test_run_executes_all_steps_in_order(raw_table):
     # Step order logged: one "run" step per agent, in sequence.
     run_notes = [s.notes for s in orch.steps if s.action == "run"]
     # Each run-step names the agent and its artifact handle.
-    assert any("ingest" in n and "raw_loans" in n for n in run_notes)
+    assert any("data_engineer" in n and "raw_loans" in n for n in run_notes)
     assert any("analytics" in n and "feature_frame" in n for n in run_notes)
     assert any("risk_model" in n and "scored_accounts" in n for n in run_notes)
     assert any("risk_auditor" in n and "scored_accounts" in n for n in run_notes)
     assert any("insight" in n and "dashboard_payload" in n for n in run_notes)
     # Handoffs recorded frm→to in order. (risk_auditor sits between risk_model
-    # and insight — WA-014.)
-    assert [h.frm for h in orch.handoffs] == ["ingest", "analytics", "risk_model", "risk_auditor"]
+    # and insight — WA-014.) data_engineer replaced ingest in WA-029.
+    assert [h.frm for h in orch.handoffs] == ["data_engineer", "analytics", "risk_model", "risk_auditor"]
     assert [h.to for h in orch.handoffs] == ["analytics", "risk_model", "risk_auditor", "insight"]
 
 
@@ -160,13 +160,13 @@ def test_run_short_circuits_on_gate_rejection(raw_table):
 
     assert res.status == Status.BLOCKED
     assert "insight" in res.notes.lower() or "rejected" in res.notes.lower()
-    # The pipeline ran ingest→analytics→risk_model but stopped at insight.
+    # The pipeline ran data_engineer→analytics→risk_model but stopped at insight.
     run_agents = [n.split(" ")[0] for n in (s.notes for s in orch.steps if s.action == "run")]
-    assert "ingest" in run_agents and "risk_model" in run_agents
+    assert "data_engineer" in run_agents and "risk_model" in run_agents
 
 
 def test_run_surfaces_stage_failure_not_swallowed():
-    """An ingest failure (zero rows) surfaces as BLOCKED, not a silent success."""
+    """A data_engineer failure (zero rows) surfaces as BLOCKED, not a silent success."""
     import dataclasses
     empty = pa.table(
         {f.name: [] for f in dataclasses.fields(RawLoans)},
@@ -176,7 +176,7 @@ def test_run_surfaces_stage_failure_not_swallowed():
     orch = _orchestrator_with_stub(empty, gate=gate)
     res = orch.run(AgentContext(lane="collections", data_handles={}))
     assert res.status == Status.BLOCKED
-    assert "ingest" in res.notes.lower()
+    assert "data_engineer" in res.notes.lower() or "ingest" in res.notes.lower()
 
 
 # --------------------------------------------------------------------------- #
