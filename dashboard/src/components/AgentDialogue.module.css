@@ -66,6 +66,37 @@
   border-color: var(--text-subtle);
 }
 
+/* "Watch live" — the secondary, outline-flavored toggle beside Run live. Reads
+   as a peer action, not the primary one (Run live stays filled/teal). */
+.watchBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  font-size: 0.82rem;
+  font-weight: 600;
+  padding: 6px var(--sp-3);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--pasar-teal-600);
+  background: var(--surface);
+  color: var(--pasar-teal-700);
+  cursor: pointer;
+  transition: background 0.12s ease;
+}
+
+.watchBtn:hover:not(:disabled) {
+  background: var(--pasar-teal-50);
+}
+
+.watchBtn:disabled {
+  color: var(--text-muted);
+  border-color: var(--border-strong);
+  cursor: progress;
+}
+
+.watchBtn[aria-pressed="true"] {
+  background: var(--pasar-teal-50);
+}
+
 /* Spinner — CSS-only, respects prefers-reduced-motion via tokens.css. */
 .spinner,
 .spinnerLarge {
@@ -85,6 +116,32 @@
   width: 1.4rem;
   height: 1.4rem;
   color: var(--pasar-teal-600);
+}
+
+/* Compact spinner for the in-list "streaming more rounds…" tail. */
+.spinnerSmall {
+  display: inline-block;
+  width: 0.75rem;
+  height: 0.75rem;
+  border-radius: 50%;
+  border: 2px solid var(--pasar-teal-600);
+  border-right-color: transparent;
+  animation: agent-spin 0.7s linear infinite;
+  color: var(--pasar-teal-600);
+}
+
+/* Quiet "more coming" row under live cards while a stream is still open. */
+.streamingTail {
+  list-style: none;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  font-size: 0.78rem;
+  color: var(--text-subtle);
+  padding: var(--sp-2) var(--sp-3);
+  background: var(--surface-muted);
+  border-radius: var(--radius-sm);
+  align-self: flex-start;
 }
 
 @keyframes agent-spin {

@@ -2,6 +2,7 @@ import { useMemo } from "react";
 
 import type { DisputeRecord, DisputeRound } from "@/types";
 import { useLiveRun } from "@/lib/useLiveRun";
+import { useLiveDebateStream } from "@/lib/useLiveDebateStream";
 import styles from "./AgentDialogue.module.css";
 
 interface AgentDialogueProps {
@@ -113,21 +114,36 @@ function DisputeCard({ dispute }: { dispute: DisputeRecord }) {
  * human escalation). Contract: `DashboardPayload.agent_dialogue` (additive,
  * optional — see HACKATHON.md § dispute record).
  *
- * By default the panel renders the fixture debate. The "Run live (Qwen)"
- * action POSTs to `/api/run?brain=qwen` and, on success, swaps in the live
- * `agent_dialogue` (same frozen shape — the backend conforms per WA-014). Only
- * the debate surface swaps; the rest of the dashboard keeps its fixture view.
+ * The panel renders the committed fixture by default. Two live paths swap in a
+ * fresh debate:
+ *  - "Run live (Qwen)" — POST /api/run?brain=qwen, whole debate returned in one
+ *    JSON envelope (useLiveRun). Best when the stream endpoint is down.
+ *  - "Watch live" — SSE on /api/run/stream?brain=qwen, rounds appended as they
+ *    arrive (useLiveDebateStream). The debating spinner holds until the first
+ *    round lands, then transitions to live cards.
+ * Only the debate surface swaps; the rest of the dashboard keeps its fixture.
  */
 export function AgentDialogue({ dialogue }: AgentDialogueProps) {
   const { state, run, reset } = useLiveRun();
+  const stream = useLiveDebateStream();
   const isLive = state.status === "ok";
-  // On a successful live run, the panel shows the live debate (possibly empty —
-  // the auditor may agree with every audited score). `?? []` covers a live
-  // payload that omits the additive key. `effective` is always a concrete array
-  // so the memo and render stay type-narrow; the pre-WA-014 guard below still
-  // hides the panel entirely when the fixture predates agent_dialogue.
-  const liveDialogue: DisputeRecord[] = isLive ? state.payload.agent_dialogue ?? [] : [];
-  const effective: DisputeRecord[] = isLive ? liveDialogue : (dialogue ?? []);
+  const isStreaming = stream.state.status === "live" || stream.state.status === "connecting";
+
+  // The stream takes precedence when active — it's the most "live" view. Then a
+  // completed Run-live run. Then the fixture.
+  let effective: DisputeRecord[];
+  let active: "fixture" | "run" | "stream";
+  if (isStreaming) {
+    effective =
+      stream.state.status === "live" ? stream.state.disputes : [];
+    active = "stream";
+  } else if (isLive) {
+    effective = state.payload.agent_dialogue ?? [];
+    active = "run";
+  } else {
+    effective = dialogue ?? [];
+    active = "fixture";
+  }
   const running = state.status === "running";
 
   const escalated = useMemo(
@@ -156,10 +172,13 @@ export function AgentDialogue({ dialogue }: AgentDialogueProps) {
           </p>
         </div>
         <div className={styles.actions}>
-          {isLive && (
-            <span className={styles.liveBadge} title="Showing a live Qwen run">
+          {(isLive || isStreaming) && (
+            <span
+              className={styles.liveBadge}
+              title={isStreaming ? "Watching the live stream" : "Showing a live Qwen run"}
+            >
               <span className={styles.liveDot} aria-hidden="true" />
-              Live
+              {isStreaming ? "Streaming" : "Live"}
             </span>
           )}
           {effective.length > 0 && (
@@ -168,27 +187,49 @@ export function AgentDialogue({ dialogue }: AgentDialogueProps) {
               {escalated > 0 ? ` · ${escalated} escalated` : ""}
             </span>
           )}
-          {isLive ? (
+          {active === "stream" ? (
+            <button type="button" className={styles.resetBtn} onClick={stream.stop}>
+              Stop stream
+            </button>
+          ) : isLive ? (
             <button type="button" className={styles.resetBtn} onClick={reset}>
               Back to fixture
             </button>
           ) : (
-            <button
-              type="button"
-              className={styles.runBtn}
-              onClick={run}
-              disabled={running}
-              aria-busy={running}
-            >
-              {running ? (
-                <>
-                  <span className={styles.spinner} aria-hidden="true" />
-                  Running…
-                </>
-              ) : (
-                "Run live (Qwen)"
-              )}
-            </button>
+            <>
+              <button
+                type="button"
+                className={styles.watchBtn}
+                onClick={stream.start}
+                disabled={running}
+                aria-pressed={isStreaming}
+              >
+                {stream.state.status === "connecting" ? (
+                  <>
+                    <span className={styles.spinner} aria-hidden="true" />
+                    Connecting…
+                  </>
+                ) : (
+                  "Watch live"
+                )}
+              </button>
+              <button
+                type="button"
+                className={styles.runBtn}
+                onClick={run}
+                disabled={running}
+                aria-busy={running}
+              >
+                {running ? (
+                  <>
+                    <span className={styles.spinner} aria-hidden="true" />
+                    Running…
+                  </>
+                ) : (
+                  "Run live (Qwen)"
+                )}
+              </button>
+            </>
           )}
         </div>
       </header>
@@ -196,11 +237,17 @@ export function AgentDialogue({ dialogue }: AgentDialogueProps) {
       {/* Polite live region: announces run state to assistive tech without
           stealing focus. role="alert" on the error block promotes it. */}
       <p className={styles.visuallyHidden} role="status" aria-live="polite">
-        {running
-          ? "Running the live Qwen debate…"
-          : isLive
-            ? "Live debate loaded."
-            : ""}
+        {isStreaming
+          ? stream.state.status === "connecting"
+            ? "Opening the live debate stream…"
+            : stream.state.status === "live" && stream.state.done
+              ? "Live debate complete."
+              : "Streaming the live debate…"
+          : running
+            ? "Running the live Qwen debate…"
+            : isLive
+              ? "Live debate loaded."
+              : ""}
       </p>
 
       {state.status === "error" && (
@@ -209,9 +256,16 @@ export function AgentDialogue({ dialogue }: AgentDialogueProps) {
         </p>
       )}
 
+      {stream.state.status === "error" && (
+        <p className={styles.runError} role="alert">
+          <strong>Couldn’t watch live:</strong> {stream.state.message}
+        </p>
+      )}
+
       {/* Mid-run placeholder so judges aren’t staring at a static fixture while
-          the Qwen call is in flight (~15-60s). */}
-      {running ? (
+          the Qwen call is in flight (~15-60s), or while the SSE stream is
+          connecting before its first round lands. */}
+      {running || stream.state.status === "connecting" ? (
         <div className={styles.runningState} aria-hidden="true">
           <span className={styles.spinnerLarge} />
           <p>
@@ -220,15 +274,27 @@ export function AgentDialogue({ dialogue }: AgentDialogueProps) {
         </div>
       ) : effective.length === 0 ? (
         <p className={styles.empty}>
-          {isLive
-            ? "No disputes this live run — the auditor agreed with every audited score."
-            : "No disputes this run — the auditor agreed with every audited score."}
+          {active === "stream"
+            ? stream.state.status === "live" && stream.state.done
+              ? "No disputes this stream — the auditor agreed with every audited score."
+              : "Waiting for the first round…"
+            : isLive
+              ? "No disputes this live run — the auditor agreed with every audited score."
+              : "No disputes this run — the auditor agreed with every audited score."}
         </p>
       ) : (
         <ul className={styles.disputeList} role="list">
           {effective.map((dispute) => (
             <DisputeCard key={dispute.loan_id} dispute={dispute} />
           ))}
+          {/* While streaming and not yet done, show a quiet "more coming" tail
+              under the live cards so the panel reads as actively streaming. */}
+          {active === "stream" && !(stream.state.status === "live" && stream.state.done) && (
+            <li className={styles.streamingTail} aria-hidden="true">
+              <span className={styles.spinnerSmall} />
+              Streaming more rounds…
+            </li>
+          )}
         </ul>
       )}
     </section>

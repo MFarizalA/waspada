@@ -71,6 +71,16 @@ let _token: string | null = null;
 let _onUnauthorized: (() => void) | null = null;
 
 /**
+ * Read the current session token from outside React. The one place this is
+ * needed is EventSource (SSE), which — unlike fetch — cannot set request
+ * headers, so the Bearer has to ride as a query param on the stream URL.
+ * Returns null when no session is active; callers must handle that.
+ */
+export function getAuthToken(): string | null {
+  return _token;
+}
+
+/**
  * Authenticated fetch. Attaches `Authorization: Bearer <token>` (when a session
  * exists and the caller hasn't set one) and triggers a logout on 401 so the app
  * returns to the login screen instead of silently failing.
