@@ -51,6 +51,40 @@
   background: var(--surface-muted);
 }
 
+/* Session controls (WA-028): mode chip + signed-in email + sign-out. */
+.session {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  min-width: 0;
+}
+
+.userEmail {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  max-width: 240px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.logoutBtn {
+  padding: var(--sp-1) var(--sp-3);
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--pasar-teal-700);
+  background: var(--pasar-teal-50);
+  border: 1px solid var(--pasar-teal-500);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background 0.12s;
+}
+
+.logoutBtn:hover {
+  background: var(--pasar-teal-100);
+}
+
 .main {
   flex: 1;
   padding: var(--sp-6);

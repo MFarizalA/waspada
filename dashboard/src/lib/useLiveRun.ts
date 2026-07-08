@@ -1,11 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { isDashboardPayload, type DashboardPayload } from "@/types";
+import { apiFetch } from "@/lib/auth";
 
 /**
  * Live run hook — drives the "Run live (Qwen)" action on the Agent Society
- * panel. POSTs to `/api/run?brain=qwen` (api/main.py), which returns an
- * envelope `{ payload, report, alert_summary, steps }`; only the frozen
+ * panel. POSTs to `/api/run?brain=qwen` (api/main.py), which is a Bearer-gated
+ * route (Depends(current_user)). `apiFetch` attaches the token from the auth
+ * context and, on a 401, clears the session — which returns the user to the
+ * login screen via the App gate. The response envelope is
+ * `{ payload, report, alert_summary, steps }`; only the frozen
  * `DashboardPayload` is consumed here.
  *
  * The panel renders the committed fixture by default; this hook swaps in the
@@ -53,7 +57,7 @@ export function useLiveRun(): UseLiveRunResult {
     // Race the fetch against a timeout so a hung backend doesn't freeze the UI.
     const timer = setTimeout(() => controller.abort(), RUN_TIMEOUT_MS);
 
-    fetch(RUN_URL, {
+    apiFetch(RUN_URL, {
       method: "POST",
       headers: { Accept: "application/json" },
       signal: controller.signal,

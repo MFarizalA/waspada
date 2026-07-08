@@ -2,11 +2,13 @@ import { useEffect, useState } from "react";
 
 import type { DashboardPayload, ScoredAccount } from "@/types";
 import { loadPayload } from "@/lib/payload";
+import { useAuth } from "@/lib/auth";
 import { WorkList } from "@/components/WorkList";
 import { PortfolioHealth } from "@/components/PortfolioHealth";
 import { Alerts } from "@/components/Alerts";
 import { AgentDialogue } from "@/components/AgentDialogue";
 import { AccountDrawer } from "@/components/AccountDrawer";
+import { AuthScreen } from "@/components/AuthScreen";
 import styles from "./App.module.css";
 
 type LoadState =
@@ -22,8 +24,29 @@ type LoadState =
  * lib/payload.ts) and lays out the three analyst panels + the per-account
  * drawer. The payload shape never changes between demo and real run; the
  * contract is frozen (WA-001).
+ *
+ * Auth (WA-028): the whole dashboard is gated behind `useAuth`. Unauthenticated
+ * users see the AuthScreen; a 401 on any protected call (via apiFetch in
+ * useLiveRun) clears the session and bounces back to login.
  */
 export function App() {
+  const { status } = useAuth();
+
+  // While we're validating a stored token against /me, show a minimal splash
+  // instead of flashing the login form for already-authed returning users.
+  if (status === "loading") {
+    return <div className={styles.app} />;
+  }
+  if (status !== "authenticated") {
+    return <AuthScreen />;
+  }
+  return <Dashboard />;
+}
+
+/** The authenticated dashboard. Split out so it only pays for its state/hooks
+ *  once a session exists. */
+function Dashboard() {
+  const { user, logout } = useAuth();
   const [state, setState] = useState<LoadState>({ status: "loading" });
   const [selected, setSelected] = useState<ScoredAccount | null>(null);
 
@@ -53,9 +76,20 @@ export function App() {
             <p className={styles.subtitle}>Early-warning collections view</p>
           </div>
         </div>
-        <p className={styles.mode}>
-          {state.status === "ready" ? "Fixture demo" : ""}
-        </p>
+        <div className={styles.session}>
+          <p className={styles.mode}>
+            {state.status === "ready" ? "Fixture demo" : ""}
+          </p>
+          {user && <span className={styles.userEmail}>{user.email}</span>}
+          <button
+            type="button"
+            className={styles.logoutBtn}
+            onClick={logout}
+            aria-label="Sign out"
+          >
+            Sign out
+          </button>
+        </div>
       </header>
 
       <main className={styles.main}>
