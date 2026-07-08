@@ -21,6 +21,15 @@ runs the Actuary's rebuttal (Round 2) and, if it upholds, the Arbiter's ruling
 (``upheld`` / ``overridden`` / ``escalated_approved`` / ``escalated_rejected``).
 A concession or an arbiter ``override`` short-circuits Round 3; an arbiter
 ``escalate`` (or any unparsable turn) routes to the human gate.
+
+WA-026 adds **cross-run dispute memory**: before opening a debate the
+orchestrator consults :class:`~waspada.agents.dispute_memory.DisputeMemory`. A
+prior HUMAN ruling on the same loan short-circuits the debate (the prior
+resolution is reused, no LLM calls spent); any other prior ruling is injected
+as context for the Arbiter/Skeptic. Resolved disputes are persisted after the
+run so the next run of the same book spends measurably fewer calls (the second
+headline efficiency axis). This is decision consistency / institutional memory,
+NOT self-improvement.
 """
 from __future__ import annotations
 
@@ -32,9 +41,10 @@ from ..config import COLLECTIONS, LANES
 from .analytics import AnalyticsAgent
 from .arbiter import ArbiterAgent
 from .base import Agent, ApprovalGate, Approved
+from .dispute_memory import DisputeMemory, MemoryBackend
 from .ingest import IngestAgent
 from .insight import InsightAgent
-from .protocol import AgentContext, AgentResult, Dispute, Handoff, Status
+from .protocol import AgentContext, AgentResult, Dispute, DisputeRound, Handoff, Status
 from .risk_auditor import RiskAuditorAgent
 from .risk_model import RiskModelAgent
 
@@ -65,6 +75,8 @@ class Orchestrator(Agent):
         audit_k: int = 8,
         arbiter: Optional[ArbiterAgent] = None,
         enable_arbiter: bool = True,
+        memory: Optional[DisputeMemory] = None,
+        memory_backend: Optional[MemoryBackend] = None,
     ) -> None:
         super().__init__(llm=llm)
         self.gate = gate or ApprovalGate()
@@ -88,6 +100,15 @@ class Orchestrator(Agent):
         self._arbiter_agent: Optional[ArbiterAgent] = None
         # Counts for the run report / tests.
         self._resolution_counts: Dict[str, int] = {}
+        # WA-026: cross-run dispute memory. Accept either a fully-built
+        # :class:`DisputeMemory` (tests inject an InMemory one) or a bare
+        # backend (the API wires a LocalFileMemory). ``None`` defaults to an
+        # in-process memory so an unconfigured orchestrator still runs — the
+        # memory just never persists across processes. NOTE: use ``is not
+        # None`` (not truthiness) — DisputeMemory defines __len__, so an empty
+        # memory is falsy and ``memory or ...`` would discard it.
+        self.memory: DisputeMemory = (
+            memory if memory is not None else DisputeMemory(memory_backend))
 
     # ------------------------------------------------------------------ plan
     def plan(self, lane: str = COLLECTIONS) -> List[str]:
@@ -216,6 +237,18 @@ class Orchestrator(Agent):
         # Stash the final payload on the context for the CLI / report.
         payload_handle = last.artifact_ref if last else None
         self._final_ctx = ctx
+        # WA-026: persist the cross-run dispute memory now that every dispute
+        # has been resolved + recorded. Best-effort: a persist failure never
+        # fails the run (the memory is an accelerator, not a correctness
+        # dependency) — surface it as an audit step instead.
+        try:
+            self.memory.persist()
+        except Exception as exc:  # pragma: no cover - backend-dependent
+            self.step("memory_persist_error", status=Status.ERROR,
+                      notes=f"dispute memory persist failed: {exc}")
+        else:
+            self.step("memory_persisted",
+                      notes=f"dispute memory now holds {self.memory.size} account(s)")
         # Terminal status mirrors the last agent's: DISPUTED if disputes were
         # opened, OK otherwise. Both are completions (a payload exists).
         terminal = last.status if last is not None else Status.OK
@@ -231,6 +264,15 @@ class Orchestrator(Agent):
     def _resolve_disputes(self, ctx: AgentContext) -> None:
         """Run the 3-round debate on every open dispute the auditor opened.
 
+        WA-026: BEFORE opening a debate, the cross-run memory is consulted. A
+        prior **human** ruling on the same loan short-circuits the debate (the
+        prior resolution is reused, no LLM calls spent) — the strongest
+        precedent. Any other prior ruling (arbiter/model) is injected as
+        context so the Arbiter/Skeptic see precedent; the debate still runs
+        (the memory INFORMS, it never silences — the demo keeps showing
+        disputes). After resolution, every freshly-settled dispute is recorded
+        to the memory so the next run sees it.
+
         For each dispute: Round 2 (Actuary rebuttal) → if concede, close as
         ``overridden``; if uphold, Round 3 (Arbiter) → ``upheld`` /
         ``overridden`` / escalate-to-gate. Unparsable rebuttal or ruling, or
@@ -244,11 +286,23 @@ class Orchestrator(Agent):
             return
         scored = self._table(ctx, "scored_accounts")
         features = self._table(ctx, "feature_frame")
-        counts: Dict[str, int] = {"upheld": 0, "overridden": 0,
-                                  "escalated_approved": 0, "escalated_rejected": 0}
+        counts: Dict[str, int] = {key: 0 for key in (
+            "upheld", "overridden", "escalated_approved", "escalated_rejected")}
         escalations: List[Dispute] = []
+        # WA-026: per-run efficiency bookkeeping (surfaced in the report).
+        self.memory.reset_counters()
 
         for d in disputes:
+            # --- WA-026: consult cross-run memory BEFORE debating. ---
+            recalled = self.memory.short_circuit(d)
+            if recalled is not None:
+                # Human precedent → reuse the prior ruling, skip the debate.
+                self._apply_recalled(d, recalled, counts)
+                continue
+            # Non-short-circuiting precedent (arbiter/model, or none) → inject
+            # as context so the debate sees it, then run the debate normally.
+            self._inject_precedent(d)
+
             # --- Round 2: the Actuary rebuts. ---
             r2 = self._risk_model_agent.defend_score(d, scored, features)
             d.rounds.append(r2)
@@ -296,14 +350,74 @@ class Orchestrator(Agent):
         if escalations:
             self._route_escalations(escalations, ctx, counts)
 
+        # --- WA-026: remember every freshly-resolved dispute for the next run. ---
+        n_remembered = self.memory.record_many(disputes)
+
         self._resolution_counts = counts
         self.step(
             "dispute_resolution_done",
             notes=(f"upheld={counts['upheld']} overridden={counts['overridden']} "
                    f"escalated_approved={counts['escalated_approved']} "
                    f"escalated_rejected={counts['escalated_rejected']} "
-                   f"of {len(disputes)}"),
+                   f"of {len(disputes)}; "
+                   f"memory: short_circuited={self.memory.short_circuited} "
+                   f"precedent_hits={self.memory.precedent_hits} "
+                   f"misses={self.memory.misses} remembered={n_remembered}"),
         )
+
+    # ----------------------------------------------- WA-026 memory helpers
+    def _apply_recalled(self, d: Dispute, recalled: Dict[str, Any],
+                        counts: Dict[str, int]) -> None:
+        """Stamp a short-circuited dispute with the recalled human ruling.
+
+        The dispute is closed with its prior resolution/resolved_by, and a
+        synthetic Round-3 note records that the ruling was recalled from
+        memory (no Actuary/Arbiter calls were spent). Counts the outcome so
+        :attr:`_resolution_counts` stays consistent with a fresh debate.
+        """
+        outcome = str(recalled.get("resolution", ""))
+        if outcome not in counts:
+            outcome = "escalated_approved"  # defensive — should not happen
+        d.resolution = outcome
+        d.resolved_by = str(recalled.get("resolved_by", "human"))
+        rat = str(recalled.get("rationale", "")).strip()
+        d.rationale = (rat + " (recalled from dispute memory)").strip()
+        d.rounds.append(DisputeRound(
+            round_no=3, speaker="orchestrator",
+            claim=(f"RECALLED: prior human ruling '{outcome}' reused; "
+                   "debate skipped (cross-run memory short-circuit)."),
+            confidence=None, model=None,
+            evidence=[f"prior_resolution={outcome}",
+                      f"prior_resolved_by={d.resolved_by}"],
+        ))
+        counts[outcome] += 1
+        self.step("dispute_recalled",
+                  notes=f"{d.loan_id} {outcome} (recalled from memory)")
+
+    def _inject_precedent(self, d: Dispute) -> None:
+        """Stamp any non-short-circuiting prior ruling onto the dispute.
+
+        The Arbiter/Skeptic prompts read the dispute's rounds, so we append a
+        lightweight context note carrying the precedent. The debate still runs
+        in full — the memory INFORMS, it does not silence. No-op when the
+        account is unseen (the common first-run case).
+        """
+        prior = self.memory.precedent(d)
+        if prior is None:
+            return
+        ctx_note = DisputeRound(
+            round_no=1, speaker="orchestrator",
+            claim=(f"PRECEDENT: a prior run resolved this account as "
+                   f"'{prior.get('resolution','')}' "
+                   f"(resolved_by={prior.get('resolved_by','')}); "
+                   f"weigh this precedent."),
+            confidence=None, model=None,
+            evidence=[f"prior_resolution={prior.get('resolution','')}",
+                      f"prior_resolved_by={prior.get('resolved_by','')}"],
+        )
+        # Insert as the leading context so the debate reads it first, but keep
+        # the Skeptic's Round-1 challenge as the substantive opener.
+        d.rounds.insert(0, ctx_note)
 
     def _route_escalations(
         self, escalations: List[Dispute], ctx: AgentContext, counts: Dict[str, int],
