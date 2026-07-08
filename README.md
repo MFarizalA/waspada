@@ -46,9 +46,12 @@ WASPADA automates that loop:
 6. **Visualize** on an analyst-facing dashboard.
 
 A **multi-agent layer** wraps each step: an **orchestrator** plans the run and
-coordinates four specialized agents (**ingest → analytics → risk-model →
-insight**), each with a clear role, holding the human approval gate before the
-work-list is released.
+coordinates the pipeline agents (**ingest → analytics → risk-model → insight**),
+holding the human approval gate before the work-list is released. The Qwen pivot
+extends this into a 6-member **Agent Society** — two data agents (Data Engineer,
+Data Analyst) that reason over the book and a bounded risk **debate** (Skeptic ⇄
+Actuary → Arbiter) that contests the riskiest scores — designed in `HACKATHON.md`
+and landing via WA-014+ / WA-029 / WA-030.
 
 ---
 
@@ -60,12 +63,16 @@ we build one engine + one set of agents and run it in two lanes.
 
 ```mermaid
 flowchart LR
-    O["Orchestrator<br/>plans · runs · holds the gate"] --> I["Ingest agent<br/>Alibaba OSS"]
-    I -->|RawLoans| A["Analytics agent<br/>cuDF / pyarrow"]
-    A -->|FeatureFrame| R["Risk-Model agent<br/>sklearn"]
-    R -->|ScoredAccounts| N["Insight agent<br/>rank + alert"]
-    N --> G["Approval Gate<br/>human"]
-    G --> D["Dashboard"]
+    OSS[("Alibaba OSS<br/>loan book")] --> DE["Data Engineer<br/>qwen3.6-flash<br/>quality-check"]
+    DE -->|RawLoans| DA["Data Analyst<br/>qwen3.7-plus<br/>features · DuckDB"]
+    DA -->|FeatureFrame| R["risk_model<br/>sklearn score"]
+    R -->|ScoredAccounts| DB{"top-K<br/>contested?"}
+    DB -->|no| N["insight<br/>rank · health · alerts"]
+    DB -->|yes| SOC["Agent Society — bounded debate<br/>Skeptic ⇄ Actuary → Arbiter<br/>flash · plus · max"]
+    SOC --> N
+    N --> G["Approval Gate<br/>human · final authority"]
+    G --> D["Dashboard<br/>+ Agent Society panel"]
+    ORCH["orchestrator — deterministic spine<br/>sequences · audit stream → SLS"] -.-> DE
 ```
 
 **Frozen data contract** (`waspada/schema.py`) — four types locked once so every
@@ -86,7 +93,9 @@ assert every hand-off matches the contract (drift fails loud, not silent).
 ## The multi-agent layer
 
 The agent substrate (`waspada/agents/`) is lane-agnostic and runs **offline by
-default** (deterministic `MockLLM`; Gemini is an opt-in via `WASPADA_LLM_PROVIDER=gemini`).
+default** (deterministic `MockLLM`). The real reasoning brain is **Qwen** via
+`WASPADA_LLM_PROVIDER=qwen` (Alibaba Cloud DashScope, OpenAI-compatible endpoint);
+a legacy `gemini` provider also exists but is unused after the pivot.
 
 - **Orchestrator** (`Orchestrator`) — the primary agent. `plan(lane)` builds the
   step sequence; `run()` executes ingest→analytics→risk-model→insight, threading
@@ -94,6 +103,11 @@ default** (deterministic `MockLLM`; Gemini is an opt-in via `WASPADA_LLM_PROVIDE
   analyst summary. A failure in any stage surfaces (not swallowed).
 - **Ingest / Analytics / Risk-Model / Insight agents** — thin wrappers over the
   pipeline components, each producing its contract artifact.
+- **Agent Society (Qwen pivot, in build)** — the Data Engineer / Data Analyst
+  data agents (function-calling loops over dlt + DuckDB) and the Skeptic ⇄
+  Actuary → Arbiter debate that contests the model's riskiest scores under a
+  bounded call budget; frozen design + tickets in `HACKATHON.md`
+  (WA-014+ / WA-029 / WA-030).
 - **ApprovalGate** — the human-in-loop checkpoint. Before the work-list is
   released the gate must approve. `WASPADA_AUTO_APPROVE=1` short-circuits to
   approve **but logs it `auto=True`** so an audit can tell a rubber-stamp from a
@@ -128,7 +142,7 @@ waspada/
 dashboard/                 # React/TS EWS dashboard (Kirana, WA-011)
 gpu/                       # optional WSL entry points for cuDF feature engineering
 tests/                     # passing tests (live-only smoke tests skip without creds)
-backlog/                   # ticket specs (WA-001..WA-012)
+backlog/                   # ticket specs (WA-001..WA-030)
 ```
 
 ---
@@ -191,7 +205,7 @@ python -m pytest tests/ -v          # live-only smoke tests skip without OSS cre
   out-of-time-ish check (issue year is reconstructed from `loan_age` + `as_of_date`
   because the frozen `FeatureFrame` carries no `issue_date`).
 - **Offline by default.** The framework runs end-to-end on `MockLLM` with no
-  network; tests block sockets to prove it. Gemini is opt-in.
+  network; tests block sockets to prove it. Qwen (Alibaba DashScope) is opt-in.
 - **Humans in control.** The `ApprovalGate` blocks the work-list release; an
   auto-approve is logged distinctly so an audit can tell it from a real sign-off.
 - **CPU ships now, GPU is a drop-in.** The CPU path (sklearn) is the production

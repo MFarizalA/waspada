@@ -25,7 +25,7 @@ holding the gate at both layers.*
 
 | Track ask | WASPADA answer |
 |---|---|
-| Task division & roles | a deterministic **harness** (ingest/orchestrate/analyze/package) hosts a 4-member **society** (§ two tiers): the harness does the bulk work for free; LLM cognition is spent only on contested judgment |
+| Task division & roles | a deterministic **spine** (orchestrate/package) hosts a **6-member society** (§ two tiers): two **data agents** (quality-check the book, explore/build features) + three **debate agents** + a human — LLM cognition spent where judgment lives (which checks/queries to run, which scores to contest), never on plumbing |
 | Dialogue & negotiation | The **risk debate**: Skeptic challenges → Actuary defends → Judge rules — a bounded 3-round argument per contested account, every claim citing evidence (§ debate protocol) |
 | Disagreement resolution | Four terminal resolutions (`upheld / overridden / escalated_approved / escalated_rejected`), an Arbiter ruling tier, and a human `ApprovalGate` as the constitutional backstop |
 | Efficiency gain vs single agent | Measured head-to-head: one-LLM-call-per-account baseline vs. the society (deterministic model on 100% + bounded LLM audit on top-K) — recall/precision @ call-tier, LLM-calls-per-account, latency (§ benchmark) |
@@ -93,11 +93,16 @@ the human ruled (§ UI). Architecture diagram below; 3-min demo script in
 We're deliberate about a distinction most "multi-agent" projects blur: **the
 harness is not the society.** The reproducible plumbing that fetches, sequences,
 computes, and packages is a **deterministic runtime** — it hosts the agents, it
-isn't one. The **society** is the small set of participants that actually
-*deliberate*: an LLM that prosecutes a score, an LLM that defends it, an LLM
-that judges, and a human who holds final authority. Naming this line is the
-point — it's the "cheapest sufficient intelligence per component" discipline,
-and it preempts agent-washing: we don't call an OSS fetch an "agent."
+isn't one. The **society** is the set of participants that exercise real LLM
+judgment: two **data agents** that reason over the book (a **Data Engineer**
+choosing which quality checks to run, a **Data Analyst** choosing which queries
+to explore), and the **debate** — an LLM that prosecutes a score, an LLM that
+defends it, an LLM that judges, and a human who holds final authority. What
+stays deterministic is the *plumbing*: sequencing, the actual arithmetic, the
+packaging. Naming this line is the point — it's the "cheapest sufficient
+intelligence per component" discipline, and it preempts agent-washing: we don't
+call an OSS fetch or a `GROUP BY` an "agent" — we call the *decision of which
+check or query to run next* one.
 
 The one thing genuinely uncommon here: **the object under debate is a
 calibrated classical-ML score with real feature evidence, not a free-text
@@ -110,24 +115,35 @@ argue for itself, so an LLM is assigned as its defense counsel.
 | Component | Function | Mechanism | Tools / capability | On failure |
 |---|---|---|---|---|
 | `orchestrator` | Plans, sequences, records every `Handoff`/`Step`, routes disputes to the gate | **rule-based** control flow (the spine never hallucinates) | gate wiring, audit log | halt loudly, partial audit trail preserved |
-| `ingest` | Fetches the book, refuses stale/malformed data | **rule-based** (freshness + schema gates) | OSS fetch (`oss2`) | `blocked` on zero rows; `error` on drift |
-| `analytics` | Turns raw loans into features + the portfolio stats the debate cites | **deterministic** compute + **rule-based** bucketing (DPD buckets, vintages) | pyarrow feature build (optional cuDF/WSL path); backs the MCP tools' data | `error`, validated contract |
 | `insight` | Ranks the work-list, computes health, raises alerts, packages the transcript | **rule-based** (ranking + alert thresholds) | ranking/alerts, `agent_dialogue` assembly, requests gate approval | gate rejection → `blocked` |
 
-### Tier 2 — the agent society (the debate participants; cognition + the only real loop live here)
+The **deterministic compute** the data agents drive — the OSS fetch + freshness/
+schema gate, the feature arithmetic and DPD/vintage bucketing — lives *inside*
+the Data Engineer and Data Analyst as their reproducible core (Tier 2). The LLM
+layer only decides *which* check or query to run; the numbers themselves are
+never LLM-generated.
 
-| Participant | Role in the debate | Brain | Capability | On failure |
+### Tier 2 — the agent society (data + debate participants; cognition and the function-calling loops live here)
+
+The society runs in two groups, in sequence: **data agents** (upstream — get the
+book trustworthy and feature-rich) then **debate agents** (downstream — contest
+the scores).
+
+| Participant | Role | Brain | Capability | On failure |
 |---|---|---|---|---|
+| `data_engineer` | **The Data Engineer** — validates, profiles, and quality-checks the freshly-loaded book before anyone trusts it | **LLM** (`qwen3.6-flash`) + **function-calling loop** over a deterministic dlt/DuckDB check core | tools: `validate_schema`, `null_rates`, `profile_column`, `detect_anomalies` | dirty data → `blocked`; unparsable tool step → run the default check set (validation never skipped) |
+| `data_analyst` | **The Data Analyst** — builds features and explores the book for the aggregates the debate later cites | **LLM** (`qwen3.7-plus`) + **function-calling loop** over DuckDB SQL | tools: `query`, `correlation`, `distribution`, `build_feature`; backs the MCP evidence base | tool/parse failure → fall back to the fixed, deterministic feature recipe |
 | `risk_model` (score) | **The Defendant + Counsel** — a classical-ML score, defended by an LLM when challenged | **classical ML** (sklearn LogisticRegression) as the score; `qwen3.7-plus` as its defense voice (`defend_score()`) | vintage-split training, leakage guard; uphold-or-concede rebuttal | unparsable rebuttal → auto-escalate |
 | `risk_auditor` | **The Prosecutor (Skeptic)** — audits the top-K riskiest scores, challenges where the story doesn't match the number | **LLM** (`qwen3.6-flash`) + **native function-calling loop** | **MCP client**: `portfolio_stats`, `lookup_account`; opens `Dispute`s with cited evidence | unparsable challenge → no dispute (logged), pipeline continues |
 | `arbiter` | **The Judge** — reads both arguments, rules, or punts to the human | **LLM** (`qwen3.7-max`) | ruling with rationale + confidence; low confidence → escalate | unparsable ruling → escalate to human |
 | *(human analyst)* | **The Gate (final authority)** — ratifies overrides, rules escalations | **human** | `ApprovalGate` (`resolve_risk_dispute`, `publish_work_list`); auto-approve logged `auto=True`, distinguishable in audit | fails **closed** (no decide channel → rejected) |
 
-**Where the loop is:** exactly one — the Prosecutor's function-calling loop
-(challenge → call an MCP tool → observe → call again → conclude). The harness
-runs a single outer pass with one branch (dispute → gate). The Judge and
-Defense are single-shot LLM turns, not loops. Loops live only where iterative
-reasoning is actually needed.
+**Where the loops are:** three, all function-calling — the Data Engineer, the
+Data Analyst, and the Prosecutor each Think→Act→Observe (decide which tool →
+observe the result → decide whether to call again → conclude). The harness spine
+runs a single outer pass with one branch (dispute → gate); the Judge and Defense
+are single-shot LLM turns, not loops. Loops live only where iterative,
+tool-driven reasoning is actually needed — never in the spine.
 
 ## The debate protocol (bounded negotiation)
 
@@ -222,24 +238,47 @@ the write-up and video use exactly this framing.
 
 ```mermaid
 flowchart TB
-    subgraph QC["Qwen Cloud (dashscope-intl · compatible-mode/v1)"]
-        F["qwen3.6-flash<br/>challenges + data engineering"]
-        P["qwen3.7-plus<br/>rebuttals + data analysis"]
-        M["qwen3.7-max<br/>rulings"]
-    end
-    subgraph FC["Alibaba Cloud Function Compute (FastAPI · Docker · CAPort 8080)"]
-        O["Orchestrator + AI agents<br/>(Data Engineer · Data Analyst · Risk Auditor · Actuary · Arbiter)"]
-        MCP["MCP server<br/>portfolio_stats · lookup_account"]
-        O -- "MCP protocol (stdio)" --> MCP
-    end
     OSS[("Alibaba Cloud OSS<br/>loans.parquet · 1M rows")]
+
+    subgraph FC["Alibaba Cloud Function Compute (FastAPI · Docker · CAPort 8080)"]
+        direction TB
+        ORCH["orchestrator — deterministic spine<br/>sequences · audit log · routes disputes to gate"]
+        subgraph DATA["Data agents — upstream (function-calling loops)"]
+            direction LR
+            DE["Data Engineer<br/>quality-check the book"] --> DA["Data Analyst<br/>features + explore (DuckDB)"]
+        end
+        RM["risk_model<br/>sklearn score · 100% of book · 0 LLM calls"]
+        subgraph DEBATE["Debate agents — top-K contested scores only"]
+            direction LR
+            SK["Risk Auditor / Skeptic<br/>prosecutes"] <--> AC["Actuary<br/>defends the score"]
+            AC --> AR["Arbiter<br/>rules or punts"]
+        end
+        INS["insight — deterministic<br/>rank · health · alerts · package agent_dialogue"]
+        MCP["MCP server<br/>portfolio_stats · lookup_account"]
+
+        ORCH -.-> DATA
+        DA --> RM --> DEBATE --> INS
+        DA -. "backs evidence base" .-> MCP
+        SK -- "MCP (stdio)" --> MCP
+    end
+
+    subgraph QC["Qwen Cloud (dashscope-intl · compatible-mode/v1)"]
+        F["qwen3.6-flash<br/>Data Engineer · Skeptic"]
+        P["qwen3.7-plus<br/>Data Analyst · Actuary defense"]
+        M["qwen3.7-max<br/>Arbiter rulings"]
+    end
+
     UI["React/TS dashboard<br/>work-list · health · alerts · Agent Society panel"]
-    HU["Human analyst<br/>ApprovalGate"]
-    O -- "function calling + JSON mode" --> QC
-    OSS -- "RawLoans (Arrow)" --> O
-    O -- "DashboardPayload + agent_dialogue" --> UI
+    HU["Human analyst<br/>ApprovalGate · final authority"]
+    SLS[("Simple Log Service<br/>queryable audit stream")]
+
+    OSS -- "RawLoans (Arrow)" --> DE
+    DATA -- "function calling + JSON" --> QC
+    DEBATE -- "function calling + JSON" --> QC
+    INS -- "DashboardPayload + agent_dialogue" --> UI
     UI --> HU
-    HU -- "approve / reject" --> O
+    HU -- "approve / reject / rule" --> ORCH
+    FC -. "Step · Handoff · DisputeRound" .-> SLS
 ```
 
 - **Error handling story** (rubric: "strong error handling"): frozen contract
@@ -293,10 +332,10 @@ don't execute a fixed script.
 
 ## Analytics (feeds the debate — not a separate showpiece)
 
-The Quant's feature pipeline (payment ratios, DPD buckets, vintage cohorts,
-segment health) is both the **model's input** and the **debate's evidence
-base**: the MCP tools serve exactly these aggregates, so what an agent *cites*
-is what the pipeline *computed*. Optional cuDF/WSL GPU path exists for feature
+The Data Analyst's feature pipeline (payment ratios, DPD buckets, vintage
+cohorts, segment health) is both the **model's input** and the **debate's
+evidence base**: the MCP tools serve exactly these aggregates, so what an agent
+*cites* is what the pipeline *computed*. Optional cuDF/WSL GPU path exists for feature
 engineering (kept; benchmark harness removed as out of scope for this track).
 
 **Expected Loss (WA-024 — the most credit-credible number we can show):**
@@ -394,6 +433,20 @@ removed · README/HACKATHON rewritten · AgentDialogue panel + types + fixture.
   the payload (additive), portfolio EL in `portfolio_health`, assumptions
   labeled in the UI.
 
+**Data agents (the lakehouse upgrade — § Lakehouse data layer):**
+- **WA-029** (Bimo · P1) — **Data Engineer agent**: dlt load + a frozen schema
+  contract on the OSS Parquet, wrapped by a `qwen3.6-flash` function-calling loop
+  over quality tools (`validate_schema`/`null_rates`/`profile_column`/
+  `detect_anomalies`). Keeps the existing deterministic freshness/schema gate as
+  its core (never removes it); same `register_tool` pattern as ingest's `fetch`
+  → stubbable in tests. Promotes `ingest` from Tier 1 to a Tier-2 data agent.
+- **WA-030** (Bimo · P1) — **Data Analyst agent**: DuckDB query engine over the
+  Parquet, driven by a `qwen3.7-plus` function-calling loop
+  (`query`/`correlation`/`distribution`/`build_feature`). Falls back to the fixed,
+  deterministic feature recipe on any tool/parse failure; the aggregates it
+  computes back the MCP evidence base (§ Analytics). Promotes `analytics` to a
+  Tier-2 data agent.
+
 **Stretch (only after core):**
 - **WA-021** — MCP over SSE on FC + native Responses-API attachment (the
   `{"type":"mcp"}` tools block) — the strongest possible rubric hit if it fits.
@@ -423,12 +476,13 @@ removed · README/HACKATHON rewritten · AgentDialogue panel + types + fixture.
   only if its core lands early).
 
 **Loop note (design principle, not a ticket):** the LLM agents already loop —
-native function calling *is* Think→Act→Observe (the Skeptic calls a tool, sees
-the result, decides whether to call again, then answers). The deterministic
-agents (Librarian, Quant, Actuary's scoring) **deliberately do not loop or
-self-modify** — reproducibility + auditability is the governance property that
-wins Problem Value; an agent that rewrites its own logic mid-run would break
-it. Loops live where judgment lives, by design.
+native function calling *is* Think→Act→Observe (the Data Engineer, Data Analyst,
+and Skeptic each call a tool, see the result, decide whether to call again, then
+answer). The deterministic spine (orchestrator, insight packaging) and the
+single-shot turns (the sklearn score + its defense, the Arbiter ruling)
+**deliberately do not loop or self-modify** — reproducibility + auditability is
+the governance property that wins Problem Value; an agent that rewrites its own
+logic mid-run would break it. Loops live where judgment lives, by design.
 
 ## Submission checklist (Devpost)
 
