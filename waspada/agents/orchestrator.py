@@ -40,6 +40,7 @@ import pyarrow as pa
 from ..config import COLLECTIONS, LANES
 from .analytics import AnalyticsAgent
 from .arbiter import ArbiterAgent
+from .data_analyst import DataAnalystAgent
 from .base import Agent, ApprovalGate, Approved
 from .data_engineer import DataEngineerAgent
 from .dispute_memory import DisputeMemory, MemoryBackend
@@ -59,7 +60,7 @@ __all__ = ["Orchestrator", "COLLECTIONS_STEP_ORDER"]
 # (WA-014, the Skeptic) runs AFTER the classical-ML model scores the book and
 # BEFORE insight packages the payload — it audits the top-K riskiest accounts
 # and opens Disputes where its view diverges from the model's band.
-COLLECTIONS_STEP_ORDER = ("data_engineer", "analytics", "risk_model", "risk_auditor", "insight")
+COLLECTIONS_STEP_ORDER = ("data_engineer", "data_analyst", "risk_model", "risk_auditor", "insight")
 
 
 class Orchestrator(Agent):
@@ -183,6 +184,10 @@ class Orchestrator(Agent):
         # loop (tests inject a fresh MockLLM for the DE; production gets a
         # flash clone sharing the Qwen client).
         de_brain = self.llm.with_model("qwen3.6-flash")
+        # Data Analyst (WA-030) reasons on qwen3.7-plus — a function-calling
+        # loop over DuckDB SQL explorations. The deterministic FeatureFrame is
+        # still built by build_features() inside the agent.
+        da_brain = self.llm.with_model("qwen3.7-plus")
         risk_model = RiskModelAgent(self.llm)
         # Remember the risk-model agent so the dispute-resolution step can
         # call its defend_score() (the Actuary speaks Round 2).
@@ -195,7 +200,7 @@ class Orchestrator(Agent):
             self._arbiter_agent = None
         return [
             DataEngineerAgent(de_brain, limit=self.ingest_limit),
-            AnalyticsAgent(self.llm, as_of=self.as_of),
+            DataAnalystAgent(da_brain, as_of=self.as_of),
             risk_model,
             RiskAuditorAgent(auditor_brain, k=self.audit_k),
             InsightAgent(self.llm, gate=self.gate, top_n=self.top_n),
