@@ -46,6 +46,7 @@ from .data_engineer import DataEngineerAgent
 from .dispute_memory import DisputeMemory, MemoryBackend
 from .ingest import IngestAgent
 from .insight import InsightAgent
+from .llm import qwen_tier
 from .protocol import AgentContext, AgentResult, Dispute, DisputeRound, Handoff, Status
 from .risk_auditor import RiskAuditorAgent
 from .risk_model import RiskModelAgent
@@ -177,17 +178,17 @@ class Orchestrator(Agent):
         """
         # Skeptic challenges with flash — the cheapest tier sufficient for a
         # one-shot structured challenge. ``with_model`` is a no-op on MockLLM.
-        auditor_brain = self.llm.with_model("qwen3.6-flash")
+        auditor_brain = self.llm.with_model(qwen_tier("flash"))
         # Data Engineer (WA-029) also reasons on flash — same cheap tier, a
         # function-calling loop over data quality. Tiered separately from the
         # debate brain so a shared MockLLM script isn't consumed by the DE's
         # loop (tests inject a fresh MockLLM for the DE; production gets a
         # flash clone sharing the Qwen client).
-        de_brain = self.llm.with_model("qwen3.6-flash")
+        de_brain = self.llm.with_model(qwen_tier("flash"))
         # Data Analyst (WA-030) reasons on qwen3.7-plus — a function-calling
         # loop over DuckDB SQL explorations. The deterministic FeatureFrame is
         # still built by build_features() inside the agent.
-        da_brain = self.llm.with_model("qwen3.7-plus")
+        da_brain = self.llm.with_model(qwen_tier("plus"))
         risk_model = RiskModelAgent(self.llm)
         # Remember the risk-model agent so the dispute-resolution step can
         # call its defend_score() (the Actuary speaks Round 2).

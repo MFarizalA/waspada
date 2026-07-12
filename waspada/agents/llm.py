@@ -212,6 +212,37 @@ class QwenLLM(LLM):
 
 
 # --------------------------------------------------------------------------- #
+# Qwen model tiers — configurable via env (fall back to the documented defaults)
+# --------------------------------------------------------------------------- #
+QWEN_TIER_DEFAULTS = {
+    "flash": "qwen3.6-flash",   # cheap triage — Data Engineer, Skeptic
+    "plus": "qwen3.7-plus",     # mid — Data Analyst, Actuary rebuttal
+    "max": "qwen3.7-max",       # top — Arbiter rulings
+}
+_QWEN_TIER_ENV = {
+    "flash": "QWEN_MODEL_FLASH",
+    "plus": "QWEN_MODEL_PLUS",
+    "max": "QWEN_MODEL_MAX",
+}
+
+
+def qwen_tier(tier: str) -> str:
+    """Resolve a cognitive-load tier (``flash`` | ``plus`` | ``max``) to a model id.
+
+    Precedence: the tier's env override (``QWEN_MODEL_FLASH`` / ``QWEN_MODEL_PLUS``
+    / ``QWEN_MODEL_MAX``) → the documented default. This lets an operator point
+    the tiers at whatever models their DashScope account actually serves without
+    touching code. On :class:`MockLLM` the id is only an audit label
+    (``with_model`` returns self); on :class:`QwenLLM` it selects the real model
+    per agent. With no env override the return value equals the previous
+    hard-coded string, so offline/mock behavior is unchanged.
+    """
+    if tier not in QWEN_TIER_DEFAULTS:
+        raise ValueError(f"unknown Qwen tier {tier!r}; use 'flash', 'plus', or 'max'")
+    return os.environ.get(_QWEN_TIER_ENV[tier], "").strip() or QWEN_TIER_DEFAULTS[tier]
+
+
+# --------------------------------------------------------------------------- #
 # Factory
 # --------------------------------------------------------------------------- #
 def get_llm(provider: Optional[str] = None, *, json_mode: bool = False) -> LLM:
