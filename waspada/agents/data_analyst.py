@@ -219,14 +219,19 @@ class DataAnalystAgent(Agent):
             "",
             "Available tools (reply with ONLY a JSON object, no prose):",
             '  {"tool": "query", "arg": "SELECT grade, AVG(dti) FROM raw_loans GROUP BY grade LIMIT 200"}',
-            '  {"tool": "correlation", "arg": "{\\"a\\": \\"dti\\", \\"b\\": \\"rate\\"}"}',
-            '  {"tool": "distribution", "arg": "dti"}',
+            '  {"tool": "correlation", "arg": "{\\"a\\": \\"payment_ratio\\", \\"b\\": \\"dti\\"}"}',
+            '  {"tool": "distribution", "arg": "payment_ratio"}',
             '  {"tool": "build_feature", "arg": "SELECT grade, AVG(outstanding_ratio) AS median_outstanding FROM feature_frame GROUP BY grade"}',
             '  {"tool": "done"}              — you have explored enough; stop the loop',
             "",
             "Rules:",
             "  - query/build_feature must be SELECT-only, no semicolons.",
-            "  - Use table names 'raw_loans' and 'feature_frame'.",
+            "  - Two tables: 'feature_frame' (the debate's evidence base — has the",
+            "    derived features payment_ratio, outstanding_ratio, loan_age, ...)",
+            "    and 'raw_loans' (the raw snapshot — outstanding_principal, total_paid).",
+            "  - correlation/distribution read 'feature_frame' by default; target the",
+            '    raw snapshot with "raw_loans.<col>" (distribution) or a "table":',
+            '    "raw_loans" key (correlation).',
             "",
         ]
         if history:
@@ -257,6 +262,39 @@ def _default_exploration_tools() -> Dict[str, Callable[..., Any]]:
 
 
 _MAX_ROWS = 200
+
+# The two tables the Lakehouse registers. ``correlation`` / ``distribution``
+# default to the FeatureFrame — it is the debate's evidence base (it carries the
+# derived columns the debate actually cites: payment_ratio, outstanding_ratio,
+# loan_age, delinquency_status). ``raw_loans`` stays reachable via an explicit
+# table override so raw-only columns (outstanding_principal, total_paid) are not
+# lost.
+_VALID_TABLES = ("raw_loans", "feature_frame")
+_DEFAULT_TABLE = "feature_frame"
+
+
+def _resolve_table(name: Any) -> str:
+    """Resolve a caller-supplied table name to a registered table.
+
+    Unknown / empty names fall back to the FeatureFrame (evidence base) rather
+    than erroring — the tool still returns a useful default answer.
+    """
+    t = str(name or "").strip()
+    return t if t in _VALID_TABLES else _DEFAULT_TABLE
+
+
+def _split_table_col(ref: str) -> Tuple[str, str]:
+    """Resolve a ``table.column`` or bare ``column`` reference to ``(table, column)``.
+
+    A bare column defaults to the FeatureFrame; a ``raw_loans.col`` prefix
+    targets the raw snapshot. Quotes are stripped defensively.
+    """
+    ref = str(ref or "").strip().replace('"', "")
+    if "." in ref:
+        head, tail = ref.split(".", 1)
+        if head.strip() in _VALID_TABLES:
+            return head.strip(), tail.strip()
+    return _DEFAULT_TABLE, ref
 
 
 def _safe_sql_check(sql: str) -> Optional[str]:
@@ -289,7 +327,11 @@ def _tool_query(lh: Lakehouse, arg: str, *_a: Any) -> Dict[str, Any]:
 
 
 def _tool_correlation(lh: Lakehouse, arg: str, *_a: Any) -> Dict[str, Any]:
-    """Pearson correlation between two numeric columns."""
+    """Pearson correlation between two numeric columns.
+
+    Both columns are read from one table (default ``feature_frame``); pass an
+    optional ``"table"`` key to target ``raw_loans`` instead.
+    """
     try:
         obj = json.loads(arg or "{}")
     except (ValueError, TypeError):
@@ -298,21 +340,28 @@ def _tool_correlation(lh: Lakehouse, arg: str, *_a: Any) -> Dict[str, Any]:
     b = str(obj.get("b", "")).replace('"', "")
     if not a or not b:
         return {"error": "correlation needs JSON arg {'a': col, 'b': col}"}
+    table = _resolve_table(obj.get("table"))
     try:
         r = lh.scalar(
-            f'SELECT CORR(CAST("{a}" AS DOUBLE), CAST("{b}" AS DOUBLE)) FROM {lh.table}'
+            f'SELECT CORR(CAST("{a}" AS DOUBLE), CAST("{b}" AS DOUBLE)) FROM {table}'
         )
-        return {"a": a, "b": b, "correlation": r}
+        return {"table": table, "a": a, "b": b, "correlation": r}
     except Exception as exc:
-        return {"a": a, "b": b, "error": str(exc)}
+        return {"table": table, "a": a, "b": b, "error": str(exc)}
 
 
 def _tool_distribution(lh: Lakehouse, arg: str, *_a: Any) -> Dict[str, Any]:
-    """Quantiles/min/max/mean/histogram buckets for one column."""
-    col = (arg or "").strip()
-    if not col:
+    """Quantiles/min/max/mean/histogram buckets for one column.
+
+    The column reference is ``column`` (read from the FeatureFrame, the debate
+    evidence base) or ``table.column`` to target ``raw_loans`` explicitly.
+    """
+    ref = (arg or "").strip()
+    if not ref:
         return {"error": "distribution needs a column name (arg)"}
-    qcol = col.replace('"', "")
+    table, qcol = _split_table_col(ref)
+    if not qcol:
+        return {"error": "distribution needs a column name (arg)"}
     try:
         row = lh.con.execute(
             f'SELECT COUNT(*), MIN("{qcol}"), MAX("{qcol}"), '
@@ -320,7 +369,7 @@ def _tool_distribution(lh: Lakehouse, arg: str, *_a: Any) -> Dict[str, Any]:
             f'APPROX_QUANTILE(CAST("{qcol}" AS DOUBLE), 0.25), '
             f'APPROX_QUANTILE(CAST("{qcol}" AS DOUBLE), 0.50), '
             f'APPROX_QUANTILE(CAST("{qcol}" AS DOUBLE), 0.75) '
-            f'FROM {lh.table}'
+            f'FROM {table}'
         ).fetchone()
         n, lo, hi, mean, q1, q2, q3 = (
             (row + (None,) * 7)[:7] if row else (0, None, None, None, None, None, None)
@@ -330,19 +379,19 @@ def _tool_distribution(lh: Lakehouse, arg: str, *_a: Any) -> Dict[str, Any]:
             hist_rows = lh.con.execute(
                 f'SELECT bucket, COUNT(*) FROM ('
                 f'  SELECT WIDTH_BUCKET(CAST("{qcol}" AS DOUBLE), '
-                f'    (SELECT MIN(CAST("{qcol}" AS DOUBLE)) FROM {lh.table}), '
-                f'    (SELECT MAX(CAST("{qcol}" AS DOUBLE)) FROM {lh.table}), 10) AS bucket '
-                f'  FROM {lh.table}) GROUP BY bucket ORDER BY bucket'
+                f'    (SELECT MIN(CAST("{qcol}" AS DOUBLE)) FROM {table}), '
+                f'    (SELECT MAX(CAST("{qcol}" AS DOUBLE)) FROM {table}), 10) AS bucket '
+                f'  FROM {table}) GROUP BY bucket ORDER BY bucket'
             ).fetchall()
             hist = [{"bucket": b, "count": c} for b, c in hist_rows]
         except Exception:
             hist = []
         return {
-            "column": col, "n": n, "min": lo, "max": hi, "mean": mean,
+            "table": table, "column": qcol, "n": n, "min": lo, "max": hi, "mean": mean,
             "q1": q1, "median": q2, "q3": q3, "histogram": hist,
         }
     except Exception as exc:
-        return {"column": col, "error": str(exc)}
+        return {"table": table, "column": qcol, "error": str(exc)}
 
 
 def _tool_build_feature(lh: Lakehouse, arg: str, *_a: Any) -> Dict[str, Any]:

@@ -255,3 +255,59 @@ def test_query_tool_caps_rows(raw_table, as_of):
     aggregates = ctx.data_handles["analyst_aggregates"]
     reply = json.loads(aggregates["queries_run"][0]["reply"])
     assert reply["count"] <= 200
+
+
+# --------------------------------------------------------------------------- #
+# Evidence base: correlation/distribution reach the FeatureFrame columns the
+# debate actually cites (payment_ratio, outstanding_ratio, loan_age) — not just
+# the raw snapshot. Regression guard for the "hardcoded to raw_loans" gap.
+# --------------------------------------------------------------------------- #
+def _run_single_tool(raw_table, as_of, tool: str, arg: str) -> dict:
+    """Drive the agent through one tool call + done; return the tool's reply."""
+    script = [json.dumps({"tool": tool, "arg": arg}), json.dumps({"tool": "done"})]
+    agent = DataAnalystAgent(MockLLM(script=script), as_of=as_of)
+    ctx = AgentContext(
+        lane="collections",
+        data_handles={"raw_loans": raw_table},
+        prior_results=[__import__("waspada.agents.protocol", fromlist=["AgentResult"]).AgentResult(status=Status.OK, artifact_ref="raw_loans")],
+    )
+    agent.run(ctx)
+    return json.loads(ctx.data_handles["analyst_aggregates"]["queries_run"][0]["reply"])
+
+
+def test_distribution_reaches_feature_frame_only_column(raw_table, as_of):
+    """payment_ratio exists ONLY in the FeatureFrame — the tool must reach it."""
+    reply = _run_single_tool(raw_table, as_of, "distribution", "payment_ratio")
+    assert "error" not in reply, reply
+    assert reply["table"] == "feature_frame"
+    assert reply["column"] == "payment_ratio"
+    assert reply["n"] == raw_table.num_rows
+
+
+def test_correlation_reaches_feature_frame_only_columns(raw_table, as_of):
+    """Correlate two FeatureFrame-derived columns (defaults to feature_frame)."""
+    reply = _run_single_tool(
+        raw_table, as_of, "correlation",
+        json.dumps({"a": "payment_ratio", "b": "outstanding_ratio"}),
+    )
+    assert "error" not in reply, reply
+    assert reply["table"] == "feature_frame"
+    assert "correlation" in reply
+
+
+def test_distribution_can_target_raw_loans_via_prefix(raw_table, as_of):
+    """total_paid exists ONLY in raw_loans — reachable via a table prefix."""
+    reply = _run_single_tool(raw_table, as_of, "distribution", "raw_loans.total_paid")
+    assert "error" not in reply, reply
+    assert reply["table"] == "raw_loans"
+    assert reply["column"] == "total_paid"
+
+
+def test_correlation_can_target_raw_loans_via_table_key(raw_table, as_of):
+    """Correlate raw-only columns by passing an explicit table key."""
+    reply = _run_single_tool(
+        raw_table, as_of, "correlation",
+        json.dumps({"a": "total_paid", "b": "outstanding_principal", "table": "raw_loans"}),
+    )
+    assert "error" not in reply, reply
+    assert reply["table"] == "raw_loans"
