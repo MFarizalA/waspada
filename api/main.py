@@ -169,6 +169,26 @@ def _collect_pipeline_steps(orch: Orchestrator, ctx: AgentContext) -> Dict[str, 
     }
 
 
+def _brain_error(brain: str, exc: Exception) -> JSONResponse:
+    """A clean 503 when the reasoning brain can't be built or reached.
+
+    Selecting ``brain=qwen`` without a working ``DASHSCOPE_API_KEY`` (or with
+    DashScope unreachable) must NOT surface as a bare 500 — return an actionable
+    message the dashboard can display and fall back from.
+    """
+    return JSONResponse(
+        {
+            "error": (
+                f"Reasoning brain '{brain}' is unavailable "
+                f"({type(exc).__name__}: {exc}). "
+                f"Set DASHSCOPE_API_KEY for Qwen, or use the mock brain."
+            ),
+            "brain": brain,
+        },
+        status_code=503,
+    )
+
+
 @app.post("/api/run")
 async def run_pipeline(brain: str = "mock", _user: dict = Depends(current_user)):
     """Run the full agent pipeline on a synthetic snapshot.
@@ -180,16 +200,22 @@ async def run_pipeline(brain: str = "mock", _user: dict = Depends(current_user))
     step (``mock`` default = fast/free/deterministic; ``qwen`` = real Qwen
     calls via DashScope, opt-in only — this adds real network latency and
     should not be the default every visitor's first click triggers).
+
+    If ``brain=qwen`` is selected but Qwen can't be built/reached (no
+    ``DASHSCOPE_API_KEY``, bad key, network down), we return a **503 with a
+    clear message** rather than a bare 500.
     """
-    orch = _build_demo_orchestrator(brain)
     ctx = AgentContext(
         lane="collections",
         data_handles={},
         meta={"source": "cloud-run-demo", "run_id": uuid.uuid4().hex[:12]},
     )
-
-    orch.plan("collections")
-    result = orch.run(ctx)
+    try:
+        orch = _build_demo_orchestrator(brain)
+        orch.plan("collections")
+        result = orch.run(ctx)
+    except Exception as exc:  # brain unbuildable / unreachable → clean 503, not a 500
+        return _brain_error(brain, exc)
     _ship_audit(orch, ctx)  # WA-023: audit stream (fail-safe)
 
     if not result.ok:
@@ -250,11 +276,14 @@ async def run_stream(brain: str = "mock", _user: dict = Depends(current_user_ws)
     def on_dispute_resolved(d: Any) -> None:
         loop.call_soon_threadsafe(q.put_nowait, _resolution_event(d))
 
-    orch = _build_demo_orchestrator(
-        brain,
-        on_round_complete=on_round_complete,
-        on_dispute_resolved=on_dispute_resolved,
-    )
+    try:
+        orch = _build_demo_orchestrator(
+            brain,
+            on_round_complete=on_round_complete,
+            on_dispute_resolved=on_dispute_resolved,
+        )
+    except Exception as exc:  # brain unbuildable → clean 503 (EventSource errors → UI falls back)
+        return _brain_error(brain, exc)
     ctx = AgentContext(
         lane="collections",
         data_handles={},
