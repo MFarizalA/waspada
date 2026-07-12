@@ -19,6 +19,7 @@ from typing import Any, Dict, List
 import pytest
 
 from waspada.agents import MockLLM
+from waspada.agents.data_analyst import DataAnalystAgent
 from waspada.agents.data_engineer import DataEngineerAgent
 from waspada.agents.orchestrator import Orchestrator
 
@@ -68,13 +69,18 @@ def _parse_sse(body: str) -> List[Dict[str, Any]]:
 
 
 def _isolated_de_brain(orch: Orchestrator) -> Orchestrator:
-    """Give the Data Engineer a fresh canned brain so a scripted orchestrator
-    brain is reserved for the debate agents."""
+    """Give the Tier-2 data agents (Data Engineer + Data Analyst) fresh canned
+    brains so the scripted orchestrator brain is reserved for the debate agents.
+
+    Both data agents run function-calling loops on ``self.llm``; without this,
+    they would consume the scripted debate script before the Risk Auditor speaks.
+    Mirrors the isolation WA-030 applied to the other debate tests.
+    """
     orig = orch._build_agents
     def _build():
         agents = orig()
         for a in agents:
-            if isinstance(a, DataEngineerAgent):
+            if isinstance(a, (DataEngineerAgent, DataAnalystAgent)):
                 a.llm = MockLLM()
         return agents
     orch._build_agents = _build  # type: ignore[method-assign]
