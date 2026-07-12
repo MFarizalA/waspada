@@ -478,6 +478,28 @@ removed · README/HACKATHON rewritten · AgentDialogue panel + types + fixture.
 - EL-weighted product×region heat-map + HHI concentration (fold into WA-024
   only if its core lands early).
 
+**Post-hackathon roadmap (🟡 requirements frozen 2026-07-12, not started — full
+specs in `backlog/WA-032..039`):**
+- **WA-032 — Human-configurable decision matrix (`RiskPolicy`).** The band→action
+  map (`ACTION_BY_BAND`), alert thresholds, and NPL buckets move from hard-coded
+  constants in `insight/ranking.py` into a committed, validated JSON policy file
+  (`WASPADA_POLICY_FILE`); defaults preserve today's behavior byte-for-byte.
+  Analysts edit policy without touching code. Land this first — it is also the
+  Origination lane's action-matrix machinery.
+- **WA-033–039 — the Origination lane** (approve / refer / reject + price new
+  applications on the same engine and Agent Society). The substrate is already
+  lane-agnostic (config lanes, protocol, gate, the whole debate engine); the
+  build is additive: application-time contract types (WA-034) → 
+  `features/origination.py` with a funded-then-defaulted label (WA-035; no
+  reject-inference — the source only has funded loans, stated honestly) →
+  lane-parameterized model features + application-cohort OOT split (WA-036) →
+  `insight/origination.py` decision matrix as a `RiskPolicy` + approval-rate/EL
+  health (WA-037) → lane-aware data agents + OSS source (WA-038) → dashboard
+  approve/refer/reject badges + origination health panel, EN/中文 (WA-039).
+  One guard is lifted (`orchestrator.plan()`'s "Origination deferred" raise);
+  the Skeptic⇄Actuary→Arbiter debate then contests the riskiest *approvals*
+  unchanged.
+
 **Loop note (design principle, not a ticket):** the LLM agents already loop —
 native function calling *is* Think→Act→Observe (the Data Engineer, Data Analyst,
 and Skeptic each call a tool, see the result, decide whether to call again, then
