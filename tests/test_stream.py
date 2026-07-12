@@ -232,3 +232,33 @@ def test_non_stream_run_still_works(client, token):
     assert "payload" in body
     assert "report" in body
     assert "steps" in body
+
+
+# --------------------------------------------------------------------------- #
+# Brain unavailable (e.g. brain=qwen with no DASHSCOPE_API_KEY) → clean 503,
+# not a bare 500. Regression for the "Run live (Qwen)" 500.
+# --------------------------------------------------------------------------- #
+def _raise_brain(_brain):
+    raise RuntimeError("DashScope unreachable: invalid API key")
+
+
+def test_run_qwen_unavailable_returns_503(client, token, monkeypatch):
+    monkeypatch.setattr(main_mod, "get_llm", _raise_brain)
+    r = client.post("/api/run?brain=qwen", headers={"Authorization": f"Bearer {token}"})
+    assert r.status_code == 503
+    body = r.json()
+    assert "unavailable" in body["error"].lower()
+    assert body["brain"] == "qwen"
+
+
+def test_stream_qwen_unavailable_returns_503(client, token, monkeypatch):
+    monkeypatch.setattr(main_mod, "get_llm", _raise_brain)
+    r = client.get(f"/api/run/stream?token={token}&brain=qwen")
+    assert r.status_code == 503
+    assert "unavailable" in r.json()["error"].lower()
+
+
+def test_mock_run_unaffected_by_the_guard(client, token):
+    # mock never calls get_llm's qwen path → still 200.
+    r = client.post("/api/run?brain=mock", headers={"Authorization": f"Bearer {token}"})
+    assert r.status_code == 200
