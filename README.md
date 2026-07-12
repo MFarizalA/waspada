@@ -268,7 +268,7 @@ python -m pytest tests/ -q          # 300+ tests, green offline; live-only smoke
 | MCP | Real MCP server + client (`portfolio_stats`, `lookup_account`) | ✅ |
 | Dispute memory | Cross-run institutional precedent | ✅ |
 | Audit | SLS audit stream, fail-safe local fallback (WA-023) | ✅ |
-| Dashboard | EWS dashboard · Agent Society panel · SSE live debate (WA-011/019/022) | ✅ |
+| Dashboard | EWS dashboard · Agent Society panel · SSE live debate (WA-011/019/022) · bilingual EN/中文 + China-style UI (WA-031) | ✅ |
 | Auth | JWT sessions + bcrypt, RDS/SQLite (WA-028) | ✅ |
 | Benchmark | Society vs single-agent efficiency harness (WA-017) | ✅ |
 | Deploy | OpenTofu IaC (OSS · ACR · Function Compute · SLS · RDS) | 🟡 provisioned; FC deploy pending creds |
