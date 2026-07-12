@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import type { DashboardPayload, ScoredAccount } from "@/types";
 import { loadPayload } from "@/lib/payload";
 import { useAuth } from "@/lib/auth";
+import { useI18n } from "@/lib/i18n";
 import { WorkList } from "@/components/WorkList";
 import { PortfolioHealth } from "@/components/PortfolioHealth";
 import { Alerts } from "@/components/Alerts";
@@ -45,8 +46,14 @@ export function App() {
 
 /** The authenticated dashboard. Split out so it only pays for its state/hooks
  *  once a session exists. */
+/** Smooth-scroll to a section heading (the megamenu nav targets). */
+function scrollToId(id: string, block: ScrollLogicalPosition = "start") {
+  document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block });
+}
+
 function Dashboard() {
   const { user, logout } = useAuth();
+  const { t, toggle } = useI18n();
   const [state, setState] = useState<LoadState>({ status: "loading" });
   const [selected, setSelected] = useState<ScoredAccount | null>(null);
 
@@ -70,24 +77,48 @@ function Dashboard() {
     <div className={styles.app}>
       <header className={styles.topbar}>
         <div className={styles.brand}>
-          <img src="favicon.svg" alt="" width="28" height="28" className={styles.brandMark} />
+          <img src="favicon.svg" alt="" width="30" height="30" className={styles.brandMark} />
           <div>
-            <h1 className={styles.title}>WASPADA · EWS</h1>
-            <p className={styles.subtitle}>Early-warning collections view</p>
+            <h1 className={styles.title}>{t("brand.name")}</h1>
+            <p className={styles.subtitle}>{t("brand.sub")}</p>
           </div>
         </div>
+
+        <nav className={styles.nav} aria-label={t("brand.sub")}>
+          <button type="button" className={styles.navLink} onClick={() => scrollToId("worklist-heading")}>
+            {t("nav.worklist")}
+          </button>
+          <button type="button" className={styles.navLink} onClick={() => scrollToId("health-heading")}>
+            {t("nav.health")}
+          </button>
+          <button type="button" className={styles.navLink} onClick={() => scrollToId("alerts-heading")}>
+            {t("nav.alerts")}
+          </button>
+          <button type="button" className={styles.navLink} onClick={() => scrollToId("agent-dialogue-heading")}>
+            {t("nav.debate")}
+          </button>
+        </nav>
+
         <div className={styles.session}>
           <p className={styles.mode}>
-            {state.status === "ready" ? "Fixture demo" : ""}
+            {state.status === "ready" ? t("top.fixtureDemo") : ""}
           </p>
+          <button
+            type="button"
+            className={styles.langBtn}
+            onClick={toggle}
+            aria-label={t("lang.label")}
+          >
+            {t("lang.toggle")}
+          </button>
           {user && <span className={styles.userEmail}>{user.email}</span>}
           <button
             type="button"
             className={styles.logoutBtn}
             onClick={logout}
-            aria-label="Sign out"
+            aria-label={t("top.signOut")}
           >
-            Sign out
+            {t("top.signOut")}
           </button>
         </div>
       </header>
@@ -95,13 +126,13 @@ function Dashboard() {
       <main className={styles.main}>
         {state.status === "loading" && (
           <p className={styles.status} role="status" aria-live="polite">
-            Loading portfolio…
+            {t("top.loading")}
           </p>
         )}
 
         {state.status === "error" && (
           <p className={styles.statusError} role="alert">
-            Couldn’t load the dashboard payload: {state.message}
+            {t("top.loadError", { message: state.message })}
           </p>
         )}
 
@@ -120,14 +151,11 @@ function Dashboard() {
               <div className={styles.contestAnchor}>
                 <button
                   type="button"
-                  onClick={() =>
-                    document.getElementById("agent-dialogue-heading")?.scrollIntoView({
-                      behavior: "smooth",
-                      block: "start",
-                    })
-                  }
+                  onClick={() => scrollToId("agent-dialogue-heading")}
                 >
-                  ⚖ {contestedIds.size} {contestedIds.size === 1 ? "account" : "accounts"} contested — see debate ↓
+                  {t(contestedIds.size === 1 ? "top.contestedOne" : "top.contestedMany", {
+                    count: contestedIds.size,
+                  })}
                 </button>
               </div>
             )}

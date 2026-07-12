@@ -1,7 +1,8 @@
 import { useMemo } from "react";
 import type { Alert } from "@/types";
-import { assessAlert, severityLabel, type Severity } from "@/lib/severity";
+import { assessAlert, type Severity } from "@/lib/severity";
 import { humanizeMetric, pct, segmentLabel } from "@/lib/format";
+import { useI18n } from "@/lib/i18n";
 import styles from "./Alerts.module.css";
 
 interface AlertsProps {
@@ -38,6 +39,13 @@ const BREACH_SEVERITIES: ReadonlySet<Severity> = new Set(["critical", "high", "m
  * announced to assistive tech without stealing focus.
  */
 export function Alerts({ alerts }: AlertsProps) {
+  const { t } = useI18n();
+  const metricLabel = (metric: string) =>
+    metric === "npl_ratio" || metric === "vintage_default_rate"
+      ? t(`metric.${metric}`)
+      : humanizeMetric(metric);
+  const segLabel = (seg: Alert["segment"]) =>
+    seg == null ? t("segment.portfolioWide") : segmentLabel(seg);
   const decorated = useMemo<DecoratedAlert[]>(() => {
     return alerts
       .map((alert) => ({ alert, severity: assessAlert(alert.value, alert.threshold).severity }))
@@ -49,17 +57,17 @@ export function Alerts({ alerts }: AlertsProps) {
   return (
     <section className={styles.panel} aria-labelledby="alerts-heading">
       <header className={styles.header}>
-        <h2 id="alerts-heading" className={styles.title}>Alerts</h2>
+        <h2 id="alerts-heading" className={styles.title}>{t("al.title")}</h2>
         {breachCount > 0 && (
           <span className={styles.breachBadge}>
-            {breachCount} active {breachCount === 1 ? "breach" : "breaches"}
+            {t(breachCount === 1 ? "al.breachOne" : "al.breachMany", { count: breachCount })}
           </span>
         )}
       </header>
 
       <ul className={styles.list} role="list" aria-live="polite" aria-atomic="false">
         {decorated.length === 0 ? (
-          <li className={styles.empty}>No alerts. Portfolio within tolerance.</li>
+          <li className={styles.empty}>{t("al.empty")}</li>
         ) : (
           decorated.map(({ alert, severity }, i) => (
             <li
@@ -75,19 +83,19 @@ export function Alerts({ alerts }: AlertsProps) {
                     color: "#fff",
                   }}
                 >
-                  {severityLabel(severity)}
+                  {t(`sev.${severity}`)}
                 </span>
-                <span className={styles.metric}>{humanizeMetric(alert.metric)}</span>
-                <span className={styles.segment}>{segmentLabel(alert.segment)}</span>
+                <span className={styles.metric}>{metricLabel(alert.metric)}</span>
+                <span className={styles.segment}>{segLabel(alert.segment)}</span>
               </div>
               <p className={styles.message}>{alert.message}</p>
               <dl className={styles.stats}>
                 <div>
-                  <dt>Value</dt>
+                  <dt>{t("al.value")}</dt>
                   <dd>{pct(alert.value)}</dd>
                 </div>
                 <div>
-                  <dt>Threshold</dt>
+                  <dt>{t("al.threshold")}</dt>
                   <dd>{pct(alert.threshold)}</dd>
                 </div>
               </dl>

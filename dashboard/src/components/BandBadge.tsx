@@ -1,5 +1,6 @@
 import type { ScoredAccount } from "@/types";
 import { score } from "@/lib/format";
+import { useI18n } from "@/lib/i18n";
 
 /** Map a risk quintile band to its color from the Pasar token ramp. */
 function bandColor(band: string): string {
@@ -18,11 +19,12 @@ function bandColor(band: string): string {
  * design-system risk ramp so the analyst can scan severity at a glance.
  */
 export function BandBadge({ band }: { band: string }) {
+  const { t } = useI18n();
   return (
     <span
       className="badge"
       style={{ background: bandColor(band), color: "#fff" }}
-      aria-label={`Risk band ${band}`}
+      aria-label={t("band.aria", { band })}
     >
       {band}
     </span>
