@@ -30,7 +30,7 @@ from __future__ import annotations
 
 import dataclasses
 import datetime as dt
-from typing import Dict, List, Optional, TypedDict, Type, get_args, get_origin, get_type_hints
+from typing import Dict, List, Optional, Tuple, TypedDict, Type, get_args, get_origin, get_type_hints
 
 import pyarrow as pa
 
@@ -94,9 +94,14 @@ class FeatureFrame:
 
 # ---------------------------------------------------------------------------
 # 3. ScoredAccounts — per-loan model output (built in WA-005, ranked WA-006).
-#    `score_band` is a risk quintile (WA-005). `segment` and
+#    `score_band` is a risk level (quintile-derived, WA-005). `segment` and
 #    `recommended_action` are populated by WA-006; WA-005 may emit them empty.
 # ---------------------------------------------------------------------------
+# Risk-level vocabulary for ``score_band`` — ordered lowest→highest risk.
+# The single source of truth: the model assigns these, ranking maps them to
+# actions, the auditor projects them onto its ordinal, the dashboard renders
+# them. (Previously the quintile labels Q1..Q5.)
+RISK_LEVELS: Tuple[str, ...] = ("Very Low", "Low", "Medium", "High", "Very High")
 @dataclasses.dataclass(frozen=True)
 class Segment:
     """A portfolio slice by product and region."""
@@ -111,7 +116,7 @@ class ScoredAccounts:
 
     loan_id: str
     p_default: float               # P(eventual default) ∈ [0, 1]
-    score_band: str                # risk quintile band
+    score_band: str                # risk level (see RISK_LEVELS; quintile-derived)
     segment: Segment
     recommended_action: str        # "call" | "watch" | "auto-cure"
 

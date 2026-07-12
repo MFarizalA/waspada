@@ -169,7 +169,7 @@ class Dispute:
     """A single account's negotiation record: who opened it, what was said,
     and how it was resolved.
 
-    ``model_band`` is the Actuary's band for the account (e.g. ``"Q5"``);
+    ``model_band`` is the Actuary's band for the account (e.g. ``"Very High"``);
     ``auditor_view`` is the Skeptic's independent read (``"Low"`` |
     ``"Medium"`` | ``"High"``). A dispute is opened only where these diverge
     beyond the admissibility rule (see :class:`~waspada.agents.risk_auditor`).

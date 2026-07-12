@@ -53,7 +53,7 @@ const EN: Dict = {
   "wl.col.loan": "Loan",
   "wl.col.segment": "Segment",
   "wl.col.pdefault": "P(default)",
-  "wl.col.band": "Band",
+  "wl.col.band": "Risk level",
   "wl.col.el": "Exp. loss",
   "wl.col.action": "Action",
   "wl.caption": "Ranked collections work-list, sortable by probability of default. Select a row to view account detail.",
@@ -98,14 +98,21 @@ const EN: Dict = {
   "dr.segment": "Segment",
   "dr.product": "Product",
   "dr.region": "Region",
-  "dr.band": "Risk band",
+  "dr.band": "Risk level",
 
-  // --- action / band badges ---
+  // --- action / risk-level badges ---
   "action.call": "Call",
   "action.watch": "Watch",
   "action.auto-cure": "Auto-cure",
   "action.aria": "Recommended action: {label}",
-  "band.aria": "Risk band {band}",
+  "band.aria": "Risk level {band}",
+  // Risk-level values (waspada/schema.py RISK_LEVELS). EN = identity; keys
+  // contain spaces on purpose (looked up as `band.val.${value}`).
+  "band.val.Very Low": "Very Low",
+  "band.val.Low": "Low",
+  "band.val.Medium": "Medium",
+  "band.val.High": "High",
+  "band.val.Very High": "Very High",
 
   // --- agent dialogue ---
   "ad.title": "Agent Society · Risk Debate",

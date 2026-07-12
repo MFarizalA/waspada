@@ -78,8 +78,8 @@ DEFAULT_N_ACCOUNTS = 300
 DEFAULT_SEED = 11
 
 # The high-risk "call tier" — the band whose recall/precision we report. This
-# is the collections action surface (Q5 → "call"); matches ACTION_BY_BAND.
-HIGH_RISK_BAND = "Q5"
+# is the collections action surface ("Very High" → "call"); matches ACTION_BY_BAND.
+HIGH_RISK_BAND = "Very High"
 
 
 # --------------------------------------------------------------------------- #
@@ -151,12 +151,12 @@ def _synthetic_raw_loans(n: int, seed: int) -> pa.Table:
     unambiguous accounts, which understates the society's real debate cost):
 
       * **risky-default** (~40%) — grade E, high rate/dti, low repayment →
-        model nails as Q5, label_default=True. Skeptic agrees.
+        model nails as Very High, label_default=True. Skeptic agrees.
       * **safe-current** (~40%) — grade A, low rate/dti, high repayment →
-        Q1/Q2, label_default=False. Skeptic agrees.
+        Very Low/Low, label_default=False. Skeptic agrees.
       * **borderline-repaying** (~20%) — grade E, high rate/dti, BUT high
         payment_ratio + low outstanding (near-settled). The model scores these
-        on their risk drivers (rate/dti/grade) → often Q4/Q5; a skeptic seeing
+        on their risk drivers (rate/dti/grade) → often High/Very High; a skeptic seeing
         the near-settled balance challenges the band. label_default=False.
         These are the model's FALSE POSITIVES the debate exists to catch.
     """
@@ -232,7 +232,7 @@ def metrics_from_predictions(
     """Recall/precision of the high-risk flag against the default ground truth.
 
     ``y_true``   — 1 if the account's ``label_default`` is True (eventual default).
-    ``y_pred_high_risk`` — 1 if the arm flagged the account high-risk (Q5 / call).
+    ``y_pred_high_risk`` — 1 if the arm flagged the account high-risk (Very High / call).
     Returns recall, precision, f1, and the raw confusion counts so the JSON is
     self-auditing.
     """
@@ -268,7 +268,8 @@ def metrics_from_predictions(
 # coin flip). The committed JSON tags every such turn ``model="mock-deterministic"``.
 # --------------------------------------------------------------------------- #
 _PR_RE = re.compile(r"payment_ratio=([0-9.]+)")
-_BAND_RE = re.compile(r"band=(Q[1-5])")
+# Longest alternatives first so "Very High" wins over "High".
+_BAND_RE = re.compile(r"band=(Very High|Very Low|Medium|High|Low)")
 
 
 class _DeterministicSkepticLLM(LLM):
@@ -276,12 +277,12 @@ class _DeterministicSkepticLLM(LLM):
 
     Mirrors what a real Qwen skeptic does with the ``portfolio_stats`` /
     ``lookup_account`` MCP tools: it compares the account's payment_ratio
-    against the Q5 cohort's typical level and challenges when the account is
+    against the Very High cohort's typical level and challenges when the account is
     an outlier — repaying far better than its high-risk band peers. The
-    fixture cites exactly this signal (``"payment_ratio=0.61 vs Q5 median
+    fixture cites exactly this signal (``"payment_ratio=0.61 vs Very High median
     0.18"``). Grounded in a real feature, reproducible.
 
-    A Q5/Q4 account whose payment_ratio is well above the band's typical level
+    A Very High/High account whose payment_ratio is well above the band's typical level
     → the skeptic reads it as ``Low`` or ``Medium`` (band likely overstates
     risk) → gap ≥ 2 → dispute. Otherwise it agrees (``High``) → no dispute.
     """
@@ -292,7 +293,9 @@ class _DeterministicSkepticLLM(LLM):
     # Approximate per-band typical payment_ratio (the cohort medians a skeptic
     # with portfolio_stats would see). High-risk bands repay little; a value
     # well above the band's level is the challenge signal.
-    _BAND_TYPICAL_PR = {"Q1": 0.80, "Q2": 0.60, "Q3": 0.40, "Q4": 0.15, "Q5": 0.05}
+    _BAND_TYPICAL_PR = {
+        "Very Low": 0.80, "Low": 0.60, "Medium": 0.40, "High": 0.15, "Very High": 0.05,
+    }
     _CHALLENGE_FACTOR = 3.0  # account repays >3x the band's typical → challenge
 
     def __init__(self) -> None:
@@ -303,10 +306,10 @@ class _DeterministicSkepticLLM(LLM):
         m_pr = _PR_RE.search(prompt)
         m_band = _BAND_RE.search(prompt)
         pr = float(m_pr.group(1)) if m_pr else 0.5
-        band = m_band.group(1) if m_band else "Q3"
+        band = m_band.group(1) if m_band else "Medium"
         typical = self._BAND_TYPICAL_PR.get(band, 0.3)
         challenge = pr >= (typical * self._CHALLENGE_FACTOR) and pr >= 0.08
-        if challenge and band in ("Q4", "Q5"):
+        if challenge and band in ("High", "Very High"):
             # How far above the band's level decides Low vs Medium.
             view = "Low" if pr >= typical * 6 else "Medium"
             conf = 0.78 if view == "Low" else 0.7
@@ -330,7 +333,7 @@ class _DeterministicActuaryLLM(LLM):
     Defends the band with a confidence that tracks the SAME repayment evidence
     the Skeptic cited. A near-settled high-risk account (high payment_ratio)
     is a genuinely weak defense → low confidence → the arbiter escalates. A
-    clearly-delinquent Q5 account (low payment_ratio) is a strong defense.
+    clearly-delinquent Very High account (low payment_ratio) is a strong defense.
     Grounded in the real feature; reproducible; never a coin flip.
     """
 
@@ -345,7 +348,7 @@ class _DeterministicActuaryLLM(LLM):
         m_pr = re.search(r"payment_ratio=([0-9.]+)", prompt)
         pr = float(m_pr.group(1)) if m_pr else 0.5
         # Weak defense when repayment contradicts a high band; strong otherwise.
-        # A Q5 account repaying well is the textbook weak-defense case.
+        # A Very High account repaying well is the textbook weak-defense case.
         if pr >= 0.15:
             conf = 0.52  # weak → arbiter escalates (below 0.6 threshold)
             claim = "band is the model's best estimate but repayment evidence is mixed"
@@ -420,7 +423,7 @@ def run_society_arm(
     scored = _predict(full_model, test_frame)
     scoring_seconds = time.perf_counter() - t0
 
-    # Quality: high-risk flag = (score_band == Q5) vs label_default.
+    # Quality: high-risk flag = (score_band == Very High) vs label_default.
     bands = scored.column("score_band").to_pylist()
     labels = scored.column("label_default").to_pylist()
     y_true = [int(bool(b)) for b in labels]
@@ -545,7 +548,7 @@ def _baseline_prompt(loan_id: str, row: Dict[str, Any]) -> str:
         f"outstanding_ratio: {row.get('outstanding_ratio'):.2f}",
         f"delinquency_status: {row.get('delinquency_status')}",
         "Reply with ONLY a JSON object, no prose, exactly this shape:",
-        '{"score_band": "Q1|Q2|Q3|Q4|Q5", "recommended_action": "call|watch|auto-cure"}',
+        '{"score_band": "Very Low|Low|Medium|High|Very High", "recommended_action": "call|watch|auto-cure"}',
     ])
 
 

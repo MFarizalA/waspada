@@ -105,7 +105,7 @@ export function AccountDrawer({ account, onClose }: AccountDrawerProps) {
             </div>
             <div className={styles.detailItem}>
               <dt>{t("dr.band")}</dt>
-              <dd>{account.score_band}</dd>
+              <dd><BandBadge band={account.score_band} /></dd>
             </div>
           </dl>
         </div>
@@ -117,11 +117,11 @@ export function AccountDrawer({ account, onClose }: AccountDrawerProps) {
 
 function scoreColor(band: string): { color: string } {
   switch (band) {
-    case "Q1":
-    case "Q2": return { color: "var(--risk-low)" };
-    case "Q3": return { color: "var(--risk-moderate)" };
-    case "Q4": return { color: "var(--risk-elevated)" };
-    case "Q5": return { color: "var(--risk-high)" };
+    case "Very Low":
+    case "Low": return { color: "var(--risk-low)" };
+    case "Medium": return { color: "var(--risk-moderate)" };
+    case "High": return { color: "var(--risk-elevated)" };
+    case "Very High": return { color: "var(--risk-high)" };
     default:   return { color: "var(--text)" };
   }
 }

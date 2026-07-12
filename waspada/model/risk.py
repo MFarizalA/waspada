@@ -49,7 +49,7 @@ from sklearn.metrics import roc_auc_score
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
 
-from ..schema import FeatureFrame, ScoredAccounts, schema_from_dataclass, validate_table
+from ..schema import RISK_LEVELS, FeatureFrame, ScoredAccounts, schema_from_dataclass, validate_table
 
 __all__ = [
     "FEATURE_COLUMNS",
@@ -247,34 +247,36 @@ def train(
 
 
 # --------------------------------------------------------------------------- #
-# predict — ScoredAccounts-shaped output with p_default + quintile band.
+# predict — ScoredAccounts-shaped output with p_default + risk-level band.
 # --------------------------------------------------------------------------- #
-def _quintile_bands(probs: np.ndarray) -> List[str]:
-    """Assign Q1 (lowest risk) .. Q5 (highest risk) by p_default quintile.
+def _risk_level_bands(probs: np.ndarray) -> List[str]:
+    """Assign "Very Low" (lowest risk) .. "Very High" (highest) by p_default quintile.
 
-    Per-batch relative banding (the work-list ranks within the scored
-    population). Degenerate cases (constant probs, tiny N) collapse to a
-    middle band so banding never throws.
+    The labels come from :data:`waspada.schema.RISK_LEVELS` (the frozen
+    vocabulary). Per-batch relative banding (the work-list ranks within the
+    scored population). Degenerate cases (constant probs, tiny N) collapse to
+    the middle level so banding never throws.
     """
+    lo, low, mid, high, hi = RISK_LEVELS
     n = len(probs)
     if n == 0:
         return []
     qs = np.percentile(probs, [20, 40, 60, 80])
-    # If all cutpoints collapse (constant probs), everyone is Q3 (mid).
+    # If all cutpoints collapse (constant probs), everyone is mid ("Medium").
     if len(set(qs.tolist())) == 1:
-        return ["Q3"] * n
+        return [mid] * n
     bands: List[str] = []
     for p in probs:
         if p <= qs[0]:
-            bands.append("Q1")
+            bands.append(lo)
         elif p <= qs[1]:
-            bands.append("Q2")
+            bands.append(low)
         elif p <= qs[2]:
-            bands.append("Q3")
+            bands.append(mid)
         elif p <= qs[3]:
-            bands.append("Q4")
+            bands.append(high)
         else:
-            bands.append("Q5")
+            bands.append(hi)
     return bands
 
 
@@ -299,7 +301,7 @@ def predict(model: Dict, features: pa.Table) -> pa.Table:
     # Guard: probabilities must be finite and in [0,1] (clip tiny float drift).
     probs = np.clip(np.nan_to_num(probs, nan=0.0), 0.0, 1.0)
 
-    bands = _quintile_bands(probs)
+    bands = _risk_level_bands(probs)
 
     # Segment struct per the frozen ScoredAccounts contract.
     seg_type = schema_from_dataclass(ScoredAccounts).field("segment").type

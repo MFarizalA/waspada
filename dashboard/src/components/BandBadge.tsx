@@ -2,38 +2,44 @@ import type { ScoredAccount } from "@/types";
 import { score } from "@/lib/format";
 import { useI18n } from "@/lib/i18n";
 
-/** Map a risk quintile band to its color from the Pasar token ramp. */
+/** The frozen risk-level vocabulary (waspada/schema.py RISK_LEVELS), low→high. */
+const KNOWN_LEVELS = new Set(["Very Low", "Low", "Medium", "High", "Very High"]);
+
+/** Map a risk level to its color from the design-token risk ramp. */
 function bandColor(band: string): string {
   switch (band) {
-    case "Q1":
-    case "Q2": return "var(--risk-low)";
-    case "Q3": return "var(--risk-moderate)";
-    case "Q4": return "var(--risk-elevated)";
-    case "Q5": return "var(--risk-high)";
+    case "Very Low":
+    case "Low": return "var(--risk-low)";
+    case "Medium": return "var(--risk-moderate)";
+    case "High": return "var(--risk-elevated)";
+    case "Very High": return "var(--risk-high)";
     default:   return "var(--text-subtle)";
   }
 }
 
 /**
- * Compact pill showing the score band (risk quintile). Color-coded via the
- * design-system risk ramp so the analyst can scan severity at a glance.
+ * Compact pill showing the risk level (quintile-derived score band).
+ * Color-coded via the design-system risk ramp so the analyst can scan severity
+ * at a glance. The label localizes (EN/中文) for known levels; an unknown value
+ * renders raw so payload drift stays visible instead of crashing.
  */
 export function BandBadge({ band }: { band: string }) {
   const { t } = useI18n();
+  const label = KNOWN_LEVELS.has(band) ? t(`band.val.${band}`) : band;
   return (
     <span
       className="badge"
       style={{ background: bandColor(band), color: "#fff" }}
-      aria-label={t("band.aria", { band })}
+      aria-label={t("band.aria", { band: label })}
     >
-      {band}
+      {label}
     </span>
   );
 }
 
 /**
  * The p_default score, shown as a colored number. The number itself carries the
- * precision (two decimals); the color encodes the band for fast scanning.
+ * precision (two decimals); the color encodes the risk level for fast scanning.
  */
 export function ScoreText({ account }: { account: ScoredAccount }) {
   return (
