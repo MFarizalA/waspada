@@ -28,7 +28,7 @@ import re
 from typing import Any, List, Optional, Tuple
 
 from .base import Agent
-from .llm import LLM, MockLLM
+from .llm import LLM, MockLLM, qwen_tier
 from .protocol import AgentContext, AgentResult, Dispute, DisputeRound, Status
 
 __all__ = ["ArbiterAgent", "ARBITER_CONFIDENCE_THRESHOLD"]
@@ -78,7 +78,7 @@ class ArbiterAgent(Agent):
         brain offered a confident-ish uphold/override — the human gate gets the
         borderline calls. Unparsable → ``escalate``.
         """
-        brain = self.llm.with_model("qwen3.7-max")
+        brain = self.llm.with_model(qwen_tier("max"))
         model_name = getattr(brain, "model_name", None) or getattr(brain, "name", None)
 
         prompt = self._ruling_prompt(dispute)

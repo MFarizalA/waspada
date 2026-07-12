@@ -26,7 +26,7 @@ import pyarrow as pa
 from ..model.risk import predict as _predict, train as _train
 from ..schema import ScoredAccounts, validate_table
 from .base import Agent
-from .llm import LLM, MockLLM
+from .llm import LLM, MockLLM, qwen_tier
 from .protocol import AgentContext, AgentResult, Dispute, DisputeRound, Status
 
 __all__ = ["RiskModelAgent"]
@@ -118,7 +118,7 @@ class RiskModelAgent(Agent):
         # Tier the brain up to the mid rebuttal model. ``with_model`` is a
         # no-op on MockLLM (offline path records model="mock"); on QwenLLM it
         # clones the shared client onto ``qwen3.7-plus``.
-        brain = self.llm.with_model("qwen3.7-plus")
+        brain = self.llm.with_model(qwen_tier("plus"))
         model_name = getattr(brain, "model_name", None) or getattr(brain, "name", None)
 
         # Round 1 challenge (the claim the Actuary is rebutting).
