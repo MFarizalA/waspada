@@ -1,0 +1,3 @@
+# Shell scripts must stay LF-terminated or bash fails with a `\r` interpreter
+# error on Windows checkouts (autocrlf would otherwise rewrite them to CRLF).
+*.sh text eol=lf
