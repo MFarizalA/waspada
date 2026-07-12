@@ -15,6 +15,8 @@ holding the gate at both layers.*
 
 ---
 
+**Status legend:** ✅ shipped & tested offline · 🟡 architected / planned (not yet in code). Markers reflect the repo at review time.
+
 ## Track 3 requirements → how WASPADA answers
 
 > *"Design a multi-agent collaboration system where multiple Agents with
@@ -33,17 +35,17 @@ holding the gate at both layers.*
 ## Judging rubric → design mapping
 
 **Technical Depth & Engineering (sophisticated QwenCloud API use):**
-- **Native function calling** — the Skeptic runs a real Qwen tool-calling loop
+- 🟡 (implemented as JSON-mode tool selection; native tools/tool_calls API not wired) · **Native function calling** — the Skeptic runs a real Qwen tool-calling loop
   (`tools`/`tool_calls`, confirmed supported on all three models we use); *Qwen
   decides* when to pull portfolio context, not hard-wired Python.
-- **MCP integration** — a real MCP server (`waspada/mcp/`) serves
+- ✅ · **MCP integration** — a real MCP server (`waspada/mcp/`) serves
   `portfolio_stats` + `lookup_account` over the Model Context Protocol; agents
   consume it through an MCP client session. Stretch: expose it over SSE on
   Function Compute and attach it natively to Qwen's **Responses API**
   (`{"type":"mcp", "server_protocol":"sse", ...}` — confirmed platform feature).
-- **Model tiering by cognitive load** — `qwen3.6-flash` (cheap triage
+- ✅ · **Model tiering by cognitive load** — `qwen3.6-flash` (cheap triage
   challenges) → `qwen3.7-plus` (rebuttals) → `qwen3.7-max` (arbiter rulings).
-- **JSON-mode + validate-and-retry** — `response_format: json_object`
+- ✅ · **JSON-mode + validate-and-retry** — `response_format: json_object`
   (confirmed; strict `json_schema` is *not* offered) with schema validation and
   one retry, degrading gracefully (never crashes the pipeline).
 - Honest note: Qwen Cloud has **no server-side "custom skills" API primitive**
@@ -131,12 +133,12 @@ the scores).
 
 | Participant | Role | Brain | Capability | On failure |
 |---|---|---|---|---|
-| `data_engineer` | **The Data Engineer** — validates, profiles, and quality-checks the freshly-loaded book before anyone trusts it | **LLM** (`qwen3.6-flash`) + **function-calling loop** over a deterministic dlt/DuckDB check core | tools: `validate_schema`, `null_rates`, `profile_column`, `detect_anomalies` | dirty data → `blocked`; unparsable tool step → run the default check set (validation never skipped) |
-| `data_analyst` | **The Data Analyst** — builds features and explores the book for the aggregates the debate later cites | **LLM** (`qwen3.7-plus`) + **function-calling loop** over DuckDB SQL | tools: `query`, `correlation`, `distribution`, `build_feature`; backs the MCP evidence base | tool/parse failure → fall back to the fixed, deterministic feature recipe |
-| `risk_model` (score) | **The Defendant + Counsel** — a classical-ML score, defended by an LLM when challenged | **classical ML** (sklearn LogisticRegression) as the score; `qwen3.7-plus` as its defense voice (`defend_score()`) | vintage-split training, leakage guard; uphold-or-concede rebuttal | unparsable rebuttal → auto-escalate |
-| `risk_auditor` | **The Prosecutor (Skeptic)** — audits the top-K riskiest scores, challenges where the story doesn't match the number | **LLM** (`qwen3.6-flash`) + **native function-calling loop** | **MCP client**: `portfolio_stats`, `lookup_account`; opens `Dispute`s with cited evidence | unparsable challenge → no dispute (logged), pipeline continues |
-| `arbiter` | **The Judge** — reads both arguments, rules, or punts to the human | **LLM** (`qwen3.7-max`) | ruling with rationale + confidence; low confidence → escalate | unparsable ruling → escalate to human |
-| *(human analyst)* | **The Gate (final authority)** — ratifies overrides, rules escalations | **human** | `ApprovalGate` (`resolve_risk_dispute`, `publish_work_list`); auto-approve logged `auto=True`, distinguishable in audit | fails **closed** (no decide channel → rejected) |
+| `data_engineer` | ✅ · **The Data Engineer** — validates, profiles, and quality-checks the freshly-loaded book before anyone trusts it | **LLM** (`qwen3.6-flash`) + **function-calling loop** over a deterministic dlt/DuckDB check core | tools: `validate_schema`, `null_rates`, `profile_column`, `detect_anomalies` | dirty data → `blocked`; unparsable tool step → run the default check set (validation never skipped) |
+| `data_analyst` | 🟡 (planned, WA-030 — analytics is deterministic today) · **The Data Analyst** — builds features and explores the book for the aggregates the debate later cites | **LLM** (`qwen3.7-plus`) + **function-calling loop** over DuckDB SQL | tools: `query`, `correlation`, `distribution`, `build_feature`; backs the MCP evidence base | tool/parse failure → fall back to the fixed, deterministic feature recipe |
+| `risk_model` (score) | ✅ · **The Defendant + Counsel** — a classical-ML score, defended by an LLM when challenged | **classical ML** (sklearn LogisticRegression) as the score; `qwen3.7-plus` as its defense voice (`defend_score()`) | vintage-split training, leakage guard; uphold-or-concede rebuttal | unparsable rebuttal → auto-escalate |
+| `risk_auditor` | ✅ (note: single-shot JSON, not a loop) · **The Prosecutor (Skeptic)** — audits the top-K riskiest scores, challenges where the story doesn't match the number | **LLM** (`qwen3.6-flash`) + **native function-calling loop** | **MCP client**: `portfolio_stats`, `lookup_account`; opens `Dispute`s with cited evidence | unparsable challenge → no dispute (logged), pipeline continues |
+| `arbiter` | ✅ · **The Judge** — reads both arguments, rules, or punts to the human | **LLM** (`qwen3.7-max`) | ruling with rationale + confidence; low confidence → escalate | unparsable ruling → escalate to human |
+| *(human analyst)* | ✅ · **The Gate (final authority)** — ratifies overrides, rules escalations | **human** | `ApprovalGate` (`resolve_risk_dispute`, `publish_work_list`); auto-approve logged `auto=True`, distinguishable in audit | fails **closed** (no decide channel → rejected) |
 
 **Where the loops are:** three, all function-calling — the Data Engineer, the
 Data Analyst, and the Prosecutor each Think→Act→Observe (decide which tool →
@@ -286,7 +288,7 @@ flowchart TB
   with one retry then safe fallback; gate fails closed; `blocked/error/disputed`
   are distinct terminal states; every step and handoff is audit-logged; the
   whole system runs offline on `MockLLM` (CI proves it — 131 tests, no network).
-- **Audit stream (SLS):** every `Step`/`Handoff`/`DisputeRound` is also shipped
+- 🟡 (log store is provisioned in the IaC; the shipping wrapper, WA-023, is not implemented) · **Audit stream (SLS):** every `Step`/`Handoff`/`DisputeRound` is also shipped
   to **Alibaba Simple Log Service** as structured logs (`run_id, agent, action,
   model, tokens, latency, resolution`) — SQL-queryable in the SLS console.
   ~2h integration (`aliyun-log-python-sdk`, one thin wrapper on the
@@ -302,26 +304,27 @@ flowchart TB
 
 The data layer is a proper **data lakehouse**, not a bulk download:
 
-- **OSS (data lake):** `loans.parquet` as the source of truth in Alibaba Cloud
+- ✅ · **OSS (data lake):** `loans.parquet` as the source of truth in Alibaba Cloud
   OSS. dlt's `filesystem` source reads it via the S3-compatible API
   (`endpoint_url`), with incremental loading + merge dedup on re-runs.
-- **DuckDB (query engine):** the in-process SQL engine that reads Parquet
+- ✅ · **DuckDB (query engine):** the in-process SQL engine that reads Parquet
   directly (via `httpfs` for remote, or locally). Agents run SQL queries
   instead of Python aggregation — `SELECT grade, avg(dti) ... GROUP BY grade`
-  pushes computation down. DuckDB also federates to RDS PostgreSQL via
-  `postgres_scanner`, enabling cross-source joins (loan book ↔ dispute memory).
-- **RDS PostgreSQL (operational warehouse):** user auth (WA-028), dispute
-  memory (WA-026), audit trail. DuckDB joins OSS analytics with RDS
-  operational data in a single query — the lakehouse pattern.
-- **dlt pipeline:** schema contracts freeze the RawLoans shape (reject drift),
+  pushes computation down. 🟡 DuckDB also federates to RDS PostgreSQL via
+  `postgres_scanner`, enabling cross-source joins (loan book ↔ dispute memory)
+  — federation planned, not yet wired.
+- ✅ · **RDS PostgreSQL (operational warehouse):** user auth (WA-028), dispute
+  memory (WA-026), audit trail. 🟡 DuckDB joins OSS analytics with RDS
+  operational data in a single query — the lakehouse pattern (federation planned).
+- 🟡 · **dlt pipeline:** schema contracts freeze the RawLoans shape (reject drift),
   incremental cursors track what's loaded, `load_info` carries the audit
   metadata. Swappable destination: DuckDB for local/dev, PostgreSQL for prod.
 
 Two pipeline agents become **AI agents** powered by Qwen function calling:
-- **Data Engineer** (qwen3.6-flash) — validates, profiles, quality-checks the
+- ✅ · **Data Engineer** (qwen3.6-flash) — validates, profiles, quality-checks the
   snapshot. Decides which checks to run via tool-calling loop
   (validate_schema → null_rates → profile_column → detect_anomalies).
-- **Data Analyst** (qwen3.7-plus) — builds features, explores the data,
+- 🟡 · **Data Analyst** (qwen3.7-plus) — builds features, explores the data,
   surfaces insights. Runs DuckDB SQL via function calling (query →
   correlation → distribution → build_feature).
 
