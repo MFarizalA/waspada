@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import type { ScoredAccount } from "@/types";
 import { segmentLabel, pct } from "@/lib/format";
+import { useI18n } from "@/lib/i18n";
 import { ActionBadge } from "@/components/ActionBadge";
 import { BandBadge } from "@/components/BandBadge";
 import styles from "./AccountDrawer.module.css";
@@ -22,6 +23,7 @@ interface AccountDrawerProps {
  * and the recommended action — all straight off the frozen ScoredAccounts shape.
  */
 export function AccountDrawer({ account, onClose }: AccountDrawerProps) {
+  const { t } = useI18n();
   const closeBtnRef = useRef<HTMLButtonElement>(null);
   const previouslyFocused = useRef<HTMLElement | null>(null);
 
@@ -61,14 +63,14 @@ export function AccountDrawer({ account, onClose }: AccountDrawerProps) {
       >
         <header className={styles.header}>
           <div>
-            <p className={styles.eyebrow}>Account</p>
+            <p className={styles.eyebrow}>{t("dr.eyebrow")}</p>
             <h2 id="drawer-title" className={styles.title}>{account.loan_id}</h2>
           </div>
           <button
             ref={closeBtnRef}
             type="button"
             className={styles.closeBtn}
-            aria-label="Close account detail"
+            aria-label={t("dr.close")}
             onClick={onClose}
           >
             ✕
@@ -77,7 +79,7 @@ export function AccountDrawer({ account, onClose }: AccountDrawerProps) {
 
         <div className={styles.body}>
           <div className={styles.scoreBlock}>
-            <span className={styles.scoreLabel}>Probability of default</span>
+            <span className={styles.scoreLabel}>{t("dr.pdefault")}</span>
             <span className={styles.scoreValue} style={scoreColor(account.score_band)}>
               {pct(account.p_default)}
             </span>
@@ -86,23 +88,23 @@ export function AccountDrawer({ account, onClose }: AccountDrawerProps) {
 
           <dl className={styles.detailGrid}>
             <div className={styles.detailItem}>
-              <dt>Recommended action</dt>
+              <dt>{t("dr.action")}</dt>
               <dd><ActionBadge action={account.recommended_action} /></dd>
             </div>
             <div className={styles.detailItem}>
-              <dt>Segment</dt>
+              <dt>{t("dr.segment")}</dt>
               <dd>{segmentLabel(account.segment)}</dd>
             </div>
             <div className={styles.detailItem}>
-              <dt>Product</dt>
+              <dt>{t("dr.product")}</dt>
               <dd className={styles.cap}>{account.segment.product}</dd>
             </div>
             <div className={styles.detailItem}>
-              <dt>Region</dt>
+              <dt>{t("dr.region")}</dt>
               <dd className={styles.cap}>{account.segment.region}</dd>
             </div>
             <div className={styles.detailItem}>
-              <dt>Risk band</dt>
+              <dt>{t("dr.band")}</dt>
               <dd>{account.score_band}</dd>
             </div>
           </dl>

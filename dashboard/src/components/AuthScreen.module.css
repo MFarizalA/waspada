@@ -5,7 +5,8 @@
   justify-content: center;
   padding: var(--sp-6);
   background:
-    radial-gradient(1200px 600px at 50% -10%, var(--pasar-teal-50), transparent 70%),
+    radial-gradient(1200px 600px at 50% -10%, var(--cn-red-50), transparent 70%),
+    radial-gradient(900px 500px at 90% 110%, rgba(212, 175, 55, 0.18), transparent 70%),
     var(--bg);
 }
 
@@ -14,8 +15,9 @@
   max-width: 400px;
   background: var(--surface);
   border: 1px solid var(--border);
+  border-top: 3px solid var(--cn-red-600);
   border-radius: var(--radius-lg);
-  box-shadow: 0 12px 40px rgba(15, 23, 42, 0.10);
+  box-shadow: var(--shadow);
   padding: var(--sp-8) var(--sp-6);
 }
 
@@ -42,9 +44,11 @@
 
 .title {
   margin: 0;
-  font-size: 1.1rem;
+  font-family: var(--font-display);
+  font-size: 1.3rem;
   font-weight: 700;
-  letter-spacing: 0.02em;
+  letter-spacing: 0.04em;
+  color: var(--cn-red-600);
 }
 
 .subtitle {
@@ -52,6 +56,21 @@
   font-size: 0.78rem;
   color: var(--text-subtle);
 }
+
+.langBtn {
+  margin-left: auto;
+  align-self: flex-start;
+  padding: var(--sp-1) var(--sp-3);
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--cn-ink);
+  background: var(--cn-gold-500);
+  border: 1px solid var(--cn-gold-600);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background 0.12s;
+}
+.langBtn:hover { background: var(--cn-gold-400); }
 
 /* --- form ----------------------------------------------------------------- */
 .form {
