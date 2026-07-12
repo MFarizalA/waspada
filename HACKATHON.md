@@ -288,7 +288,7 @@ flowchart TB
   with one retry then safe fallback; gate fails closed; `blocked/error/disputed`
   are distinct terminal states; every step and handoff is audit-logged; the
   whole system runs offline on `MockLLM` (CI proves it — 131 tests, no network).
-- 🟡 (log store is provisioned in the IaC; the shipping wrapper, WA-023, is not implemented) · **Audit stream (SLS):** every `Step`/`Handoff`/`DisputeRound` is also shipped
+- ✅ (WA-023: `waspada/audit/` ships the step log to SLS with a fail-safe local-file fallback) · **Audit stream (SLS):** every `Step`/`Handoff`/`DisputeRound` is also shipped
   to **Alibaba Simple Log Service** as structured logs (`run_id, agent, action,
   model, tokens, latency, resolution`) — SQL-queryable in the SLS console.
   ~2h integration (`aliyun-log-python-sdk`, one thin wrapper on the

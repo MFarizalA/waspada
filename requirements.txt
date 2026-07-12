@@ -9,6 +9,7 @@ cuml-cu12>=26.6        # GPU ML (risk models)
 
 # --- Alibaba Cloud data layer ---
 oss2>=2.18              # OSS bucket client (the loan-portfolio Parquet object)
+aliyun-log-python-sdk>=0.9  # Simple Log Service audit stream (WA-023); optional — fail-safe local fallback if absent
 
 # --- Lakehouse access layer (WA-029): dlt load + DuckDB for the Data Engineer agent ---
 dlt[duckdb]>=1.4        # dlt load (filesystem source over OSS/S3 endpoint) + DuckDB destination

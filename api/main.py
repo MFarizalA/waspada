@@ -18,6 +18,7 @@ import asyncio
 import datetime as dt
 import json
 import sys
+import uuid
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any, Callable, Dict, Optional
@@ -128,6 +129,14 @@ def _build_demo_orchestrator(
     return orch
 
 
+def _ship_audit(orch: Orchestrator, ctx: AgentContext) -> None:
+    """Ship the run's step log to the audit stream (WA-023). Fail-safe:
+    SLS when configured, else a local file; never raises into the request."""
+    from waspada.audit.sls import get_audit_sink, ship_run_audit
+    run_id = (getattr(ctx, "meta", None) or {}).get("run_id") or uuid.uuid4().hex[:12]
+    ship_run_audit(orch, run_id, get_audit_sink(run_id))
+
+
 def _collect_pipeline_steps(orch: Orchestrator, ctx: AgentContext) -> Dict[str, Any]:
     """Package the payload, report, alert summary and step logs from a run."""
     final_ctx = getattr(orch, "_final_ctx", ctx)
@@ -176,11 +185,12 @@ async def run_pipeline(brain: str = "mock", _user: dict = Depends(current_user))
     ctx = AgentContext(
         lane="collections",
         data_handles={},
-        meta={"source": "cloud-run-demo"},
+        meta={"source": "cloud-run-demo", "run_id": uuid.uuid4().hex[:12]},
     )
 
     orch.plan("collections")
     result = orch.run(ctx)
+    _ship_audit(orch, ctx)  # WA-023: audit stream (fail-safe)
 
     if not result.ok:
         return JSONResponse(
@@ -248,12 +258,13 @@ async def run_stream(brain: str = "mock", _user: dict = Depends(current_user_ws)
     ctx = AgentContext(
         lane="collections",
         data_handles={},
-        meta={"source": "sse-stream"},
+        meta={"source": "sse-stream", "run_id": uuid.uuid4().hex[:12]},
     )
 
     async def runner() -> None:
         try:
             await asyncio.to_thread(orch.run, ctx)
+            await asyncio.to_thread(_ship_audit, orch, ctx)  # WA-023 (fail-safe)
         except Exception as exc:  # pragma: no cover - defensive; stream must close
             # Log locally but never crash the SSE connection; the frontend falls
             # back to the request/response path on disconnect/error.
