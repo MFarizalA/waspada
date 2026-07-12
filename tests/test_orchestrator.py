@@ -14,6 +14,7 @@ import pyarrow as pa
 import pytest
 
 from waspada.agents import AgentContext, ApprovalGate, Approved, MockLLM, Rejected, Status
+from waspada.agents.data_analyst import DataAnalystAgent
 from waspada.agents.data_engineer import DataEngineerAgent
 from waspada.agents.orchestrator import COLLECTIONS_STEP_ORDER, Orchestrator
 from waspada.schema import RawLoans, schema_from_dataclass
@@ -70,8 +71,11 @@ def _orchestrator_with_stub(raw: pa.Table, *, gate: ApprovalGate) -> Orchestrato
     def _build():
         agents = _orig_build()
         for a in agents:
-            if isinstance(a, DataEngineerAgent):
+            if isinstance(a, (DataEngineerAgent, DataAnalystAgent)):
                 a.register_tool("fetch", _stub)
+                # Fresh mock brain so the Tier-2 loops don't consume the shared
+                # debate script (if one is wired on the orchestrator brain).
+                a.llm = MockLLM()
         return agents
     orch._build_agents = _build  # type: ignore[method-assign]
     return orch
@@ -120,14 +124,14 @@ def test_run_executes_all_steps_in_order(raw_table):
     run_notes = [s.notes for s in orch.steps if s.action == "run"]
     # Each run-step names the agent and its artifact handle.
     assert any("data_engineer" in n and "raw_loans" in n for n in run_notes)
-    assert any("analytics" in n and "feature_frame" in n for n in run_notes)
+    assert any("data_analyst" in n and "feature_frame" in n for n in run_notes)
     assert any("risk_model" in n and "scored_accounts" in n for n in run_notes)
     assert any("risk_auditor" in n and "scored_accounts" in n for n in run_notes)
     assert any("insight" in n and "dashboard_payload" in n for n in run_notes)
     # Handoffs recorded frm→to in order. (risk_auditor sits between risk_model
     # and insight — WA-014.) data_engineer replaced ingest in WA-029.
-    assert [h.frm for h in orch.handoffs] == ["data_engineer", "analytics", "risk_model", "risk_auditor"]
-    assert [h.to for h in orch.handoffs] == ["analytics", "risk_model", "risk_auditor", "insight"]
+    assert [h.frm for h in orch.handoffs] == ["data_engineer", "data_analyst", "risk_model", "risk_auditor"]
+    assert [h.to for h in orch.handoffs] == ["data_analyst", "risk_model", "risk_auditor", "insight"]
 
 
 def test_run_invokes_approval_gate_before_payload(raw_table):

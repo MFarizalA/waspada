@@ -18,6 +18,7 @@ from __future__ import annotations
 
 from .arbiter import ArbiterAgent
 from .base import Agent, ApprovalGate, Approved, Rejected, handoff
+from .data_analyst import DataAnalystAgent
 from .data_engineer import DataEngineerAgent
 from .dispute_memory import (
     DisputeMemory,
@@ -59,6 +60,7 @@ __all__ = [
     "LocalFileMemory",
     # agents
     "ArbiterAgent",
+    "DataAnalystAgent",
     "DataEngineerAgent",
     "IngestAgent",
     "InsightAgent",

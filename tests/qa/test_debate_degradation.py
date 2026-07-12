@@ -42,6 +42,7 @@ from waspada.agents.analytics import AnalyticsAgent
 from waspada.agents.arbiter import ARBITER_CONFIDENCE_THRESHOLD
 from waspada.agents.base import Rejected
 from waspada.agents.ingest import IngestAgent
+from waspada.agents.data_analyst import DataAnalystAgent
 from waspada.agents.data_engineer import DataEngineerAgent
 from waspada.agents.orchestrator import Orchestrator
 from waspada.agents.risk_model import RiskModelAgent
@@ -106,9 +107,10 @@ def _orch(raw: pa.Table, brain, *, gate=None, enable_arbiter: bool = True) -> Or
     def _build():
         agents = _orig()
         for a in agents:
-            if isinstance(a, DataEngineerAgent):
+            if isinstance(a, (DataEngineerAgent, DataAnalystAgent)):
                 a.register_tool("fetch", _stub_fetch(raw))
-                a.llm = MockLLM()  # fresh brain — DE loop must not eat the debate script
+                # Fresh brain — Tier-2 loops must not eat the shared debate script.
+                a.llm = MockLLM()
         return agents
     orch._build_agents = _build  # type: ignore[method-assign]
     return orch
