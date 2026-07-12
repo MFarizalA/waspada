@@ -19,6 +19,7 @@ import datetime as dt
 import json
 import os
 import sys
+import uuid
 from pathlib import Path
 from typing import Optional
 
@@ -111,7 +112,8 @@ def main(argv: Optional[list[str]] = None) -> int:
         from .base import ApprovalGate
         orch.gate = ApprovalGate(auto_approve=True)
 
-    ctx = AgentContext(lane=args.lane, data_handles={}, meta={"as_of": args.as_of, "cli": True})
+    run_id = uuid.uuid4().hex[:12]
+    ctx = AgentContext(lane=args.lane, data_handles={}, meta={"as_of": args.as_of, "cli": True, "run_id": run_id})
 
     # Offline path: stub the data-engineer fetch with a synthetic snapshot when
     # OSS isn't configured, so the CLI runs end-to-end without network.
@@ -161,6 +163,14 @@ def main(argv: Optional[list[str]] = None) -> int:
 
     print(orch.report(payload))
     print(f"[waspada] dashboard payload written to {out_path}")
+
+    # Ship the run's step log to the audit stream (WA-023). Fail-safe: SLS when
+    # configured, else a local data/audit/<run_id>.jsonl file; never blocks.
+    from ..audit.sls import get_audit_sink, ship_run_audit
+    sink = get_audit_sink(run_id)
+    n_audit = ship_run_audit(orch, run_id, sink)
+    print(f"[waspada] audit: shipped {n_audit} record(s) via {getattr(sink, 'backend', '?')} "
+          f"(run_id={run_id})", file=sys.stderr)
     return 0
 
 
