@@ -46,6 +46,10 @@ Thumbs.db
 .venv-qa/
 *.pdf
 
+# --- Build artifacts ---
+# Scratch dashboard build output; never committed (swept into a stash once).
+.dbuild/
+
 # --- OpenTofu / Terraform (WA-027) ---
 # State files may contain sensitive values; never commit.
 *.tfstate

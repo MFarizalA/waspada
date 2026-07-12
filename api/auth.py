@@ -27,7 +27,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 import jwt
-from fastapi import APIRouter, Depends, Header, HTTPException, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
 from passlib.context import CryptContext
 from pydantic import BaseModel, EmailStr, Field
 
@@ -176,6 +176,32 @@ async def current_user(authorization: str = Header(default=None)) -> dict:
             headers={"WWW-Authenticate": "Bearer"},
         )
     token = authorization.split(" ", 1)[1].strip()
+    return _user_from_token(token)
+
+
+async def current_user_ws(
+    token: Optional[str] = Query(default=None),
+    authorization: Optional[str] = Header(default=None),
+) -> dict:
+    """Validate JWT from ``?token=`` query param (EventSource) or Bearer header.
+
+    SSE/EventSource cannot set custom headers, so the dashboard passes the JWT
+    as a query parameter on ``/api/run/stream``. This dependency accepts either
+    form; it is used **only** for the SSE stream route.
+    """
+    if token:
+        return _user_from_token(token)
+    if authorization and authorization.lower().startswith("bearer "):
+        return _user_from_token(authorization.split(" ", 1)[1].strip())
+    raise HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="missing token",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+
+
+def _user_from_token(token: str) -> dict:
+    """Decode a JWT and return the user record."""
     email = decode_jwt(token)
     rec = _db().get_user(email)
     assert rec is not None  # decode_jwt already checked existence
