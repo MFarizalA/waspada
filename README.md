@@ -272,7 +272,7 @@ python -m pytest tests/ -q          # 300+ tests, green offline; live-only smoke
 | Auth | JWT sessions + bcrypt, RDS/SQLite (WA-028) | ✅ |
 | Benchmark | Society vs single-agent efficiency harness (WA-017) | ✅ |
 | Deploy | OpenTofu IaC (OSS · ACR · Function Compute · SLS · RDS) | 🟡 provisioned; FC deploy pending creds |
-| Origination lane | Second lane on the same engine | 🟡 architected, deferred |
+| Origination lane | Second lane on the same engine | 🟡 requirements drafted (WA-033..039) |
 
 ---
 
