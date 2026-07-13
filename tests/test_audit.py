@@ -60,7 +60,7 @@ class _FakeOrch:
         ]
         dispute = Dispute(
             loan_id="LN0001", opened_by="risk_auditor",
-            model_band="Q5", auditor_view="Medium",
+            model_band="Very High", auditor_view="Medium",
             rounds=[
                 DisputeRound(round_no=1, speaker="risk_auditor", model="qwen3.6-flash",
                              claim="payment ratio high", confidence=0.72,

@@ -1,43 +1,56 @@
 import { useMemo } from "react";
 
-import type { DisputeRecord, DisputeRound } from "@/types";
+import type { DisputeRecord, DisputeRound, ScoredAccount } from "@/types";
 import { useLiveRun } from "@/lib/useLiveRun";
 import { useLiveDebateStream } from "@/lib/useLiveDebateStream";
+import { useI18n, type TFunc } from "@/lib/i18n";
+import { riskLevelColor, riskLevelLabel, riskLevelDisplay } from "@/lib/riskLevel";
 import styles from "./AgentDialogue.module.css";
 
 interface AgentDialogueProps {
   /** Absent (undefined) = the payload predates the Agent Society feature → render nothing. */
   dialogue: DisputeRecord[] | undefined;
+  /** The payload's work_list — joined against each dispute's loan_id to pair
+   *  the Actuary's p_default with its risk-level label (FICO-style). Optional
+   *  and defaults to empty so an omitted prop degrades to label-only, never
+   *  crashes. */
+  accounts?: ScoredAccount[];
 }
 
-/** Character card per speaker — display name + chip color (tokens only). */
-const SPEAKERS: Record<string, { label: string; color: string }> = {
-  risk_auditor: { label: "Risk Auditor", color: "var(--sev-high)" },
-  risk_model: { label: "Actuary", color: "var(--sev-info)" },
-  arbiter: { label: "Credit Arbiter", color: "var(--pasar-teal-700)" },
-  human: { label: "Analyst", color: "var(--pasar-teal-500)" },
+/** Chip color per speaker (labels are localized via i18n at render time). */
+const SPEAKER_COLOR: Record<string, string> = {
+  risk_auditor: "var(--sev-high)",
+  risk_model: "var(--sev-info)",
+  arbiter: "var(--pasar-teal-700)",
+  human: "var(--pasar-teal-500)",
 };
+const KNOWN_SPEAKERS = new Set(["risk_auditor", "risk_model", "arbiter", "human"]);
 
 type Resolution = DisputeRecord["resolution"];
 
-const RESOLUTIONS: Record<Resolution, { label: string; color: string }> = {
-  upheld: { label: "Upheld", color: "var(--pasar-teal-600)" },
-  overridden: { label: "Overridden", color: "var(--sev-moderate)" },
-  escalated_approved: { label: "Escalated · approved", color: "var(--sev-info)" },
-  escalated_rejected: { label: "Escalated · rejected", color: "var(--sev-critical)" },
+const RESOLUTION_COLOR: Record<Resolution, string> = {
+  upheld: "var(--pasar-teal-600)",
+  overridden: "var(--sev-moderate)",
+  escalated_approved: "var(--sev-info)",
+  escalated_rejected: "var(--sev-critical)",
 };
 
-function speakerOf(name: string): { label: string; color: string } {
-  return SPEAKERS[name] ?? { label: name, color: "var(--text-subtle)" };
+function speakerColor(name: string): string {
+  return SPEAKER_COLOR[name] ?? "var(--text-subtle)";
+}
+/** Localized speaker label; unknown speakers fall back to the raw agent name. */
+function speakerLabel(t: TFunc, name: string): string {
+  return KNOWN_SPEAKERS.has(name) ? t(`speaker.${name}`) : name;
 }
 
 function Round({ round }: { round: DisputeRound }) {
-  const speaker = speakerOf(round.speaker);
+  const { t } = useI18n();
+  const color = speakerColor(round.speaker);
   return (
     <li className={styles.round}>
       <div className={styles.roundHead}>
-        <span className="badge" style={{ background: speaker.color, color: "#fff" }}>
-          {speaker.label}
+        <span className="badge" style={{ background: color, color: "#fff" }}>
+          {speakerLabel(t, round.speaker)}
         </span>
         <span className={styles.agentName}>{round.speaker}</span>
         {round.model && <span className={styles.modelTag}>{round.model}</span>}
@@ -46,7 +59,7 @@ function Round({ round }: { round: DisputeRound }) {
             <span className={styles.confidenceTrack} aria-hidden="true">
               <span
                 className={styles.confidenceFill}
-                style={{ width: `${Math.round(round.confidence * 100)}%`, background: speaker.color }}
+                style={{ width: `${Math.round(round.confidence * 100)}%`, background: color }}
               />
             </span>
             {Math.round(round.confidence * 100)}%
@@ -67,31 +80,37 @@ function Round({ round }: { round: DisputeRound }) {
   );
 }
 
-function DisputeCard({ dispute }: { dispute: DisputeRecord }) {
-  const res = RESOLUTIONS[dispute.resolution];
-  const resolver = speakerOf(dispute.resolved_by);
+function DisputeCard({ dispute, pDefault }: { dispute: DisputeRecord; pDefault?: number }) {
+  const { t } = useI18n();
+  const resColor = RESOLUTION_COLOR[dispute.resolution];
   return (
     <li
       id={`debate-${dispute.loan_id}`}
       className={styles.dispute}
-      style={{ borderLeftColor: res.color }}
+      style={{ borderLeftColor: resColor }}
       tabIndex={-1}
     >
       <div className={styles.disputeHead}>
         <span className={styles.loanId}>{dispute.loan_id}</span>
         <span className={styles.clash}>
           <span className={styles.clashSide}>
-            Actuary <strong>{dispute.model_band}</strong>
+            {t("speaker.risk_model")}{" "}
+            <strong style={{ color: riskLevelColor(dispute.model_band) }}>
+              {riskLevelDisplay(t, dispute.model_band, pDefault)}
+            </strong>
           </span>
           <span className={styles.vs} aria-hidden="true">
-            vs
+            {t("ad.vs")}
           </span>
           <span className={styles.clashSide}>
-            Risk Auditor <strong>{dispute.auditor_view}</strong>
+            {t("speaker.risk_auditor")}{" "}
+            <strong style={{ color: riskLevelColor(dispute.auditor_view) }}>
+              {riskLevelLabel(t, dispute.auditor_view)}
+            </strong>
           </span>
         </span>
-        <span className="badge" style={{ background: res.color, color: "#fff" }}>
-          {res.label}
+        <span className="badge" style={{ background: resColor, color: "#fff" }}>
+          {t(`res.${dispute.resolution}`)}
         </span>
       </div>
       <ol className={styles.rounds} role="list">
@@ -100,7 +119,9 @@ function DisputeCard({ dispute }: { dispute: DisputeRecord }) {
         ))}
       </ol>
       <p className={styles.rationale}>
-        <span className={styles.rationaleLabel}>Resolved by {resolver.label.toLowerCase()}:</span>{" "}
+        <span className={styles.rationaleLabel}>
+          {t("ad.resolvedBy", { resolver: speakerLabel(t, dispute.resolved_by) })}
+        </span>{" "}
         {dispute.rationale}
       </p>
     </li>
@@ -123,7 +144,8 @@ function DisputeCard({ dispute }: { dispute: DisputeRecord }) {
  *    round lands, then transitions to live cards.
  * Only the debate surface swaps; the rest of the dashboard keeps its fixture.
  */
-export function AgentDialogue({ dialogue }: AgentDialogueProps) {
+export function AgentDialogue({ dialogue, accounts = [] }: AgentDialogueProps) {
+  const { t } = useI18n();
   const { state, run, reset } = useLiveRun();
   const stream = useLiveDebateStream();
   const isLive = state.status === "ok";
@@ -146,6 +168,19 @@ export function AgentDialogue({ dialogue }: AgentDialogueProps) {
   }
   const running = state.status === "running";
 
+  // loan_id -> p_default, for the FICO-style paired display on the Actuary's
+  // side of the clash line. A completed "Run live" carries its own fresh
+  // work_list (preferred — the live run's own numbers); the SSE stream never
+  // sends one, so streaming falls back to the fixture's `accounts` prop. A
+  // genuinely unmatched loan_id (e.g. the stream's synthetic "LIVE" id before
+  // a resolution lands) simply misses the map — riskLevelDisplay degrades to
+  // the label alone, never crashes.
+  const liveAccounts = isLive ? state.payload.work_list : undefined;
+  const pDefaultByLoanId = useMemo(
+    () => new Map((liveAccounts ?? accounts).map((a) => [a.loan_id, a.p_default])),
+    [liveAccounts, accounts],
+  );
+
   const escalated = useMemo(
     () => effective.filter((d) => d.resolution.startsWith("escalated")).length,
     [effective],
@@ -164,36 +199,33 @@ export function AgentDialogue({ dialogue }: AgentDialogueProps) {
       <header className={styles.header}>
         <div className={styles.headerText}>
           <h2 id="agent-dialogue-heading" className={styles.title}>
-            Agent Society · Risk Debate
+            {t("ad.title")}
           </h2>
-          <p className={styles.subtitle}>
-            The Risk Auditor audits the riskiest scores; contested calls are argued, ruled, and — when
-            unresolved — escalated to the analyst.
-          </p>
+          <p className={styles.subtitle}>{t("ad.subtitle")}</p>
         </div>
         <div className={styles.actions}>
           {(isLive || isStreaming) && (
             <span
               className={styles.liveBadge}
-              title={isStreaming ? "Watching the live stream" : "Showing a live Qwen run"}
+              title={isStreaming ? t("ad.streaming.title") : t("ad.live.title")}
             >
               <span className={styles.liveDot} aria-hidden="true" />
-              {isStreaming ? "Streaming" : "Live"}
+              {isStreaming ? t("ad.streaming") : t("ad.live")}
             </span>
           )}
           {effective.length > 0 && (
             <span className={styles.countBadge}>
-              {effective.length} {effective.length === 1 ? "dispute" : "disputes"}
-              {escalated > 0 ? ` · ${escalated} escalated` : ""}
+              {t(effective.length === 1 ? "ad.disputeOne" : "ad.disputeMany", { count: effective.length })}
+              {escalated > 0 ? t("ad.escalated", { count: escalated }) : ""}
             </span>
           )}
           {active === "stream" ? (
             <button type="button" className={styles.resetBtn} onClick={stream.stop}>
-              Stop stream
+              {t("ad.stopStream")}
             </button>
           ) : isLive ? (
             <button type="button" className={styles.resetBtn} onClick={reset}>
-              Back to fixture
+              {t("ad.backToFixture")}
             </button>
           ) : (
             <>
@@ -207,10 +239,10 @@ export function AgentDialogue({ dialogue }: AgentDialogueProps) {
                 {stream.state.status === "connecting" ? (
                   <>
                     <span className={styles.spinner} aria-hidden="true" />
-                    Connecting…
+                    {t("ad.connecting")}
                   </>
                 ) : (
-                  "Watch live"
+                  t("ad.watchLive")
                 )}
               </button>
               <button
@@ -223,10 +255,10 @@ export function AgentDialogue({ dialogue }: AgentDialogueProps) {
                 {running ? (
                   <>
                     <span className={styles.spinner} aria-hidden="true" />
-                    Running…
+                    {t("ad.running")}
                   </>
                 ) : (
-                  "Run live (Qwen)"
+                  t("ad.runLive")
                 )}
               </button>
             </>
@@ -239,26 +271,26 @@ export function AgentDialogue({ dialogue }: AgentDialogueProps) {
       <p className={styles.visuallyHidden} role="status" aria-live="polite">
         {isStreaming
           ? stream.state.status === "connecting"
-            ? "Opening the live debate stream…"
+            ? t("ad.sr.opening")
             : stream.state.status === "live" && stream.state.done
-              ? "Live debate complete."
-              : "Streaming the live debate…"
+              ? t("ad.sr.complete")
+              : t("ad.sr.streaming")
           : running
-            ? "Running the live Qwen debate…"
+            ? t("ad.sr.running")
             : isLive
-              ? "Live debate loaded."
+              ? t("ad.sr.loaded")
               : ""}
       </p>
 
       {state.status === "error" && (
         <p className={styles.runError} role="alert">
-          <strong>Couldn’t run live:</strong> {state.message}
+          <strong>{t("ad.runError")}</strong> {state.message}
         </p>
       )}
 
       {stream.state.status === "error" && (
         <p className={styles.runError} role="alert">
-          <strong>Couldn’t watch live:</strong> {stream.state.message}
+          <strong>{t("ad.watchError")}</strong> {stream.state.message}
         </p>
       )}
 
@@ -268,31 +300,33 @@ export function AgentDialogue({ dialogue }: AgentDialogueProps) {
       {running || stream.state.status === "connecting" ? (
         <div className={styles.runningState} aria-hidden="true">
           <span className={styles.spinnerLarge} />
-          <p>
-            The Risk Auditor, Actuary, and Credit Arbiter are debating the riskiest accounts over Qwen…
-          </p>
+          <p>{t("ad.debatingBody")}</p>
         </div>
       ) : effective.length === 0 ? (
         <p className={styles.empty}>
           {active === "stream"
             ? stream.state.status === "live" && stream.state.done
-              ? "No disputes this stream — the auditor agreed with every audited score."
-              : "Waiting for the first round…"
+              ? t("ad.empty.streamDone")
+              : t("ad.empty.streamWait")
             : isLive
-              ? "No disputes this live run — the auditor agreed with every audited score."
-              : "No disputes this run — the auditor agreed with every audited score."}
+              ? t("ad.empty.live")
+              : t("ad.empty.fixture")}
         </p>
       ) : (
         <ul className={styles.disputeList} role="list">
           {effective.map((dispute) => (
-            <DisputeCard key={dispute.loan_id} dispute={dispute} />
+            <DisputeCard
+              key={dispute.loan_id}
+              dispute={dispute}
+              pDefault={pDefaultByLoanId.get(dispute.loan_id)}
+            />
           ))}
           {/* While streaming and not yet done, show a quiet "more coming" tail
               under the live cards so the panel reads as actively streaming. */}
           {active === "stream" && !(stream.state.status === "live" && stream.state.done) && (
             <li className={styles.streamingTail} aria-hidden="true">
               <span className={styles.spinnerSmall} />
-              Streaming more rounds…
+              {t("ad.streamingMore")}
             </li>
           )}
         </ul>

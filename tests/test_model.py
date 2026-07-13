@@ -176,7 +176,7 @@ def test_predict_score_band_is_quintile_string(tiny_frame):
     model = train(tiny_frame)
     scored = predict(model, tiny_frame)
     bands = set(scored.column("score_band").to_pylist())
-    valid = {"Q1", "Q2", "Q3", "Q4", "Q5"}
+    valid = {"Very Low", "Low", "Medium", "High", "Very High"}
     assert bands.issubset(valid), f"unexpected bands: {bands - valid}"
 
 

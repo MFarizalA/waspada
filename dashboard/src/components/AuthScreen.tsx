@@ -7,6 +7,7 @@ import {
   resetPassword,
   useAuth,
 } from "@/lib/auth";
+import { useI18n, type TFunc } from "@/lib/i18n";
 import styles from "./AuthScreen.module.css";
 
 type Mode = "login" | "register" | "forgot" | "reset";
@@ -31,6 +32,7 @@ interface AuthScreenProps {
  * standalone helpers that return to login on success.
  */
 export function AuthScreen({ initialMode = "login" }: AuthScreenProps) {
+  const { t, toggle } = useI18n();
   const [mode, setMode] = useState<Mode>(initialMode);
   return (
     <div className={styles.wrap}>
@@ -38,9 +40,17 @@ export function AuthScreen({ initialMode = "login" }: AuthScreenProps) {
         <div className={styles.brand}>
           <img src="favicon.svg" alt="" width="36" height="36" className={styles.brandMark} />
           <div>
-            <h1 className={styles.title}>WASPADA · EWS</h1>
-            <p className={styles.subtitle}>Early-warning collections</p>
+            <h1 className={styles.title}>{t("brand.name")}</h1>
+            <p className={styles.subtitle}>{t("auth.sub")}</p>
           </div>
+          <button
+            type="button"
+            className={styles.langBtn}
+            onClick={toggle}
+            aria-label={t("lang.label")}
+          >
+            {t("lang.toggle")}
+          </button>
         </div>
         {mode === "login" && <LoginForm onSwitch={setMode} />}
         {mode === "register" && <RegisterForm onSwitch={setMode} />}
@@ -116,13 +126,14 @@ function SubmitButton({ label, pending }: { label: string; pending: boolean }) {
 
 /** Map an auth error to a user-facing message. Network failures get a hint to
  *  check the backend; AuthError carries the backend's own detail otherwise. */
-function friendlyMessage(err: unknown, fallback: string): string {
+function friendlyMessage(err: unknown, fallback: string, t: TFunc): string {
   if (err instanceof AuthError) return err.message || fallback;
-  return "Couldn’t reach the server. Check it’s running on :8080.";
+  return t("auth.err.network");
 }
 
 // --- LOGIN -----------------------------------------------------------------
 function LoginForm({ onSwitch }: { onSwitch: (m: Mode) => void }) {
+  const { t } = useI18n();
   const { login } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -144,8 +155,8 @@ function LoginForm({ onSwitch }: { onSwitch: (m: Mode) => void }) {
     } catch (err) {
       setError(
         err instanceof AuthError && err.status === 401
-          ? "Invalid email or password."
-          : friendlyMessage(err, "Sign-in failed."),
+          ? t("auth.err.invalidLogin")
+          : friendlyMessage(err, t("auth.err.signInFailed"), t),
       );
     } finally {
       setPending(false);
@@ -154,11 +165,11 @@ function LoginForm({ onSwitch }: { onSwitch: (m: Mode) => void }) {
 
   return (
     <form onSubmit={onSubmit} className={styles.form}>
-      <h2 className={styles.heading}>Sign in</h2>
+      <h2 className={styles.heading}>{t("auth.signIn")}</h2>
       <ErrorBanner error={error} />
       <Field
         id="login-email"
-        label="Email"
+        label={t("auth.email")}
         type="email"
         value={email}
         onChange={setEmail}
@@ -167,7 +178,7 @@ function LoginForm({ onSwitch }: { onSwitch: (m: Mode) => void }) {
       />
       <Field
         id="login-password"
-        label="Password"
+        label={t("auth.password")}
         type="password"
         value={password}
         onChange={setPassword}
@@ -179,22 +190,22 @@ function LoginForm({ onSwitch }: { onSwitch: (m: Mode) => void }) {
         type="button"
         className={styles.demoHint}
         onClick={fillDemo}
-        aria-label="Fill demo analyst credentials"
+        aria-label={t("auth.fillDemo")}
       >
-        <span className={styles.demoLabel}>Demo analyst</span>
+        <span className={styles.demoLabel}>{t("auth.demo")}</span>
         <span className={styles.demoCreds}>
           {DEMO_EMAIL} · {DEMO_PASSWORD}
         </span>
       </button>
 
-      <SubmitButton label="Sign in" pending={pending} />
+      <SubmitButton label={t("auth.signIn")} pending={pending} />
 
       <div className={styles.links}>
         <button type="button" className={styles.link} onClick={() => onSwitch("register")}>
-          Create an account
+          {t("auth.createLink")}
         </button>
         <button type="button" className={styles.link} onClick={() => onSwitch("forgot")}>
-          Forgot password?
+          {t("auth.forgotLink")}
         </button>
       </div>
     </form>
@@ -203,6 +214,7 @@ function LoginForm({ onSwitch }: { onSwitch: (m: Mode) => void }) {
 
 // --- REGISTER --------------------------------------------------------------
 function RegisterForm({ onSwitch }: { onSwitch: (m: Mode) => void }) {
+  const { t } = useI18n();
   const { register } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -214,7 +226,7 @@ function RegisterForm({ onSwitch }: { onSwitch: (m: Mode) => void }) {
     e.preventDefault();
     setError(null);
     if (password !== confirm) {
-      setError("Passwords don’t match.");
+      setError(t("auth.err.mismatch"));
       return;
     }
     setPending(true);
@@ -223,8 +235,8 @@ function RegisterForm({ onSwitch }: { onSwitch: (m: Mode) => void }) {
     } catch (err) {
       setError(
         err instanceof AuthError && err.status === 409
-          ? "That email is already registered. Try signing in."
-          : friendlyMessage(err, "Registration failed."),
+          ? t("auth.err.dup")
+          : friendlyMessage(err, t("auth.err.regFailed"), t),
       );
     } finally {
       setPending(false);
@@ -233,11 +245,11 @@ function RegisterForm({ onSwitch }: { onSwitch: (m: Mode) => void }) {
 
   return (
     <form onSubmit={onSubmit} className={styles.form}>
-      <h2 className={styles.heading}>Create account</h2>
+      <h2 className={styles.heading}>{t("auth.createAccount")}</h2>
       <ErrorBanner error={error} />
       <Field
         id="reg-email"
-        label="Email"
+        label={t("auth.email")}
         type="email"
         value={email}
         onChange={setEmail}
@@ -246,7 +258,7 @@ function RegisterForm({ onSwitch }: { onSwitch: (m: Mode) => void }) {
       />
       <Field
         id="reg-password"
-        label="Password"
+        label={t("auth.password")}
         type="password"
         value={password}
         onChange={setPassword}
@@ -255,18 +267,18 @@ function RegisterForm({ onSwitch }: { onSwitch: (m: Mode) => void }) {
       />
       <Field
         id="reg-confirm"
-        label="Confirm password"
+        label={t("auth.confirm")}
         type="password"
         value={confirm}
         onChange={setConfirm}
         autoComplete="new-password"
         minLength={8}
       />
-      <p className={styles.hint}>Minimum 8 characters.</p>
-      <SubmitButton label="Create account" pending={pending} />
+      <p className={styles.hint}>{t("auth.minChars")}</p>
+      <SubmitButton label={t("auth.createAccount")} pending={pending} />
       <div className={styles.links}>
         <button type="button" className={styles.link} onClick={() => onSwitch("login")}>
-          ← Back to sign in
+          {t("auth.backToSignIn")}
         </button>
       </div>
     </form>
@@ -280,6 +292,7 @@ interface ForgotDoneState {
 }
 
 function ForgotForm({ onSwitch }: { onSwitch: (m: Mode) => void }) {
+  const { t } = useI18n();
   const [email, setEmail] = useState("");
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -293,7 +306,7 @@ function ForgotForm({ onSwitch }: { onSwitch: (m: Mode) => void }) {
       const res = await forgotPassword(email);
       setDone({ email, resetToken: res.resetToken });
     } catch (err) {
-      setError(friendlyMessage(err, "Couldn’t send reset token."));
+      setError(friendlyMessage(err, t("auth.err.tokenFailed"), t));
     } finally {
       setPending(false);
     }
@@ -302,24 +315,20 @@ function ForgotForm({ onSwitch }: { onSwitch: (m: Mode) => void }) {
   if (done) {
     return (
       <div className={styles.form}>
-        <h2 className={styles.heading}>Check your email</h2>
-        <p className={styles.confirmText}>
-          If <strong>{done.email}</strong> is registered, a reset token has been
-          issued. In production it would land in your inbox; for this demo the
-          token is shown below.
-        </p>
+        <h2 className={styles.heading}>{t("auth.checkEmail")}</h2>
+        <p className={styles.confirmText}>{t("auth.checkEmailBody", { email: done.email })}</p>
         {done.resetToken && (
           <div className={styles.tokenBox}>
-            <p className={styles.tokenLabel}>Reset token (demo delivery)</p>
+            <p className={styles.tokenLabel}>{t("auth.tokenLabel")}</p>
             <code className={styles.tokenValue}>{done.resetToken}</code>
           </div>
         )}
         <div className={styles.links}>
           <button type="button" className={styles.link} onClick={() => onSwitch("reset")}>
-            I have a token →
+            {t("auth.haveToken")}
           </button>
           <button type="button" className={styles.link} onClick={() => onSwitch("login")}>
-            Back to sign in
+            {t("auth.backToSignInPlain")}
           </button>
         </div>
       </div>
@@ -328,21 +337,21 @@ function ForgotForm({ onSwitch }: { onSwitch: (m: Mode) => void }) {
 
   return (
     <form onSubmit={onSubmit} className={styles.form}>
-      <h2 className={styles.heading}>Forgot password</h2>
+      <h2 className={styles.heading}>{t("auth.forgot")}</h2>
       <ErrorBanner error={error} />
       <Field
         id="forgot-email"
-        label="Email"
+        label={t("auth.email")}
         type="email"
         value={email}
         onChange={setEmail}
         autoComplete="email"
         autoFocus
       />
-      <SubmitButton label="Send reset token" pending={pending} />
+      <SubmitButton label={t("auth.sendToken")} pending={pending} />
       <div className={styles.links}>
         <button type="button" className={styles.link} onClick={() => onSwitch("login")}>
-          ← Back to sign in
+          {t("auth.backToSignIn")}
         </button>
       </div>
     </form>
@@ -351,6 +360,7 @@ function ForgotForm({ onSwitch }: { onSwitch: (m: Mode) => void }) {
 
 // --- RESET -----------------------------------------------------------------
 function ResetForm({ onSwitch }: { onSwitch: (m: Mode) => void }) {
+  const { t } = useI18n();
   const [token, setToken] = useState("");
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
@@ -362,7 +372,7 @@ function ResetForm({ onSwitch }: { onSwitch: (m: Mode) => void }) {
     e.preventDefault();
     setError(null);
     if (password !== confirm) {
-      setError("Passwords don’t match.");
+      setError(t("auth.err.mismatch"));
       return;
     }
     setPending(true);
@@ -372,8 +382,8 @@ function ResetForm({ onSwitch }: { onSwitch: (m: Mode) => void }) {
     } catch (err) {
       setError(
         err instanceof AuthError && err.status === 401
-          ? "Invalid or expired reset token."
-          : friendlyMessage(err, "Reset failed."),
+          ? t("auth.err.invalidToken")
+          : friendlyMessage(err, t("auth.err.resetFailed"), t),
       );
     } finally {
       setPending(false);
@@ -383,11 +393,11 @@ function ResetForm({ onSwitch }: { onSwitch: (m: Mode) => void }) {
   if (done) {
     return (
       <div className={styles.form}>
-        <h2 className={styles.heading}>Password updated</h2>
-        <p className={styles.confirmText}>Sign in with your new password.</p>
+        <h2 className={styles.heading}>{t("auth.updated")}</h2>
+        <p className={styles.confirmText}>{t("auth.signInNew")}</p>
         <div className={styles.links}>
           <button type="button" className={styles.link} onClick={() => onSwitch("login")}>
-            → Back to sign in
+            {t("auth.backToSignInFwd")}
           </button>
         </div>
       </div>
@@ -396,11 +406,11 @@ function ResetForm({ onSwitch }: { onSwitch: (m: Mode) => void }) {
 
   return (
     <form onSubmit={onSubmit} className={styles.form}>
-      <h2 className={styles.heading}>Reset password</h2>
+      <h2 className={styles.heading}>{t("auth.reset")}</h2>
       <ErrorBanner error={error} />
       <Field
         id="reset-token"
-        label="Reset token"
+        label={t("auth.token")}
         type="text"
         value={token}
         onChange={setToken}
@@ -408,7 +418,7 @@ function ResetForm({ onSwitch }: { onSwitch: (m: Mode) => void }) {
       />
       <Field
         id="reset-password"
-        label="New password"
+        label={t("auth.newPassword")}
         type="password"
         value={password}
         onChange={setPassword}
@@ -417,17 +427,17 @@ function ResetForm({ onSwitch }: { onSwitch: (m: Mode) => void }) {
       />
       <Field
         id="reset-confirm"
-        label="Confirm new password"
+        label={t("auth.confirmNew")}
         type="password"
         value={confirm}
         onChange={setConfirm}
         autoComplete="new-password"
         minLength={8}
       />
-      <SubmitButton label="Update password" pending={pending} />
+      <SubmitButton label={t("auth.updateBtn")} pending={pending} />
       <div className={styles.links}>
         <button type="button" className={styles.link} onClick={() => onSwitch("login")}>
-          ← Back to sign in
+          {t("auth.backToSignIn")}
         </button>
       </div>
     </form>

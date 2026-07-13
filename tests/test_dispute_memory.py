@@ -95,7 +95,7 @@ def _open_dispute(loan_id: str = "L1") -> Dispute:
     """A Round-1-only open dispute (the state WA-026 receives from WA-014)."""
     return Dispute(
         loan_id=loan_id, opened_by="risk_auditor",
-        model_band="Q5", auditor_view="Low",
+        model_band="Very High", auditor_view="Low",
         rounds=[DisputeRound(
             round_no=1, speaker="risk_auditor", model="qwen3.6-flash",
             claim="near-settled balance contradicts the band",
@@ -176,7 +176,7 @@ class TestDisputeMemoryFacade:
         """A prior HUMAN ruling is reused; short_circuit returns the resolution."""
         mem = DisputeMemory(InMemoryMemory(seed={
             "L1": {"resolution": "escalated_rejected", "resolved_by": "human",
-                   "rationale": "analyst rejected", "model_band": "Q5",
+                   "rationale": "analyst rejected", "model_band": "Very High",
                    "auditor_view": "Low"},
         }))
         recalled = mem.short_circuit(_open_dispute("L1"))
@@ -191,7 +191,7 @@ class TestDisputeMemoryFacade:
         returns None (debate runs), precedent returns the context."""
         mem = DisputeMemory(InMemoryMemory(seed={
             "L1": {"resolution": "upheld", "resolved_by": "arbiter",
-                   "rationale": "model stronger", "model_band": "Q5",
+                   "rationale": "model stronger", "model_band": "Very High",
                    "auditor_view": "Low"},
         }))
         assert mem.short_circuit(_open_dispute("L1")) is None
@@ -323,7 +323,7 @@ class TestOrchestratorMemoryPaths:
         debate entirely (0 LLM calls for it) and reuses the prior resolution."""
         raw = _raw_table(_raw_rows())
         # Seed the memory with a human ruling on the first disputed loan_id.
-        # The auditor opens disputes on the top-K riskiest accounts (Q5); the
+        # The auditor opens disputes on the top-K riskiest accounts (Very High); the
         # exact loan_ids depend on the synthetic data, so we grab them by
         # running once cold and reading the disputes back.
         mem = DisputeMemory(InMemoryMemory())
@@ -337,7 +337,7 @@ class TestOrchestratorMemoryPaths:
         # resolved_by=human so it short-circuits next run).
         seed = {first_loan: {
             "resolution": "escalated_approved", "resolved_by": "human",
-            "rationale": "prior human sign-off", "model_band": "Q5",
+            "rationale": "prior human sign-off", "model_band": "Very High",
             "auditor_view": "Low",
         }}
         mem2 = DisputeMemory(InMemoryMemory(seed=seed))
@@ -368,7 +368,7 @@ class TestOrchestratorMemoryPaths:
         # Seed the memory with a prior ARBITER ruling on that loan.
         seed = {first_loan: {
             "resolution": "upheld", "resolved_by": "arbiter",
-            "rationale": "prior arbiter uphold", "model_band": "Q5",
+            "rationale": "prior arbiter uphold", "model_band": "Very High",
             "auditor_view": "Low",
         }}
         mem2 = DisputeMemory(InMemoryMemory(seed=seed))

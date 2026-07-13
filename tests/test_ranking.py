@@ -58,40 +58,40 @@ def _scored_table(rows: list[dict]) -> pa.Table:
 
 @pytest.fixture
 def scored_mixed() -> pa.Table:
-    """10 rows across Q1–Q5, two vintages, mixed delinquency/default."""
+    """10 rows across all five risk levels, two vintages, mixed delinquency/default."""
     rows = [
-        # High-risk (Q5), default cohort 2022
-        dict(loan_id="H1", p_default=0.95, score_band="Q5",
+        # High-risk (Very High), default cohort 2022
+        dict(loan_id="H1", p_default=0.95, score_band="Very High",
              segment={"product": "debt_consolidation", "region": "West"},
              issue_year=2022, delinquency_status="Default", label_default=True),
-        dict(loan_id="H2", p_default=0.91, score_band="Q5",
+        dict(loan_id="H2", p_default=0.91, score_band="Very High",
              segment={"product": "credit_card", "region": "South"},
              issue_year=2022, delinquency_status="Default", label_default=True),
-        # Mid (Q3/Q4), watch band, mixed delinquency
-        dict(loan_id="M3", p_default=0.60, score_band="Q4",
+        # Mid (Medium/High), watch band, mixed delinquency
+        dict(loan_id="M3", p_default=0.60, score_band="High",
              segment={"product": "car", "region": "Midwest"},
              issue_year=2022, delinquency_status="31-120", label_default=False),
-        dict(loan_id="M4", p_default=0.55, score_band="Q3",
+        dict(loan_id="M4", p_default=0.55, score_band="Medium",
              segment={"product": "medical", "region": "Northeast"},
              issue_year=2023, delinquency_status="0", label_default=False),
-        dict(loan_id="M5", p_default=0.50, score_band="Q3",
+        dict(loan_id="M5", p_default=0.50, score_band="Medium",
              segment={"product": "car", "region": "West"},
              issue_year=2023, delinquency_status="16-30", label_default=False),
-        # Low (Q1/Q2), auto-cure band, performing
-        dict(loan_id="L6", p_default=0.20, score_band="Q2",
+        # Low (Very Low/Low), auto-cure band, performing
+        dict(loan_id="L6", p_default=0.20, score_band="Low",
              segment={"product": "credit_card", "region": "South"},
              issue_year=2023, delinquency_status="0", label_default=False),
-        dict(loan_id="L7", p_default=0.10, score_band="Q1",
+        dict(loan_id="L7", p_default=0.10, score_band="Very Low",
              segment={"product": "home_improvement", "region": "Midwest"},
              issue_year=2023, delinquency_status="0", label_default=False),
-        dict(loan_id="L8", p_default=0.05, score_band="Q1",
+        dict(loan_id="L8", p_default=0.05, score_band="Very Low",
              segment={"product": "car", "region": "Northeast"},
              issue_year=2023, delinquency_status="0", label_default=False),
         # 2021 vintage — fully performing, low default rate (control cohort)
-        dict(loan_id="L9", p_default=0.08, score_band="Q1",
+        dict(loan_id="L9", p_default=0.08, score_band="Very Low",
              segment={"product": "credit_card", "region": "West"},
              issue_year=2021, delinquency_status="0", label_default=False),
-        dict(loan_id="L10", p_default=0.12, score_band="Q2",
+        dict(loan_id="L10", p_default=0.12, score_band="Low",
              segment={"product": "medical", "region": "South"},
              issue_year=2021, delinquency_status="0", label_default=False),
     ]
@@ -110,7 +110,7 @@ def test_rank_orders_by_p_default_desc(scored_mixed):
 def test_rank_attaches_recommended_action_by_band(scored_mixed):
     wl = rank(scored_mixed, top_n=10)
     by_loan = {r["loan_id"]: r for r in wl}
-    # Q5 → call, Q3/Q4 → watch, Q1/Q2 → auto-cure
+    # Very High → call, Medium/High → watch, Very Low/Low → auto-cure
     assert by_loan["H1"]["recommended_action"] == "call"
     assert by_loan["M3"]["recommended_action"] == "watch"
     assert by_loan["M4"]["recommended_action"] == "watch"
@@ -128,10 +128,10 @@ def test_rank_caps_at_top_n(scored_mixed):
 def test_rank_deterministic_on_ties():
     """Equal p_default → sorted by loan_id asc (stable, reproducible)."""
     rows = [
-        dict(loan_id="B", p_default=0.5, score_band="Q3",
+        dict(loan_id="B", p_default=0.5, score_band="Medium",
              segment={"product": "x", "region": "y"},
              issue_year=2023, delinquency_status="0", label_default=False),
-        dict(loan_id="A", p_default=0.5, score_band="Q3",
+        dict(loan_id="A", p_default=0.5, score_band="Medium",
              segment={"product": "x", "region": "y"},
              issue_year=2023, delinquency_status="0", label_default=False),
     ]
@@ -218,7 +218,7 @@ def test_alert_fires_on_portfolio_npl(scored_mixed):
 def test_alerts_respect_thresholds_clean_portfolio():
     """A clean portfolio (no NPL, no defaults) fires no alerts."""
     rows = [
-        dict(loan_id="C1", p_default=0.1, score_band="Q1",
+        dict(loan_id="C1", p_default=0.1, score_band="Very Low",
              segment={"product": "x", "region": "y"},
              issue_year=2023, delinquency_status="0", label_default=False),
     ]
@@ -269,7 +269,7 @@ def test_dashboard_payload_matches_sample_fixture_shape():
 
     seg_type = schema_from_dataclass(ScoredAccounts).field("segment").type
     rows = [
-        dict(loan_id="X1", p_default=0.9, score_band="Q5",
+        dict(loan_id="X1", p_default=0.9, score_band="Very High",
              segment={"product": "credit_card", "region": "DKI Jakarta"},
              issue_year=2023, delinquency_status="Default", label_default=True),
     ]
@@ -277,7 +277,7 @@ def test_dashboard_payload_matches_sample_fixture_shape():
         {
             "loan_id": pa.array(["X1"], type=pa.string()),
             "p_default": pa.array([0.9], type=pa.float64()),
-            "score_band": pa.array(["Q5"], type=pa.string()),
+            "score_band": pa.array(["Very High"], type=pa.string()),
             "segment": pa.array([{"product": "credit_card", "region": "DKI Jakarta"}], type=seg_type),
             "recommended_action": pa.array([""], type=pa.string()),
         },

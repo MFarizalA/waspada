@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import type { ScoredAccount } from "@/types";
 import { segmentLabel, idr } from "@/lib/format";
+import { useI18n } from "@/lib/i18n";
 import { ActionBadge } from "@/components/ActionBadge";
 import { BandBadge, ScoreText } from "@/components/BandBadge";
 import styles from "./WorkList.module.css";
@@ -37,6 +38,7 @@ const TOP_N_OPTIONS = [10, 25, 50, 100] as const;
  * the debate's resolved action in the work-list is a backend change (WA-014).
  */
 export function WorkList({ accounts, contestedLoanIds, onSelectAccount, onJumpToDebate }: WorkListProps) {
+  const { t } = useI18n();
   const [sortDir, setSortDir] = useState<SortDir>("desc");
   const [topN, setTopN] = useState<(typeof TOP_N_OPTIONS)[number]>(25);
   const showContested = contestedLoanIds != null && contestedLoanIds.size > 0;
@@ -60,20 +62,20 @@ export function WorkList({ accounts, contestedLoanIds, onSelectAccount, onJumpTo
     <section className={styles.workList} aria-labelledby="worklist-heading">
       <header className={styles.header}>
         <div>
-          <h2 id="worklist-heading" className={styles.title}>Work list</h2>
+          <h2 id="worklist-heading" className={styles.title}>{t("wl.title")}</h2>
           <p className={styles.subtitle}>
-            Showing <strong>{sorted.length}</strong> of {accounts.length} ranked accounts
+            {t("wl.showing", { shown: sorted.length, total: accounts.length })}
           </p>
         </div>
 
         <div className={styles.controls}>
           <label className={styles.topNLabel}>
-            Top
+            {t("wl.top")}
             <select
               className={styles.topNSelect}
               value={topN}
               onChange={(e) => setTopN(Number(e.target.value) as typeof topN)}
-              aria-label="Number of accounts to show"
+              aria-label={t("wl.showCount")}
             >
               {TOP_N_OPTIONS.map((n) => (
                 <option key={n} value={n}>{n}</option>
@@ -85,15 +87,12 @@ export function WorkList({ accounts, contestedLoanIds, onSelectAccount, onJumpTo
 
       <div className={styles.tableWrap}>
         <table className={styles.table}>
-          <caption className="visually-hidden">
-            Ranked collections work-list, sortable by probability of default.
-            Select a row to view account detail.
-          </caption>
+          <caption className="visually-hidden">{t("wl.caption")}</caption>
           <thead>
             <tr>
-              <th scope="col" className={styles.colRank}>#</th>
-              <th scope="col" className={styles.colLoan}>Loan</th>
-              <th scope="col" className={styles.colSegment}>Segment</th>
+              <th scope="col" className={styles.colRank}>{t("wl.col.rank")}</th>
+              <th scope="col" className={styles.colLoan}>{t("wl.col.loan")}</th>
+              <th scope="col" className={styles.colSegment}>{t("wl.col.segment")}</th>
               <th scope="col">
                 <button
                   type="button"
@@ -101,17 +100,17 @@ export function WorkList({ accounts, contestedLoanIds, onSelectAccount, onJumpTo
                   onClick={toggleSort}
                   aria-sort={sortDir === "desc" ? "descending" : "ascending"}
                 >
-                  P(default)
+                  {t("wl.col.pdefault")}
                   <span className={styles.sortIcon} aria-hidden="true">
                     {sortDir === "desc" ? "▾" : "▴"}
                   </span>
                 </button>
               </th>
-              <th scope="col" className={styles.colBand}>Band</th>
+              <th scope="col" className={styles.colBand}>{t("wl.col.band")}</th>
               {showEl && (
-                <th scope="col" className={styles.colEl}>Exp. loss</th>
+                <th scope="col" className={styles.colEl}>{t("wl.col.el")}</th>
               )}
-              <th scope="col">Action</th>
+              <th scope="col">{t("wl.col.action")}</th>
               {showContested && (
                 <th scope="col" className={styles.colContested}>
                   <span className="visually-hidden">Agent Society contest</span>
@@ -153,14 +152,14 @@ export function WorkList({ accounts, contestedLoanIds, onSelectAccount, onJumpTo
                       <button
                         type="button"
                         className={styles.contestedPill}
-                        title="This account was contested in the Agent Society debate"
-                        aria-label={`Account ${account.loan_id} was contested — jump to debate`}
+                        title={t("wl.contested.title")}
+                        aria-label={t("wl.contested.aria", { id: account.loan_id })}
                         onClick={(e) => {
                           e.stopPropagation();
                           onJumpToDebate?.(account.loan_id);
                         }}
                       >
-                        ⚖ contested
+                        {t("wl.contested")}
                       </button>
                     )}
                   </td>
@@ -174,10 +173,8 @@ export function WorkList({ accounts, contestedLoanIds, onSelectAccount, onJumpTo
 
       {showEl && (
         <p className={styles.assumptions}>
-          <span className={styles.assumptionsLabel}>Expected loss assumptions:</span>{" "}
-          LGD&nbsp;=&nbsp;45% (Basel foundation-IRB, unsecured consumer).
-          EAD&nbsp;=&nbsp;outstanding_principal (amortizing installment).
-          EL&nbsp;=&nbsp;PD&nbsp;×&nbsp;LGD&nbsp;×&nbsp;EAD.
+          <span className={styles.assumptionsLabel}>{t("wl.assumptions.label")}</span>{" "}
+          {t("wl.assumptions.body")}
         </p>
       )}
     </section>

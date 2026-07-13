@@ -102,7 +102,7 @@ def _debate_brain_script(n_disputes: int = 4) -> MockLLM:
     rebuttal = json.dumps({
         "verdict": "uphold",
         "confidence": 0.84,
-        "claim": "model stands; dti and rate support Q5",
+        "claim": "model stands; dti and rate support Very High",
         "evidence": ["dti=35"],
     })
     ruling = json.dumps({

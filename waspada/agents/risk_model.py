@@ -80,16 +80,16 @@ class RiskModelAgent(Agent):
             self.step("predict", status=Status.ERROR, notes=str(exc))
             return AgentResult(status=Status.ERROR, agent=self.name, notes=f"predict failed: {exc}")
 
-        # Flag the highest-risk band (Q5) count — the "flags score bands" check.
+        # Flag the highest-risk level ("Very High") count — the "flags score bands" check.
         bands = scored.column("score_band").to_pylist()
-        n_q5 = sum(1 for b in bands if b == "Q5")
-        self.step("score_bands", notes=f"Q5(highest)={n_q5} of {len(bands)}")
+        n_highest = sum(1 for b in bands if b == "Very High")
+        self.step("score_bands", notes=f"Very High(highest)={n_highest} of {len(bands)}")
 
         handle = "scored_accounts"
         context.data_handles[handle] = scored
         return AgentResult(
             status=Status.OK, agent=self.name, artifact_ref=handle,
-            notes=f"scored {scored.num_rows} accounts; Q5={n_q5}",
+            notes=f"scored {scored.num_rows} accounts; Very High={n_highest}",
         )
 
     # ---------------------------------------------------- Round 2 (WA-016)

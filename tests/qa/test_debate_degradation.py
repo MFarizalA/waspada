@@ -119,7 +119,7 @@ def _orch(raw: pa.Table, brain, *, gate=None, enable_arbiter: bool = True) -> Or
 # Shared brain-script fragments (true call order: 4 challenges, then per
 # dispute the rebuttal + arbiter ruling interleaved). See test_wa016_debate.
 _CHALLENGE = json.dumps({
-    "auditor_view": "Low", "confidence": 0.8,   # Q5 vs Low → |5-1|=4 ≥ 2 → dispute
+    "auditor_view": "Low", "confidence": 0.8,   # Very High vs Low → |5-1|=4 ≥ 2 → dispute
     "claim": "balance nearly settled", "evidence": ["payment_ratio=0.95"],
 })
 _UPHOLD_REBUTTAL = json.dumps({

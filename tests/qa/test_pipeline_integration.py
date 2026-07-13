@@ -105,7 +105,7 @@ class TestDashboardPayloadAgainstFixture:
         assert abs(total - 1.0) < 1e-6, f"status_mix sums to {total}, not 1.0"
 
     def test_fixture_all_one_band_is_a_real_run_not_placeholder(self, fixture_payload):
-        """F-PI-03 (documented): the fixture's work_list is all Q5 / 'call' with
+        """F-PI-03 (documented): the fixture's work_list is all Very High / 'call' with
         p_default in a tight [0.97,0.98] band. This is the top-N of a real
         scoring run (rank() sorts p_default desc), NOT the old placeholder
         (which was p_default=1.0 for every row). Assert the old placeholder

@@ -21,11 +21,12 @@ Both the Actuary's band and the Skeptic's view map onto a common 5-point risk
 ordinal; a dispute is admissible when they differ by **≥ 2** (matches the
 ``bands agree (< 2 apart)`` gate in HACKATHON.md's debate sequence diagram):
 
-    Actuary band ordinal:  Q1=1 Q2=2 Q3=3 Q4=4 Q5=5
-    Skeptic view ordinal:  Low=1     Medium=3     High=5
+    Actuary band ordinal:  Very Low=1 Low=2 Medium=3 High=4 Very High=5
+    Skeptic view ordinal:  Low=1      Medium=3      High=5
 
-So ``Q5 + Low/Medium`` → dispute, ``Q5 + High`` → no dispute (the examples in
-the WA-014 brief). Symmetric on the low end (``Q1 + High`` → dispute).
+So ``Very High + Low/Medium`` → dispute, ``Very High + High`` → no dispute (the
+examples in the WA-014 brief). Symmetric on the low end
+(``Very Low + High`` → dispute).
 """
 from __future__ import annotations
 
@@ -43,8 +44,11 @@ __all__ = ["RiskAuditorAgent"]
 
 
 # Common 5-point risk ordinal. Band (Actuary) and view (Skeptic) both project
-# onto this so a single gap rule decides admissibility.
-_BAND_ORDINAL: Dict[str, int] = {"Q1": 1, "Q2": 2, "Q3": 3, "Q4": 4, "Q5": 5}
+# onto this so a single gap rule decides admissibility. Band keys are the
+# frozen waspada.schema.RISK_LEVELS vocabulary.
+_BAND_ORDINAL: Dict[str, int] = {
+    "Very Low": 1, "Low": 2, "Medium": 3, "High": 4, "Very High": 5,
+}
 _VIEW_ORDINAL: Dict[str, int] = {"low": 1, "medium": 3, "high": 5}
 DISPUTE_GAP = 2  # |band_ordinal − view_ordinal| ≥ DISPUTE_GAP → dispute opened
 
@@ -317,7 +321,8 @@ class RiskAuditorAgent(Agent):
     @staticmethod
     def _should_dispute(model_band: str, auditor_view: str) -> bool:
         """Admissibility: dispute iff the band/view ordinals differ by ≥ DISPUTE_GAP."""
-        b = _BAND_ORDINAL.get(str(model_band).strip().upper())
+        # .title() normalizes case for multi-word levels ("very high" → "Very High").
+        b = _BAND_ORDINAL.get(str(model_band).strip().title())
         v = _VIEW_ORDINAL.get(str(auditor_view).strip().lower())
         if b is None or v is None:
             return False

@@ -41,14 +41,16 @@ __all__ = [
     "summarize_alerts",
 ]
 
-# Recommended action by risk band. Q5 (highest risk) → call; Q3/Q4 → watch;
-# Q1/Q2 (lowest) → auto-cure. Matches the contract's call/watch/auto-cure set.
+# Recommended action by risk level. "Very High" → call; "Medium"/"High" →
+# watch; "Very Low"/"Low" → auto-cure. Keys are the frozen
+# waspada.schema.RISK_LEVELS vocabulary; values match the contract's
+# call/watch/auto-cure set.
 ACTION_BY_BAND: Dict[str, str] = {
-    "Q5": "call",
-    "Q4": "watch",
-    "Q3": "watch",
-    "Q2": "auto-cure",
-    "Q1": "auto-cure",
+    "Very High": "call",
+    "High": "watch",
+    "Medium": "watch",
+    "Low": "auto-cure",
+    "Very Low": "auto-cure",
 }
 
 # Default cohort-deterioration thresholds (configurable per call). A vintage

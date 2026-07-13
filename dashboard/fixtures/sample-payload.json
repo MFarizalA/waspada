@@ -3,7 +3,7 @@
     {
       "loan_id": "LN00573558",
       "p_default": 0.9814913260039355,
-      "score_band": "Q5",
+      "score_band": "Very High",
       "segment": {
         "product": "debt_consolidation",
         "region": "Bali"
@@ -14,7 +14,7 @@
     {
       "loan_id": "LN00961668",
       "p_default": 0.9771443715137839,
-      "score_band": "Q5",
+      "score_band": "Very High",
       "segment": {
         "product": "medical",
         "region": "Banten"
@@ -25,7 +25,7 @@
     {
       "loan_id": "LN00321200",
       "p_default": 0.9750162059454546,
-      "score_band": "Q5",
+      "score_band": "Very High",
       "segment": {
         "product": "debt_consolidation",
         "region": "DKI Jakarta"
@@ -36,7 +36,7 @@
     {
       "loan_id": "LN00999998",
       "p_default": 0.9748930673065872,
-      "score_band": "Q5",
+      "score_band": "Very High",
       "segment": {
         "product": "credit_card",
         "region": "Sulawesi Selatan"
@@ -47,7 +47,7 @@
     {
       "loan_id": "LN00416177",
       "p_default": 0.974737894241782,
-      "score_band": "Q5",
+      "score_band": "Very High",
       "segment": {
         "product": "credit_card",
         "region": "DKI Jakarta"
@@ -58,7 +58,7 @@
     {
       "loan_id": "LN00187484",
       "p_default": 0.9745581623405406,
-      "score_band": "Q5",
+      "score_band": "Very High",
       "segment": {
         "product": "medical",
         "region": "Bali"
@@ -68,7 +68,7 @@
     {
       "loan_id": "LN00123339",
       "p_default": 0.974476339921674,
-      "score_band": "Q5",
+      "score_band": "Very High",
       "segment": {
         "product": "medical",
         "region": "Kalimantan Timur"
@@ -78,7 +78,7 @@
     {
       "loan_id": "LN00531515",
       "p_default": 0.9743831114833076,
-      "score_band": "Q5",
+      "score_band": "Very High",
       "segment": {
         "product": "major_purchase",
         "region": "Sumatera Utara"
@@ -88,7 +88,7 @@
     {
       "loan_id": "LN00573356",
       "p_default": 0.9741853521233661,
-      "score_band": "Q5",
+      "score_band": "Very High",
       "segment": {
         "product": "small_business",
         "region": "Other"
@@ -98,7 +98,7 @@
     {
       "loan_id": "LN00808576",
       "p_default": 0.9740299500962659,
-      "score_band": "Q5",
+      "score_band": "Very High",
       "segment": {
         "product": "debt_consolidation",
         "region": "Jawa Tengah"
@@ -108,7 +108,7 @@
     {
       "loan_id": "LN00881010",
       "p_default": 0.9728552880302722,
-      "score_band": "Q5",
+      "score_band": "Very High",
       "segment": {
         "product": "medical",
         "region": "Jawa Timur"
@@ -118,7 +118,7 @@
     {
       "loan_id": "LN00769308",
       "p_default": 0.9727004687172922,
-      "score_band": "Q5",
+      "score_band": "Very High",
       "segment": {
         "product": "medical",
         "region": "Sumatera Utara"
@@ -128,7 +128,7 @@
     {
       "loan_id": "LN00420209",
       "p_default": 0.9725868945266047,
-      "score_band": "Q5",
+      "score_band": "Very High",
       "segment": {
         "product": "debt_consolidation",
         "region": "Kalimantan Timur"
@@ -138,7 +138,7 @@
     {
       "loan_id": "LN00723520",
       "p_default": 0.9722228999706343,
-      "score_band": "Q5",
+      "score_band": "Very High",
       "segment": {
         "product": "home_improvement",
         "region": "Jawa Barat"
@@ -149,7 +149,7 @@
     {
       "loan_id": "LN00486480",
       "p_default": 0.9719997280288267,
-      "score_band": "Q5",
+      "score_band": "Very High",
       "segment": {
         "product": "credit_card",
         "region": "DKI Jakarta"
@@ -159,7 +159,7 @@
     {
       "loan_id": "LN00327111",
       "p_default": 0.9718975251140364,
-      "score_band": "Q5",
+      "score_band": "Very High",
       "segment": {
         "product": "major_purchase",
         "region": "Bali"
@@ -169,7 +169,7 @@
     {
       "loan_id": "LN00388125",
       "p_default": 0.9718781332069403,
-      "score_band": "Q5",
+      "score_band": "Very High",
       "segment": {
         "product": "debt_consolidation",
         "region": "Sulawesi Selatan"
@@ -179,7 +179,7 @@
     {
       "loan_id": "LN00304066",
       "p_default": 0.9715791696734505,
-      "score_band": "Q5",
+      "score_band": "Very High",
       "segment": {
         "product": "debt_consolidation",
         "region": "Bali"
@@ -189,7 +189,7 @@
     {
       "loan_id": "LN00679649",
       "p_default": 0.9711692402601046,
-      "score_band": "Q5",
+      "score_band": "Very High",
       "segment": {
         "product": "small_business",
         "region": "Bali"
@@ -199,7 +199,7 @@
     {
       "loan_id": "LN00176593",
       "p_default": 0.9711243813336077,
-      "score_band": "Q5",
+      "score_band": "Very High",
       "segment": {
         "product": "credit_card",
         "region": "Jawa Timur"
@@ -236,7 +236,7 @@
     {
       "loan_id": "LN00961668",
       "opened_by": "risk_auditor",
-      "model_band": "Q5",
+      "model_band": "Very High",
       "auditor_view": "Medium",
       "rounds": [
         {
@@ -246,7 +246,7 @@
           "claim": "The score reads like a payment-behavior outlier, not a doomed account: this borrower has already repaid over half the principal and the medical segment in Banten is performing better than the book.",
           "confidence": 0.72,
           "evidence": [
-            "payment_ratio=0.61 vs Q5 median 0.18",
+            "payment_ratio=0.61 vs Very High median 0.18",
             "portfolio_stats: medical·Banten npl=12.4% vs book 21.9%",
             "loan_age=31mo of 36mo term"
           ]
@@ -274,12 +274,12 @@
       ],
       "resolution": "upheld",
       "resolved_by": "arbiter",
-      "rationale": "Active 31-120 DPD plus p95 DTI dominates the strong early payment history; keep band Q5 and the call action."
+      "rationale": "Active 31-120 DPD plus p95 DTI dominates the strong early payment history; keep band Very High and the call action."
     },
     {
       "loan_id": "LN00999998",
       "opened_by": "risk_auditor",
-      "model_band": "Q5",
+      "model_band": "Very High",
       "auditor_view": "Low",
       "rounds": [
         {
@@ -312,7 +312,7 @@
     {
       "loan_id": "LN00187484",
       "opened_by": "risk_auditor",
-      "model_band": "Q5",
+      "model_band": "Very High",
       "auditor_view": "Medium",
       "rounds": [
         {

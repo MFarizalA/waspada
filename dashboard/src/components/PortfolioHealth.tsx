@@ -1,5 +1,6 @@
 import type { PortfolioHealth } from "@/types";
 import { pct, sortCohorts, idr } from "@/lib/format";
+import { useI18n } from "@/lib/i18n";
 import styles from "./PortfolioHealth.module.css";
 
 interface PortfolioHealthProps {
@@ -23,22 +24,21 @@ function vintageBarColor(rate: number): string {
  * stretch — see schema.py L121-123), so we render the three contract fields.
  */
 export function PortfolioHealth({ health }: PortfolioHealthProps) {
+  const { t } = useI18n();
   const vintages = sortCohorts(health.vintage_default_rate);
   const maxVintage = Math.max(...vintages.map(([, r]) => r), 0.001);
   const statuses = Object.entries(health.status_mix).sort((a, b) => b[1] - a[1]);
 
   return (
     <section className={styles.panel} aria-labelledby="health-heading">
-      <h2 id="health-heading" className={styles.title}>Portfolio health</h2>
+      <h2 id="health-heading" className={styles.title}>{t("ph.title")}</h2>
 
       {/* NPL ratio headline */}
       <div className={styles.nplCard}>
         <div>
-          <p className={styles.nplLabel}>NPL ratio</p>
+          <p className={styles.nplLabel}>{t("ph.npl.label")}</p>
           <p className={styles.nplValue}>{pct(health.npl_ratio)}</p>
-          <p className={styles.nplHint}>
-            Fraction of accounts in delinquent or default status.
-          </p>
+          <p className={styles.nplHint}>{t("ph.npl.hint")}</p>
         </div>
         <div
           className={styles.nplMeter}
@@ -59,20 +59,17 @@ export function PortfolioHealth({ health }: PortfolioHealthProps) {
           across the portfolio — the number a risk committee ranks work by. */}
       {typeof health.total_expected_loss === "number" && (
         <div className={styles.elCard}>
-          <p className={styles.elLabel}>Total expected loss</p>
+          <p className={styles.elLabel}>{t("ph.el.label")}</p>
           <p className={styles.elValue}>{idr(health.total_expected_loss)}</p>
-          <p className={styles.elAssumptions}>
-            EL = PD × LGD × EAD · LGD=45% (Basel foundation-IRB, unsecured consumer) ·
-            EAD=outstanding_principal (amortizing installment).
-          </p>
+          <p className={styles.elAssumptions}>{t("ph.el.assumptions")}</p>
         </div>
       )}
 
       {/* Vintage default-rate chart */}
       <div className={styles.subsection}>
-        <h3 className={styles.subtitle}>Vintage default rate</h3>
+        <h3 className={styles.subtitle}>{t("ph.vintage.title")}</h3>
         {vintages.length === 0 ? (
-          <p className={styles.empty}>No vintage data.</p>
+          <p className={styles.empty}>{t("ph.vintage.empty")}</p>
         ) : (
           <ul className={styles.barList} role="list">
             {vintages.map(([cohort, rate]) => (
@@ -96,9 +93,9 @@ export function PortfolioHealth({ health }: PortfolioHealthProps) {
 
       {/* Status mix */}
       <div className={styles.subsection}>
-        <h3 className={styles.subtitle}>Status mix</h3>
+        <h3 className={styles.subtitle}>{t("ph.status.title")}</h3>
         {statuses.length === 0 ? (
-          <p className={styles.empty}>No status mix data.</p>
+          <p className={styles.empty}>{t("ph.status.empty")}</p>
         ) : (
           <ul className={styles.barList} role="list">
             {statuses.map(([status, prop]) => (

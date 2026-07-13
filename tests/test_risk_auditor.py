@@ -127,7 +127,7 @@ def test_parse_view_json_clamps_confidence():
 def test_dispute_to_dict_matches_frozen_shape():
     d = Dispute(
         loan_id="LN00961668", opened_by="risk_auditor",
-        model_band="Q5", auditor_view="Medium",
+        model_band="Very High", auditor_view="Medium",
         rounds=[DisputeRound(
             round_no=1, speaker="risk_auditor", model="qwen3.6-flash",
             claim="repayment outlier", confidence=0.72,
@@ -151,7 +151,7 @@ def test_dispute_to_dict_matches_frozen_shape():
 
 def test_dispute_to_dict_round_trips_through_sample_payload_keys():
     """A serialized dispute carries every key the fixture's disputes carry."""
-    d = Dispute(loan_id="X", opened_by="risk_auditor", model_band="Q5", auditor_view="Low")
+    d = Dispute(loan_id="X", opened_by="risk_auditor", model_band="Very High", auditor_view="Low")
     keys = set(d.to_dict().keys())
     fixture = json.loads(
         (__import__("pathlib").Path(__file__).resolve().parents[1]
@@ -165,9 +165,9 @@ def test_dispute_to_dict_round_trips_through_sample_payload_keys():
 # Admissibility rule — band vs view ordinal gap ≥ 2.
 # --------------------------------------------------------------------------- #
 @pytest.mark.parametrize("band,view,opens", [
-    ("Q5", "Low", True), ("Q5", "Medium", True), ("Q5", "High", False),
-    ("Q1", "High", True), ("Q3", "Medium", False), ("Q4", "Low", True),
-    ("Q2", "Medium", False), ("Q1", "Low", False),
+    ("Very High", "Low", True), ("Very High", "Medium", True), ("Very High", "High", False),
+    ("Very Low", "High", True), ("Medium", "Medium", False), ("High", "Low", True),
+    ("Low", "Medium", False), ("Very Low", "Low", False),
 ])
 def test_should_dispute_rule(band, view, opens):
     assert RiskAuditorAgent._should_dispute(band, view) is opens
@@ -175,7 +175,7 @@ def test_should_dispute_rule(band, view, opens):
 
 def test_should_dispute_unknown_values_never_dispute():
     assert RiskAuditorAgent._should_dispute("??", "Low") is False
-    assert RiskAuditorAgent._should_dispute("Q5", "??") is False
+    assert RiskAuditorAgent._should_dispute("Very High", "??") is False
 
 
 # --------------------------------------------------------------------------- #
@@ -184,7 +184,7 @@ def test_should_dispute_unknown_values_never_dispute():
 def test_auditor_opens_dispute_on_divergence(scored_ctx):
     """Scripted challenge JSON → dispute opened on every top-K account."""
     challenge = json.dumps({
-        "auditor_view": "Low",      # model is Q5 → |5−1| = 4 ≥ 2 → dispute
+        "auditor_view": "Low",      # model is Very High → |5−1| = 4 ≥ 2 → dispute
         "confidence": 0.8,
         "claim": "near-settled balance contradicts the band",
         "evidence": ["payment_ratio=0.95"],
@@ -196,7 +196,7 @@ def test_auditor_opens_dispute_on_divergence(scored_ctx):
     assert len(disputes) >= 1
     d = disputes[0]
     assert d.opened_by == "risk_auditor"
-    assert d.model_band == "Q5" and d.auditor_view == "Low"
+    assert d.model_band == "Very High" and d.auditor_view == "Low"
     # Round 1 only (WA-014); resolution is OPEN until WA-016.
     assert len(d.rounds) == 1
     assert d.rounds[0].round_no == 1
@@ -207,9 +207,9 @@ def test_auditor_opens_dispute_on_divergence(scored_ctx):
 
 
 def test_auditor_no_dispute_when_bands_agree(scored_ctx):
-    """Scripted agreement (Q5 + High) → no dispute opened."""
+    """Scripted agreement (Very High + High) → no dispute opened."""
     agree = json.dumps({
-        "auditor_view": "High",  # model Q5 → |5−5| = 0 < 2 → no dispute
+        "auditor_view": "High",  # model Very High → |5−5| = 0 < 2 → no dispute
         "confidence": 0.9, "claim": "score stands", "evidence": ["dti=30"],
     })
     auditor = RiskAuditorAgent(MockLLM(script=[agree]), k=4)
@@ -315,10 +315,10 @@ def test_payload_with_agent_dialogue_json_round_trips():
         "portfolio_health": {"npl_ratio": 0.0, "vintage_default_rate": {}, "status_mix": {}},
         "alerts": [],
         "agent_dialogue": [Dispute(
-            loan_id="L1", opened_by="risk_auditor", model_band="Q5", auditor_view="Low",
+            loan_id="L1", opened_by="risk_auditor", model_band="Very High", auditor_view="Low",
             rounds=[DisputeRound(1, "risk_auditor", "c", 0.5, "mock", ["e"])],
         ).to_dict()],
     }
     s = json.dumps(payload)
     back = json.loads(s)
-    assert back["agent_dialogue"][0]["model_band"] == "Q5"
+    assert back["agent_dialogue"][0]["model_band"] == "Very High"

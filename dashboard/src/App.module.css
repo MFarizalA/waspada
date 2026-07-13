@@ -4,66 +4,149 @@
   flex-direction: column;
 }
 
+/* --- Chinese-style megamenu banner: imperial-red gradient + gold seam --- */
 .topbar {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: var(--sp-4);
-  padding: var(--sp-4) var(--sp-6);
-  background: var(--surface);
-  border-bottom: 1px solid var(--border);
+  gap: var(--sp-5);
+  padding: var(--sp-3) var(--sp-6);
+  background: var(--cn-banner);
+  color: var(--on-brand);
+  border-bottom: 2px solid var(--cn-gold-500);
+  box-shadow: var(--shadow);
   position: sticky;
   top: 0;
   z-index: 5;
+}
+/* thin luminous gold seam under the banner */
+.topbar::after {
+  content: "";
+  position: absolute;
+  left: 0; right: 0; bottom: -2px;
+  height: 2px;
+  background: var(--cn-gold-seam);
 }
 
 .brand {
   display: flex;
   align-items: center;
   gap: var(--sp-3);
+  flex-shrink: 0;
 }
 
 .brandMark {
   border-radius: var(--radius-sm);
   flex-shrink: 0;
+  background: var(--on-brand);
+  padding: 3px;
+  box-shadow: 0 0 0 1px var(--cn-gold-500);
 }
 
 .title {
   margin: 0;
-  font-size: 1rem;
+  font-family: var(--font-display);
+  font-size: 1.28rem;
   font-weight: 700;
-  letter-spacing: 0.02em;
+  letter-spacing: 0.04em;
+  color: var(--on-brand);
+  line-height: 1.1;
 }
 
 .subtitle {
   margin: 0;
-  font-size: 0.78rem;
-  color: var(--text-subtle);
+  font-size: 0.72rem;
+  letter-spacing: 0.06em;
+  color: var(--on-brand-dim);
 }
 
-.mode {
-  margin: 0;
-  font-size: 0.75rem;
-  color: var(--text-subtle);
-  padding: 2px var(--sp-2);
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  background: var(--surface-muted);
+/* Integrated megamenu nav — in-page section anchors, gold hover underline. */
+.nav {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-1);
+  margin-left: var(--sp-4);
+  flex: 1;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.nav::-webkit-scrollbar { display: none; }
+
+.navLink {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: var(--on-brand-dim);
+  font-size: 0.86rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  padding: var(--sp-2) var(--sp-3);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  white-space: nowrap;
+  position: relative;
+  transition: color 0.14s, background 0.14s;
+}
+.navLink::after {
+  content: "";
+  position: absolute;
+  left: var(--sp-3); right: var(--sp-3); bottom: 4px;
+  height: 2px;
+  background: var(--cn-gold-400);
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform 0.16s ease;
+}
+.navLink:hover,
+.navLink:focus-visible {
+  color: var(--on-brand);
+  background: rgba(255, 255, 255, 0.08);
+}
+.navLink:hover::after,
+.navLink:focus-visible::after {
+  transform: scaleX(1);
 }
 
-/* Session controls (WA-028): mode chip + signed-in email + sign-out. */
+/* Session controls: fixture chip + language toggle + email + sign-out. */
 .session {
   display: flex;
   align-items: center;
   gap: var(--sp-3);
   min-width: 0;
+  flex-shrink: 0;
 }
 
-.userEmail {
+.mode {
+  margin: 0;
+  font-size: 0.72rem;
+  color: var(--on-brand);
+  padding: 2px var(--sp-2);
+  border: 1px solid var(--cn-gold-400);
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.15);
+  white-space: nowrap;
+}
+
+.langBtn {
+  padding: var(--sp-1) var(--sp-3);
   font-size: 0.8rem;
-  color: var(--text-muted);
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: var(--cn-ink);
+  background: var(--cn-gold-500);
+  border: 1px solid var(--cn-gold-600);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background 0.12s, transform 0.06s;
+}
+.langBtn:hover { background: var(--cn-gold-400); }
+.langBtn:active { transform: translateY(1px); }
+
+.userEmail {
+  font-size: 0.78rem;
+  color: var(--on-brand-dim);
   font-family: var(--font-mono);
-  max-width: 240px;
+  max-width: 200px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -73,22 +156,22 @@
   padding: var(--sp-1) var(--sp-3);
   font-size: 0.8rem;
   font-weight: 600;
-  color: var(--pasar-teal-700);
-  background: var(--pasar-teal-50);
-  border: 1px solid var(--pasar-teal-500);
+  color: var(--on-brand);
+  background: rgba(255, 255, 255, 0.10);
+  border: 1px solid rgba(255, 245, 225, 0.5);
   border-radius: var(--radius-sm);
   cursor: pointer;
   transition: background 0.12s;
+  white-space: nowrap;
 }
-
 .logoutBtn:hover {
-  background: var(--pasar-teal-100);
+  background: rgba(255, 255, 255, 0.22);
 }
 
 .main {
   flex: 1;
-  padding: var(--sp-6);
-  max-width: 1400px;
+  padding: var(--sp-5) var(--sp-6);
+  max-width: 1440px;
   width: 100%;
   margin: 0 auto;
 }
@@ -105,12 +188,12 @@
   color: var(--sev-high);
 }
 
-/* Two-column layout: work-list wide, side panels narrow.
-   Collapses to a single column under ~960px (tablet / landscape phone). */
+/* Two-column layout: work-list wide, side panels narrow. Denser gap.
+   Collapses to a single column under ~960px. */
 .grid {
   display: grid;
-  grid-template-columns: minmax(0, 1.6fr) minmax(280px, 1fr);
-  gap: var(--sp-6);
+  grid-template-columns: minmax(0, 1.7fr) minmax(300px, 1fr);
+  gap: var(--sp-5);
   align-items: start;
 }
 
@@ -121,12 +204,11 @@
 .colSide {
   display: flex;
   flex-direction: column;
-  gap: var(--sp-6);
+  gap: var(--sp-5);
 }
 
-/* Full-width row below the grid (the Agent Society debate panel). */
 .fullRow {
-  margin-top: var(--sp-6);
+  margin-top: var(--sp-5);
 }
 
 /* Above-the-fold anchor strip: "N accounts contested — see debate ↓" */
@@ -138,20 +220,28 @@
   align-items: center;
   gap: var(--sp-2);
   padding: var(--sp-2) var(--sp-4);
-  border: 1px solid var(--sev-moderate);
+  border: 1px solid var(--cn-red-600);
   border-radius: 999px;
-  background: color-mix(in srgb, var(--sev-moderate) 8%, transparent);
-  color: var(--text-primary);
+  background: var(--surface-tint);
+  color: var(--cn-red-700);
   font-size: 0.875rem;
-  font-weight: 600;
+  font-weight: 700;
   cursor: pointer;
   transition: background 0.15s;
 }
 .contestAnchor button:hover {
-  background: color-mix(in srgb, var(--sev-moderate) 16%, transparent);
+  background: color-mix(in srgb, var(--cn-red-600) 14%, transparent);
 }
 
 @media (max-width: 960px) {
+  .topbar {
+    flex-wrap: wrap;
+  }
+  .nav {
+    order: 3;
+    width: 100%;
+    margin-left: 0;
+  }
   .grid {
     grid-template-columns: minmax(0, 1fr);
   }

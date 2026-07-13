@@ -172,7 +172,7 @@ def test_risk_model_agent_produces_scored_accounts(raw_table, as_of):
     scored = ctx.data_handles["scored_accounts"]
     validate_table(scored, ScoredAccounts, name="risk_model scored")
     # Flags the highest band (acceptance: "flags score bands").
-    assert any(s.action == "score_bands" and "Q5" in s.notes for s in agent.steps)
+    assert any(s.action == "score_bands" and "Very High" in s.notes for s in agent.steps)
 
 
 def test_risk_model_agent_errors_without_predecessor():
