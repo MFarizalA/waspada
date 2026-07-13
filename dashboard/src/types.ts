@@ -28,7 +28,7 @@ export interface Segment {
 export interface ScoredAccount {
   loan_id: string;
   p_default: number; // P(eventual default) ∈ [0, 1]
-  score_band: string; // risk quintile band, e.g. "Q1".."Q5"
+  score_band: string; // risk level (quintile-derived), e.g. "Very Low".."Very High"
   segment: Segment;
   recommended_action: "call" | "watch" | "auto-cure";
   expected_loss?: number; // IDR at risk = PD × LGD(0.45) × EAD (WA-024, additive optional)
@@ -80,7 +80,7 @@ export interface DisputeRound {
 export interface DisputeRecord {
   loan_id: string;
   opened_by: string;
-  model_band: string; // the Actuary's band, e.g. "Q5"
+  model_band: string; // the Actuary's risk level, e.g. "Very High"
   auditor_view: string; // the Risk Auditor's independent read: "Low" | "Medium" | "High"
   rounds: DisputeRound[];
   resolution: "upheld" | "overridden" | "escalated_approved" | "escalated_rejected";

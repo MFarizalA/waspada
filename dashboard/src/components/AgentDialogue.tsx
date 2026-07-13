@@ -1,14 +1,20 @@
 import { useMemo } from "react";
 
-import type { DisputeRecord, DisputeRound } from "@/types";
+import type { DisputeRecord, DisputeRound, ScoredAccount } from "@/types";
 import { useLiveRun } from "@/lib/useLiveRun";
 import { useLiveDebateStream } from "@/lib/useLiveDebateStream";
 import { useI18n, type TFunc } from "@/lib/i18n";
+import { riskLevelColor, riskLevelLabel, riskLevelDisplay } from "@/lib/riskLevel";
 import styles from "./AgentDialogue.module.css";
 
 interface AgentDialogueProps {
   /** Absent (undefined) = the payload predates the Agent Society feature → render nothing. */
   dialogue: DisputeRecord[] | undefined;
+  /** The payload's work_list — joined against each dispute's loan_id to pair
+   *  the Actuary's p_default with its risk-level label (FICO-style). Optional
+   *  and defaults to empty so an omitted prop degrades to label-only, never
+   *  crashes. */
+  accounts?: ScoredAccount[];
 }
 
 /** Chip color per speaker (labels are localized via i18n at render time). */
@@ -74,7 +80,7 @@ function Round({ round }: { round: DisputeRound }) {
   );
 }
 
-function DisputeCard({ dispute }: { dispute: DisputeRecord }) {
+function DisputeCard({ dispute, pDefault }: { dispute: DisputeRecord; pDefault?: number }) {
   const { t } = useI18n();
   const resColor = RESOLUTION_COLOR[dispute.resolution];
   return (
@@ -88,13 +94,19 @@ function DisputeCard({ dispute }: { dispute: DisputeRecord }) {
         <span className={styles.loanId}>{dispute.loan_id}</span>
         <span className={styles.clash}>
           <span className={styles.clashSide}>
-            {t("speaker.risk_model")} <strong>{dispute.model_band}</strong>
+            {t("speaker.risk_model")}{" "}
+            <strong style={{ color: riskLevelColor(dispute.model_band) }}>
+              {riskLevelDisplay(t, dispute.model_band, pDefault)}
+            </strong>
           </span>
           <span className={styles.vs} aria-hidden="true">
             {t("ad.vs")}
           </span>
           <span className={styles.clashSide}>
-            {t("speaker.risk_auditor")} <strong>{dispute.auditor_view}</strong>
+            {t("speaker.risk_auditor")}{" "}
+            <strong style={{ color: riskLevelColor(dispute.auditor_view) }}>
+              {riskLevelLabel(t, dispute.auditor_view)}
+            </strong>
           </span>
         </span>
         <span className="badge" style={{ background: resColor, color: "#fff" }}>
@@ -132,7 +144,7 @@ function DisputeCard({ dispute }: { dispute: DisputeRecord }) {
  *    round lands, then transitions to live cards.
  * Only the debate surface swaps; the rest of the dashboard keeps its fixture.
  */
-export function AgentDialogue({ dialogue }: AgentDialogueProps) {
+export function AgentDialogue({ dialogue, accounts = [] }: AgentDialogueProps) {
   const { t } = useI18n();
   const { state, run, reset } = useLiveRun();
   const stream = useLiveDebateStream();
@@ -155,6 +167,19 @@ export function AgentDialogue({ dialogue }: AgentDialogueProps) {
     active = "fixture";
   }
   const running = state.status === "running";
+
+  // loan_id -> p_default, for the FICO-style paired display on the Actuary's
+  // side of the clash line. A completed "Run live" carries its own fresh
+  // work_list (preferred — the live run's own numbers); the SSE stream never
+  // sends one, so streaming falls back to the fixture's `accounts` prop. A
+  // genuinely unmatched loan_id (e.g. the stream's synthetic "LIVE" id before
+  // a resolution lands) simply misses the map — riskLevelDisplay degrades to
+  // the label alone, never crashes.
+  const liveAccounts = isLive ? state.payload.work_list : undefined;
+  const pDefaultByLoanId = useMemo(
+    () => new Map((liveAccounts ?? accounts).map((a) => [a.loan_id, a.p_default])),
+    [liveAccounts, accounts],
+  );
 
   const escalated = useMemo(
     () => effective.filter((d) => d.resolution.startsWith("escalated")).length,
@@ -290,7 +315,11 @@ export function AgentDialogue({ dialogue }: AgentDialogueProps) {
       ) : (
         <ul className={styles.disputeList} role="list">
           {effective.map((dispute) => (
-            <DisputeCard key={dispute.loan_id} dispute={dispute} />
+            <DisputeCard
+              key={dispute.loan_id}
+              dispute={dispute}
+              pDefault={pDefaultByLoanId.get(dispute.loan_id)}
+            />
           ))}
           {/* While streaming and not yet done, show a quiet "more coming" tail
               under the live cards so the panel reads as actively streaming. */}

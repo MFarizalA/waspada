@@ -174,7 +174,7 @@ function Dashboard() {
               </div>
             </div>
             <div className={styles.fullRow}>
-              <AgentDialogue dialogue={dialogue} />
+              <AgentDialogue dialogue={dialogue} accounts={state.payload.work_list} />
             </div>
           </>
           );

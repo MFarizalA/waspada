@@ -43,8 +43,8 @@ seconds of slack, don't rush the debate beats.
 > Qwen's cheapest tier, qwen3.6-flash — audits the top accounts independently
 > and challenges the model where the story doesn't match the number.
 >
-> [Point at a dispute card] Look at this account. The Actuary scored it Q5,
-> the riskiest band. The Risk Auditor disagreed — cited payment ratio, DTI,
+> [Point at a dispute card] Look at this account. The Actuary scored it Very
+> High, the riskiest level. The Risk Auditor disagreed — cited payment ratio, DTI,
 > delinquency status — all pulled live via MCP tools. The Actuary defended its
 > score on qwen3.7-plus, citing portfolio context. The Credit Arbiter on
 > qwen3.7-max read both arguments and ruled: upheld. The human analyst sees
