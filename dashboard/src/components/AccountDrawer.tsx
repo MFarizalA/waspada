@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import type { ScoredAccount } from "@/types";
 import { segmentLabel, pct } from "@/lib/format";
 import { useI18n } from "@/lib/i18n";
+import { riskLevelColor } from "@/lib/riskLevel";
 import { ActionBadge } from "@/components/ActionBadge";
 import { BandBadge } from "@/components/BandBadge";
 import styles from "./AccountDrawer.module.css";
@@ -80,7 +81,7 @@ export function AccountDrawer({ account, onClose }: AccountDrawerProps) {
         <div className={styles.body}>
           <div className={styles.scoreBlock}>
             <span className={styles.scoreLabel}>{t("dr.pdefault")}</span>
-            <span className={styles.scoreValue} style={scoreColor(account.score_band)}>
+            <span className={styles.scoreValue} style={{ color: riskLevelColor(account.score_band) }}>
               {pct(account.p_default)}
             </span>
             <BandBadge band={account.score_band} />
@@ -113,15 +114,4 @@ export function AccountDrawer({ account, onClose }: AccountDrawerProps) {
     </div>,
     document.body,
   );
-}
-
-function scoreColor(band: string): { color: string } {
-  switch (band) {
-    case "Very Low":
-    case "Low": return { color: "var(--risk-low)" };
-    case "Medium": return { color: "var(--risk-moderate)" };
-    case "High": return { color: "var(--risk-elevated)" };
-    case "Very High": return { color: "var(--risk-high)" };
-    default:   return { color: "var(--text)" };
-  }
 }
