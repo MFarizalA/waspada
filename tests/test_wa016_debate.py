@@ -107,7 +107,7 @@ def _open_dispute(loan_id: str = "L1") -> Dispute:
     """A Round-1-only open dispute (the state WA-016 receives from WA-014)."""
     return Dispute(
         loan_id=loan_id, opened_by="risk_auditor",
-        model_band="Q5", auditor_view="Low",
+        model_band="Very High", auditor_view="Low",
         rounds=[DisputeRound(
             round_no=1, speaker="risk_auditor", model="qwen3.6-flash",
             claim="near-settled balance contradicts the band",
@@ -331,7 +331,7 @@ def _orch_with_brain(raw: pa.Table, brain: MockLLM, *, gate=None,
 #   → _resolve_disputes: defend_score (1) + arbiter.rule (1) per dispute
 # We script enough entries to cover audit_k=4 accounts + the debate rounds.
 _CHALLENGE = json.dumps({
-    "auditor_view": "Low", "confidence": 0.8,   # Q5 vs Low → |5-1|=4 ≥ 2 → dispute
+    "auditor_view": "Low", "confidence": 0.8,   # Very High vs Low → |5-1|=4 ≥ 2 → dispute
     "claim": "balance nearly settled", "evidence": ["payment_ratio=0.95"],
 })
 _UPHOLD_REBUTTAL = json.dumps({

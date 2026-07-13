@@ -17,8 +17,10 @@ import {
  * `t(key, vars)` lookup with `{name}` interpolation. Missing keys fall back to
  * the key itself (visible in dev, never a crash).
  *
- * Data values (loan ids, product/region strings, risk bands Q1–Q5) are NOT
- * translated — only chrome and labels are.
+ * Data values (loan ids, product/region strings) are NOT translated — only
+ * chrome and labels are. Risk levels ARE translated (`band.val.*` below), since
+ * they are a human-facing severity vocabulary (Very Low..Very High), not a raw
+ * data identifier.
  */
 
 export type Lang = "en" | "zh";
@@ -113,6 +115,8 @@ const EN: Dict = {
   "band.val.Medium": "Medium",
   "band.val.High": "High",
   "band.val.Very High": "Very High",
+  // FICO-style pairing: "{score} ({level})" -> e.g. "0.91 (Very High)".
+  "band.paired": "{score} ({level})",
 
   // --- agent dialogue ---
   "ad.title": "Agent Society · Risk Debate",
@@ -272,6 +276,14 @@ const ZH: Dict = {
   "action.auto-cure": "自动结清",
   "action.aria": "建议处置：{label}",
   "band.aria": "风险评级 {band}",
+  // Risk-level values (waspada/schema.py RISK_LEVELS).
+  "band.val.Very Low": "极低",
+  "band.val.Low": "低",
+  "band.val.Medium": "中",
+  "band.val.High": "高",
+  "band.val.Very High": "极高",
+  // FICO-style pairing: "{score}（{level}）" -> e.g. "0.91（极高）" (full-width parens, CJK convention).
+  "band.paired": "{score}（{level}）",
 
   // --- agent dialogue ---
   "ad.title": "智能体协作 · 风险辩论",

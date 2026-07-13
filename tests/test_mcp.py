@@ -53,7 +53,7 @@ def _scored_table() -> pa.Table:
     return pa.table({
         "loan_id": pa.array(["L1", "L2", "L3", "L4"], pa.string()),
         "p_default": pa.array([0.92, 0.81, 0.40, 0.05], pa.float64()),
-        "score_band": pa.array(["Q5", "Q5", "Q3", "Q1"], pa.string()),
+        "score_band": pa.array(["Very High", "Very High", "Medium", "Very Low"], pa.string()),
         "segment": pa.array([
             {"product": "card", "region": "West"},
             {"product": "card", "region": "East"},

@@ -195,12 +195,12 @@ fixture already updated to this exact shape):
 {
   "loan_id": "LN00961668",
   "opened_by": "risk_auditor",
-  "model_band": "Q5",
+  "model_band": "Very High",
   "auditor_view": "Medium",
   "rounds": [
     {"round_no": 1, "speaker": "risk_auditor", "model": "qwen3.6-flash",
      "claim": "...", "confidence": 0.72,
-     "evidence": ["payment_ratio=0.61 vs Q5 median 0.18"]},
+     "evidence": ["payment_ratio=0.61 vs Very High median 0.18"]},
     {"round_no": 2, "speaker": "risk_model", "model": "qwen3.7-plus",
      "claim": "...", "confidence": 0.84, "evidence": ["dti=31.4 (p95)"]},
     {"round_no": 3, "speaker": "arbiter", "model": "qwen3.7-max",

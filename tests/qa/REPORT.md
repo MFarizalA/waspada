@@ -211,13 +211,13 @@ On both the live pipeline output and the committed fixture. Backed by
 `test_fixture_status_mix_sums_to_one`.
 
 ### F-PI-03 — Dashboard fixture is a real run, not the p=1.0 placeholder — **PASS**
-`dashboard/fixtures/sample-payload.json`: 20 rows, all `Q5`/`call`,
+`dashboard/fixtures/sample-payload.json`: 20 rows, all `Very High`/`call`,
 `p_default ∈ [0.9711, 0.9815]`, sorted descending. This is the top-N of a real
 scoring run (`rank()` sorts by `p_default` desc), **not** the old placeholder
 (which was `p_default = 1.0` for every row). The placeholder shape is asserted
 gone. Backed by `test_fixture_all_one_band_is_a_real_run_not_placeholder`.
 
-> The fixture is legitimately all-`Q5` because it is the **top-20** of the
+> The fixture is legitimately all-`Very High` because it is the **top-20** of the
 > scored book — the highest-risk tail. That is the dashboard's purpose (the
 > work-list), so a single band is expected here, not a bug.
 

@@ -149,7 +149,7 @@ def test_dashboard_payload_is_typeddict_shape():
             {
                 "loan_id": "L2",
                 "p_default": 0.83,
-                "score_band": "Q5",
+                "score_band": "Very High",
                 "segment": {"product": "installment", "region": "TX"},
                 "recommended_action": "call",
             }

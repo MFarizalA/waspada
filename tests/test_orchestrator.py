@@ -238,7 +238,7 @@ def test_cli_completes_on_disputed_run(tmp_path, monkeypatch):
     from waspada.agents.protocol import Status
 
     # Force a challenge brain: every top-K audit returns a Low view → disputes
-    # open on every Q5 account the model produced.
+    # open on every Very High account the model produced.
     challenge = _json.dumps({
         "auditor_view": "Low", "confidence": 0.8,
         "claim": "balance nearly settled", "evidence": ["payment_ratio=0.95"],
@@ -261,4 +261,4 @@ def test_cli_completes_on_disputed_run(tmp_path, monkeypatch):
     assert code == 0
     payload = _json.loads(out.read_text())
     assert payload.get("agent_dialogue"), "disputed run must serialize agent_dialogue"
-    assert payload["agent_dialogue"][0]["model_band"] == "Q5"
+    assert payload["agent_dialogue"][0]["model_band"] == "Very High"
