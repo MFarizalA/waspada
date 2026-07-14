@@ -5,12 +5,12 @@ Serves the pre-built dashboard statically + exposes live pipeline endpoints:
   GET  /              → dashboard (dashboard/dist/index.html)
   GET  /api/health    → {"status": "ok"}
   POST /api/run       → runs the orchestrated agent pipeline on a synthetic
-                        snapshot (offline, no BQ needed), returns DashboardPayload + report
+                        snapshot (offline, no data source needed), returns DashboardPayload + report
   GET  /api/run/stream → SSE stream of the debate rounds / resolutions (WA-022)
 
 The pipeline runs on a small synthetic RawLoans snapshot so the demo is fast
 (~3-5s) and has no external dependencies. The dashboard fixture shows the
-real BQ-generated payload (1M loans) for the static view.
+real pre-computed payload (1M loans) for the static view.
 """
 from __future__ import annotations
 
@@ -208,7 +208,7 @@ async def run_pipeline(brain: str = "mock", _user: dict = Depends(current_user))
     """Run the full agent pipeline on a synthetic snapshot.
 
     Returns the DashboardPayload + the plain-language analyst report.
-    Runs offline (no BQ, no GPU, no network) in ~3-5 seconds by default.
+    Runs offline (no data fetch, no GPU, no network) in ~3-5 seconds by default.
 
     ``brain`` selects the reasoning LLM for the risk-auditor negotiation
     step (``mock`` default = fast/free/deterministic; ``qwen`` = real Qwen
@@ -338,7 +338,7 @@ async def run_stream(brain: str = "mock", _user: dict = Depends(current_user_ws)
 
 @app.get("/api/payload")
 async def get_payload():
-    """Return the pre-baked BQ-generated payload (the real 1M-loan run)."""
+    """Return the pre-baked payload (the real 1M-loan run)."""
     fixture = _REPO / "dashboard" / "fixtures" / "sample-payload.json"
     if fixture.exists():
         return json.loads(fixture.read_text(encoding="utf-8"))

@@ -33,7 +33,7 @@ def _oss_configured() -> bool:
 
 
 # Capture the live OSS values at module load (before conftest's autouse
-# _clean_env fixture strips BQ_* for test isolation — OSS_* isn't stripped by
+# _clean_env fixture strips OSS_* for test isolation — OSS_* isn't stripped by
 # that fixture, but we mirror the same restore pattern for consistency and in
 # case a future conftest change adds OSS_* to the cleared set).
 _OSS_ENV = {k: os.environ.get(k, "") for k in (

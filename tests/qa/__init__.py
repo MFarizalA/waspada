@@ -13,6 +13,6 @@ The worker container runs Linux but the repo's checked-in venv is a Windows
 pyarrow/sklearn stack only — the GPU/cuDF path is exercised by the WSL smoke
 check and is out of scope here.
 
-The BigQuery-backed tests skip cleanly when creds are absent; when creds are
+The live OSS-backed tests skip cleanly when creds are absent; when creds are
 present (the sandbox is live) they run real LIMIT queries.
 """

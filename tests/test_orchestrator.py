@@ -213,8 +213,8 @@ def test_cli_writes_dashboard_payload(tmp_path, monkeypatch):
     from waspada.agents.__main__ import main
 
     out = tmp_path / "payload.json"
-    # Ensure offline path (no BQ creds) + auto-approve.
-    monkeypatch.delenv("BQ_PROJECT", raising=False)
+    # Ensure offline path (no OSS creds) + auto-approve.
+    monkeypatch.delenv("OSS_BUCKET", raising=False)
     code = main(["--lane", "collections", "--auto-approve", "--top-n", "10", "--out", str(out)])
     assert code == 0
     assert out.exists()
@@ -244,7 +244,7 @@ def test_cli_completes_on_disputed_run(tmp_path, monkeypatch):
         "claim": "balance nearly settled", "evidence": ["payment_ratio=0.95"],
     })
     monkeypatch.setenv("WASPADA_LLM_PROVIDER", "mock")
-    monkeypatch.delenv("BQ_PROJECT", raising=False)
+    monkeypatch.delenv("OSS_BUCKET", raising=False)
 
     # Inject the scripted brain by patching get_llm used inside main().
     import waspada.agents.llm as _llmmod

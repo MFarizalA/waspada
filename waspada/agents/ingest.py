@@ -35,7 +35,7 @@ class IngestAgent(Agent):
 
     def run(self, context: AgentContext) -> AgentResult:
         lane = context.lane
-        # The fetch callable: an injected stub (tool) in tests, the real BQ
+        # The fetch callable: an injected stub (tool) in tests, the real OSS
         # client in production. Falls back to the real client when unset.
         fetch: Callable[..., pa.Table] = self.tools.get("fetch", _real_fetch_loans)
 

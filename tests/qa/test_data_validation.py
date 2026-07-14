@@ -87,7 +87,7 @@ class TestFeatureFrameContract:
 
     def test_outstanding_ratio_in_unit_range(self, raw_table, as_of_date):
         # outstanding_principal <= amount should hold on a clean snapshot;
-        # the BQ probe confirms 0 rows violate this on the live book.
+        # the OSS data probe confirms 0 rows violate this on the live book.
         out = build_features(raw_table, as_of=as_of_date)
         orr = out.column("outstanding_ratio").to_pylist()
         assert all(0.0 <= x <= 1.0 for x in orr), f"outstanding_ratio out of [0,1]: {orr}"

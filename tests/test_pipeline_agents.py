@@ -1,7 +1,7 @@
 """Pipeline agents tests (WA-009 acceptance).
 
 Each of the four agents (ingest → analytics → risk-model → insight) produces
-its contract artifact on a small stubbed end-to-end run. The BQ fetch is
+its contract artifact on a small stubbed end-to-end run. The OSS fetch is
 stubbed (no network); the LLM is the mock brain; data flows through the shared
 ``AgentContext.data_handles`` store via ``artifact_ref`` handles.
 """

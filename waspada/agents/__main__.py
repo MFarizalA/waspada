@@ -36,7 +36,7 @@ def _sample_raw_table(n: int = 200, seed: int = 11) -> pa.Table:
     """A small synthetic RawLoans table for the offline CLI / demo run.
 
     Two risk classes across multiple vintages so the model trains and the
-    pipeline produces a non-trivial work-list. Used when BQ creds are absent.
+    pipeline produces a non-trivial work-list. Used when OSS creds are absent.
     """
     import numpy as np
 

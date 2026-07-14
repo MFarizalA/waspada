@@ -4,7 +4,7 @@ One client serves both decision lanes. It reads creds from the environment
 (via :mod:`waspada.config`), pulls the committed loan-portfolio Parquet object
 from an Alibaba Cloud OSS bucket, and returns it as Arrow.
 
-This mirrors what the (retired) BigQuery client did on Google Cloud, but as a
+This mirrors the original data access pattern — the pipeline never pushed SQL logic
 bulk blob read rather than a SQL query: the pipeline never pushed SQL logic
 (joins/aggregation) to the warehouse — every prior "fetch" was already a full
 ``SELECT *``-style bulk pull, with all real processing happening locally in
@@ -86,9 +86,9 @@ class OSSClient:
         """Return ``{size_bytes, freshness}`` for the loan-portfolio object.
 
         ``freshness`` is the object's ``last_modified`` as an ISO-8601 UTC
-        string — the equivalent of BigQuery's ``table_meta().freshness``, used
+        string — the equivalent of a warehouse ``table_meta().freshness``, used
         the same way (a freshness signal, not a schema report; OSS objects
-        don't carry a server-side schema the way a BQ table does).
+        don't carry a server-side schema the way a SQL warehouse table does).
         """
         meta = self._bucket.head_object(key or self._cfg.oss_key)
         last_modified = meta.headers.get("Last-Modified")

@@ -405,7 +405,7 @@ debate happen.
 ## Build plan — tickets (Stefanie owns creation/priority; suggested split)
 
 Done (co-builder, 2026-07-07): LICENSE · `QwenLLM` (+`get_llm` wired into CLI &
-API, `?brain=qwen` opt-in) · OSS data layer replacing BigQuery ·
+API, `?brain=qwen` opt-in) · OSS data layer ·
 `Status.DISPUTED` + `Dispute`/`DisputeRound` in protocol · GPU benchmark
 removed · README/HACKATHON rewritten · AgentDialogue panel + types + fixture.
 

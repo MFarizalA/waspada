@@ -58,7 +58,7 @@ class Agent(ABC):
 
     * a ``tools`` registry (string key → callable) an agent can populate and
       call; the registry is plain and unopinionated so a pipeline agent can
-      register a cuML call while an orchestrator agent registers a BQ read.
+      register a cuML call while an orchestrator agent registers an OSS read.
     * a per-agent ``llm`` (defaults to a :class:`MockLLM` — the framework
       runs offline by default; WA-009/010 inject a real brain when needed).
     * an ``steps`` audit log: each :meth:`_run` records a :class:`Step`.

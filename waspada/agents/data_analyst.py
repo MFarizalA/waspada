@@ -272,6 +272,53 @@ _MAX_ROWS = 200
 _VALID_TABLES = ("raw_loans", "feature_frame")
 _DEFAULT_TABLE = "feature_frame"
 
+# WA-045: the column allowlist — the union of every column in the RawLoans and
+# FeatureFrame contracts (``waspada.schema``). Any identifier in an LLM-composed
+# SELECT that isn't a known column name, SQL keyword, or built-in function is
+# rejected before the query reaches DuckDB. This stops a prompt-injection from
+# reading arbitrary column aliases (and keeps the LLM honest about the contract).
+_ALLOWED_COLUMNS: frozenset[str] = frozenset(
+    # RawLoans fields
+    {
+        "loan_id", "amount", "term", "rate", "grade", "annual_income", "dti",
+        "issue_date", "purpose", "region", "outstanding_principal",
+        "total_paid", "current_status",
+        # FeatureFrame-derived fields
+        "loan_age", "payment_ratio", "outstanding_ratio",
+        "delinquency_status", "label_default", "as_of_date",
+    }
+)
+
+# SQL keywords / aggregate / window functions that commonly appear in a
+# well-formed analytic SELECT and must NOT be treated as column names.
+_SQL_NON_COLUMN_KEYWORDS: frozenset[str] = frozenset(
+    {
+        # Core clauses
+        "select", "from", "where", "group", "by", "order", "having", "limit",
+        "offset", "as", "and", "or", "not", "in", "is", "null", "like",
+        "between", "case", "when", "then", "else", "end", "distinct",
+        "union", "all", "asc", "desc", "join", "left", "right", "inner",
+        "outer", "on", "using", "with", "over", "partition",
+        # Aggregate functions (DuckDB)
+        "count", "sum", "avg", "min", "max", "median", "stddev", "variance",
+        "corr", "covar", "array_agg", "list", "string_agg", "approx_quantile",
+        "first", "last", "any_value", "bool_and", "bool_or", "mode",
+        # Numeric / math functions
+        "cast", "round", "floor", "ceil", "ceiling", "abs", "sqrt", "pow",
+        "power", "exp", "ln", "log", "log10", "log2", "sign", "trunc",
+        "coalesce", "greatest", "least", "width_bucket", "range",
+        # String functions
+        "length", "len", "upper", "lower", "trim", "concat", "substring",
+        "substr", "replace", "regexp_replace",
+        # Date functions
+        "extract", "date_part", "date_trunc", "year", "month", "day",
+        # Boolean
+        "true", "false",
+        # Table names (valid references, not columns)
+        "raw_loans", "feature_frame",
+    }
+)
+
 
 def _resolve_table(name: Any) -> str:
     """Resolve a caller-supplied table name to a registered table.
@@ -298,12 +345,65 @@ def _split_table_col(ref: str) -> Tuple[str, str]:
 
 
 def _safe_sql_check(sql: str) -> Optional[str]:
-    """Return an error string if ``sql`` is not a safe read-only query."""
+    """Return an error string if ``sql`` is not a safe read-only query.
+
+    WA-045: in addition to the existing SELECT-only / no-chained-statements
+    guard, this now enforces a **column allowlist**. Every identifier in the
+    query that is not a SQL keyword, built-in function, or known table name
+    must be a column from the RawLoans / FeatureFrame contract. This prevents
+    a prompt-injection from composing a query that reads or aliases arbitrary
+    column names the LLM should never reference.
+    """
     stripped = sql.strip()
     if not stripped.lower().startswith("select"):
         return "only SELECT statements are allowed"
     if ";" in stripped:
         return "chained statements are not allowed"
+
+    # WA-045: column allowlist — extract identifiers and reject unknown ones.
+    col_err = _check_column_allowlist(stripped)
+    if col_err:
+        return col_err
+
+    return None
+
+
+def _check_column_allowlist(sql: str) -> Optional[str]:
+    """Validate that every identifier in ``sql`` is an allowed column or keyword.
+
+    Extracts word-like tokens from the SQL, skips SQL keywords / functions /
+    table names / numeric literals, and rejects any remaining identifier that
+    isn't in the FeatureFrame / RawLoans column contract. This is deliberately
+    conservative — it may reject exotic but valid SQL, but the Data Analyst's
+    tools should only ever query the known feature set.
+    """
+    # Tokenize: match identifiers (including dotted refs like table.col and
+    # quoted identifiers like "col"). Numbers and strings are ignored.
+    # Pattern: word chars, dots, and quoted identifiers.
+    tokens = re.findall(r'"([^"]+)"|([A-Za-z_][A-Za-z0-9_]*)', sql)
+
+    unknown: list[str] = []
+    for quoted, bare in tokens:
+        ident = (quoted or bare).strip().lower()
+        if not ident:
+            continue
+        # Skip the part before a dot (table name) — it was already captured as
+        # a separate bare token by the regex, so a dotted ref like
+        # ``raw_loans.dti`` yields two tokens: "raw_loans" (table) + "dti".
+        if ident in _SQL_NON_COLUMN_KEYWORDS:
+            continue
+        if ident in _ALLOWED_COLUMNS:
+            continue
+        # Numeric-looking tokens (e.g. quantile params) are not identifiers.
+        if ident.isdigit() or ident.replace(".", "", 1).isdigit():
+            continue
+        unknown.append(ident)
+
+    if unknown:
+        return (
+            f"blocked: column(s) {sorted(set(unknown))!r} are not in the "
+            f"FeatureFrame/RawLoans contract; query rejected by egress control"
+        )
     return None
 
 

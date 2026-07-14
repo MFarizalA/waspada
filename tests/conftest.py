@@ -1,6 +1,6 @@
 """Shared pytest fixtures for WASPADA tests.
 
-Keeps the package importable without a real ``.env`` or GCP creds, and gives
+Keeps the package importable without a real ``.env``, and gives
 tests a deterministic snapshot date so feature/label tests are reproducible.
 """
 
