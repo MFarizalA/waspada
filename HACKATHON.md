@@ -304,25 +304,39 @@ flowchart TB
   same society, different features/label); OSS object swap scales the book;
   FC scales the backend; K and model tiers are config.
 
-## Lakehouse data layer (WA-029/030 — the architecture upgrade)
+## Lakehouse data layer (WA-029/030 · re-scoped by WA-047)
 
-The data layer is a proper **data lakehouse**, not a bulk download:
+**Architecture decision (2026-07-14): the lakehouse is OSS + DuckDB. Nothing
+else.** RDS PostgreSQL is the operational **auth** store (WA-028) and is *not*
+part of the lakehouse; DuckDB↔RDS federation is **descoped, not deferred**.
 
-- ✅ · **OSS (data lake):** `loans.parquet` as the source of truth in Alibaba Cloud
-  OSS. dlt's `filesystem` source reads it via the S3-compatible API
-  (`endpoint_url`), with incremental loading + merge dedup on re-runs.
-- ✅ · **DuckDB (query engine):** the in-process SQL engine that reads Parquet
-  directly (via `httpfs` for remote, or locally). Agents run SQL queries
-  instead of Python aggregation — `SELECT grade, avg(dti) ... GROUP BY grade`
-  pushes computation down. 🟡 DuckDB also federates to RDS PostgreSQL via
-  `postgres_scanner`, enabling cross-source joins (loan book ↔ dispute memory)
-  — federation planned, not yet wired.
-- ✅ · **RDS PostgreSQL (operational warehouse):** user auth (WA-028), dispute
-  memory (WA-026), audit trail. 🟡 DuckDB joins OSS analytics with RDS
-  operational data in a single query — the lakehouse pattern (federation planned).
-- 🟡 · **dlt pipeline:** schema contracts freeze the RawLoans shape (reject drift),
-  incremental cursors track what's loaded, `load_info` carries the audit
-  metadata. Swappable destination: DuckDB for local/dev, PostgreSQL for prod.
+Honest status — today this is a **data lake read**, not yet a lakehouse (no
+table format, no versioning, no snapshot isolation). WA-047 closes the gap.
+
+- ✅ · **OSS (data lake):** `loans.parquet` (33 MB · 1M rows) is the source of
+  truth in Alibaba Cloud OSS, read via `oss2`.
+  🟡 A partitioned layout (`raw/lane={lane}/as_of={date}/…`) giving versioning,
+  lane separation and lineage — WA-047. Today it is a single flat object at
+  `OSS_KEY`, and **nothing writes to the bucket** (the RAM policy is read-only).
+- ✅ · **DuckDB (query engine):** the in-process SQL engine the data agents run
+  SQL against — `SELECT grade, avg(dti) ... GROUP BY grade` instead of Python
+  aggregation.
+  🟡 **Remote pushdown is not wired.** Today `oss.py` downloads the whole object
+  and the agents register it as an in-memory Arrow table (`_arrow_lakehouse`),
+  so DuckDB never queries OSS directly. `httpfs` / `read_parquet('s3://…')` —
+  WA-047.
+- 🟡 · **dlt pipeline** (schema contracts, incremental cursors, `merge` dedup on
+  `loan_id`, `load_info` audit metadata): **not implemented.**
+  `waspada/data/lakehouse.py`'s dlt path is dead code with two defects
+  (`dlt.readers.filesystem` does not exist; the loaded data never lands in the
+  returned connection) and is never called. WA-047 either fixes it or replaces
+  it with `httpfs`. The schema contract that *does* exist is the Python
+  `validate_table(raw, RawLoans)` gate inside the Data Engineer.
+- ✅ · **RDS PostgreSQL — auth only** (WA-028). *Not* a lakehouse component.
+  **Dispute memory lives in OSS**, not RDS (`memory/disputes/loan_id={id}.json`
+  — see WA-046, which also fixes the bug that no entrypoint currently wires a
+  persistent memory backend at all). The audit trail goes to **SLS** (WA-023),
+  with OSS as the planned cold tier.
 
 Two pipeline agents become **AI agents** powered by Qwen function calling:
 - ✅ · **Data Engineer** (qwen3.6-flash) — validates, profiles, quality-checks the
