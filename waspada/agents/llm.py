@@ -1,21 +1,18 @@
 """Thin, mockable LLM wrapper for agent reasoning (WA-008).
 
-Three implementations behind one interface (:class:`LLM`):
+Two implementations behind one interface (:class:`LLM`):
 
   * :class:`MockLLM` — a deterministic, network-free brain. The framework
     runs end-to-end with this; tests and offline dev never touch the network.
     Returns either a canned reply or the next entry from a script you supply.
-  * :class:`GeminiLLM` — a thin wrapper over the ``google-generativeai`` SDK
-    (Gemini free tier). The SDK is imported *lazily inside ``__init__``* so
-    the module imports cleanly even when the package isn't installed (the
-    mock is the default brain in CI / offline).
   * :class:`QwenLLM` — a thin wrapper over Qwen models via Alibaba Cloud's
     OpenAI-compatible DashScope endpoint (the "Agent Society" negotiation
-    brain — see :mod:`waspada.agents.risk_auditor`). Same lazy-import
-    discipline as ``GeminiLLM``.
+    brain — see :mod:`waspada.agents.risk_auditor`). The SDK is imported
+    *lazily inside ``__init__``* so the module imports cleanly even when the
+    package isn't installed.
 
 Selection: :func:`get_llm` reads ``WASPADA_LLM_PROVIDER`` (``"mock"`` default,
-``"gemini"`` / ``"qwen"`` opt-in). Tests and the offline path inject a
+``"qwen"`` opt-in). Tests and the offline path inject a
 ``MockLLM`` directly — they never go through the network.
 """
 from __future__ import annotations
@@ -86,7 +83,7 @@ class LLM(ABC):
       gains tool-call support for free (returns content-only responses).
 
     The :attr:`name` is logged in the step log so an audit can tell a mock
-    run from a Gemini run.
+    run from a Qwen run.
     """
 
     name: str = "llm"
@@ -211,51 +208,6 @@ class MockLLM(LLM):
 
 
 # --------------------------------------------------------------------------- #
-# GeminiLLM — the real brain (lazy SDK import)
-# --------------------------------------------------------------------------- #
-class GeminiLLM(LLM):
-    """Thin wrapper over ``google-generativeai`` (Gemini free tier).
-
-    The SDK is imported lazily in ``__init__`` so this module — and the whole
-    ``waspada.agents`` framework — imports cleanly even when the package
-    isn't installed. A missing SDK or API key raises a clear ``RuntimeError``
-    at construction, never an opaque ``ImportError`` at import time.
-    """
-
-    name = "gemini"
-    DEFAULT_MODEL = "gemini-1.5-flash"  # free-tier friendly default
-
-    def __init__(
-        self,
-        api_key: Optional[str] = None,
-        model: Optional[str] = None,
-    ) -> None:
-        api_key = api_key or os.environ.get("GEMINI_API_KEY", "")
-        if not api_key:
-            raise RuntimeError(
-                "GeminiLLM needs GEMINI_API_KEY (see .env.example); for offline "
-                "runs use MockLLM or set WASPADA_LLM_PROVIDER=mock."
-            )
-        try:
-            import google.generativeai as genai  # type: ignore
-        except ImportError as exc:  # pragma: no cover - exercised only with SDK absent
-            raise RuntimeError(
-                "google-generativeai is not installed; pip install google-generativeai "
-                "or run with the mock brain (WASPADA_LLM_PROVIDER=mock)."
-            ) from exc
-
-        self._genai = genai
-        genai.configure(api_key=api_key)
-        self.model_name = model or self.DEFAULT_MODEL
-        self._model = genai.GenerativeModel(self.model_name)
-
-    def complete(self, prompt: str, *, history: Optional[Sequence[str]] = None) -> str:  # pragma: no cover - network
-        resp = self._model.generate_content(prompt)
-        # The SDK returns an object with .text; guard for safety.
-        return getattr(resp, "text", str(resp))
-
-
-# --------------------------------------------------------------------------- #
 # QwenLLM — Qwen Cloud (qwencloud.com), backed by Alibaba Cloud DashScope
 # --------------------------------------------------------------------------- #
 class QwenLLM(LLM):
@@ -266,10 +218,10 @@ class QwenLLM(LLM):
     Uses the official ``openai`` SDK pointed at the compatible-mode
     ``base_url`` — Qwen Cloud's own documented quickstart path, and the most
     practical route since most agent tooling already assumes an OpenAI-shaped
-    client. The SDK is imported lazily in ``__init__``, same discipline as
-    :class:`GeminiLLM`: the module imports cleanly with no SDK installed, and
-    a cold container start doesn't pay the import cost unless a request
-    actually reaches for Qwen. API keys: home.qwencloud.com.
+    client. The SDK is imported lazily in ``__init__``: the module imports
+    cleanly with no SDK installed, and a cold container start doesn't pay the
+    import cost unless a request actually reaches for Qwen. API keys:
+    home.qwencloud.com.
     """
 
     name = "qwen"
@@ -431,10 +383,8 @@ def get_llm(provider: Optional[str] = None, *, json_mode: bool = False) -> LLM:
     provider = (provider or os.environ.get("WASPADA_LLM_PROVIDER") or "mock").strip().lower()
     if provider == "mock":
         return MockLLM()
-    if provider == "gemini":
-        return GeminiLLM()
     if provider == "qwen":
         return QwenLLM(json_mode=json_mode)
     raise ValueError(
-        f"WASPADA_LLM_PROVIDER={provider!r} is invalid; use 'mock', 'gemini', or 'qwen'."
+        f"WASPADA_LLM_PROVIDER={provider!r} is invalid; use 'mock' or 'qwen'."
     )

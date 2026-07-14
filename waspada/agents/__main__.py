@@ -103,7 +103,7 @@ def main(argv: Optional[list[str]] = None) -> int:
     args = parser.parse_args(argv)
 
     as_of = dt.date.fromisoformat(args.as_of)
-    # WASPADA_LLM_PROVIDER selects the reasoning brain (mock/gemini/qwen);
+    # WASPADA_LLM_PROVIDER selects the reasoning brain (mock/qwen);
     # defaults to the offline mock so the CLI never reaches for the network
     # unless a caller explicitly opts in via the env var.
     orch = Orchestrator(get_llm(), as_of=as_of, top_n=args.top_n)

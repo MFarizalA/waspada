@@ -300,7 +300,7 @@ class RiskAuditorAgent(Agent):
         JSON answer.
 
         Falls back to the legacy ``complete()`` JSON-mode path if the brain
-        doesn't support ``chat()`` with ``tools`` (e.g. GeminiLLM, or a bare
+        doesn't support ``chat()`` with ``tools`` (e.g. a bare
         legacy LLM subclass). Never crashes.
         """
         prompt = self._prompt(ctx)

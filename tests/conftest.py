@@ -18,7 +18,7 @@ def _clean_env(monkeypatch):
 
     Tests must run offline. ``WASPADA_LLM_PROVIDER`` is forced to ``mock``
     so no test path that goes through :func:`get_llm` reaches the network if
-    a developer's ``.env`` happens to set qwen/gemini. Individual tests that
+    a developer's ``.env`` happens to set qwen. Individual tests that
     need a specific brain inject it directly (not via the env var).
     """
     for key in (
@@ -27,7 +27,7 @@ def _clean_env(monkeypatch):
         "WASPADA_LANE",
         # Strip live API keys so no test path reaches the network if a
         # developer's .env happens to set them.
-        "DASHSCOPE_API_KEY", "GEMINI_API_KEY",
+        "DASHSCOPE_API_KEY",
     ):
         monkeypatch.delenv(key, raising=False)
     monkeypatch.setenv("WASPADA_LLM_PROVIDER", "mock")

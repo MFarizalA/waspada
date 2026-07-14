@@ -31,7 +31,7 @@ from waspada.agents import (
     get_llm,
     handoff,
 )
-from waspada.agents.llm import GeminiLLM, LLM
+from waspada.agents.llm import LLM
 
 
 # --------------------------------------------------------------------------- #
@@ -205,13 +205,6 @@ def test_get_llm_invalid_provider_raises(monkeypatch):
         get_llm()
 
 
-def test_gemini_llm_constructor_without_key_raises(monkeypatch):
-    """Offline: no key → clear RuntimeError, never an opaque ImportError."""
-    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
-    with pytest.raises(RuntimeError, match="GEMINI_API_KEY"):
-        GeminiLLM()
-
-
 def test_framework_runs_offline_no_network(monkeypatch):
     """End-to-end: two agents + mock brain with the socket() family blocked.
 
@@ -219,7 +212,6 @@ def test_framework_runs_offline_no_network(monkeypatch):
     it's never opened during a full producer→consumer run on the mock brain.
     """
     monkeypatch.delenv("WASPADA_LLM_PROVIDER", raising=False)
-    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
 
     calls = {"n": 0}
 

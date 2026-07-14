@@ -5,7 +5,7 @@ Lane-agnostic substrate both decision lanes build on:
   * :class:`Agent` — base class (name/role, tools registry, step log).
   * :class:`ApprovalGate` + :class:`Approved` / :class:`Rejected` — the
     human-in-loop checkpoint, with auto-approve logged distinctly.
-  * :class:`MockLLM` / :class:`GeminiLLM` / :class:`QwenLLM` / :func:`get_llm`
+  * :class:`MockLLM` / :class:`QwenLLM` / :func:`get_llm`
     — the mockable reasoning surface (default brain is offline/deterministic).
   * Protocol: :class:`AgentContext`, :class:`AgentResult`, :class:`Handoff`,
     :class:`Step`, :class:`Status`.
@@ -28,7 +28,7 @@ from .dispute_memory import (
 )
 from .ingest import IngestAgent
 from .insight import InsightAgent
-from .llm import ChatResponse, GeminiLLM, LLM, MockLLM, QwenLLM, ToolCall, get_llm
+from .llm import ChatResponse, LLM, MockLLM, QwenLLM, ToolCall, get_llm
 from .protocol import AgentContext, AgentResult, Dispute, DisputeRound, Handoff, Status, Step
 from .risk_auditor import RiskAuditorAgent
 
@@ -42,7 +42,6 @@ __all__ = [
     # llm
     "LLM",
     "MockLLM",
-    "GeminiLLM",
     "QwenLLM",
     "ToolCall",
     "ChatResponse",

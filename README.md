@@ -159,7 +159,7 @@ waspada/
 └── agents/
     ├── base.py             # Agent base + ApprovalGate
     ├── protocol.py         # AgentContext / AgentResult / Handoff / Step / Status / Dispute
-    ├── llm.py              # MockLLM (offline) / QwenLLM / GeminiLLM (lazy SDK imports)
+    ├── llm.py              # MockLLM (offline) / QwenLLM (lazy SDK import)
     ├── data_engineer.py    # Data Engineer agent (quality-check loop)
     ├── data_analyst.py     # Data Analyst agent (feature/exploration loop)
     ├── risk_model.py       # risk model + defend_score() rebuttal
