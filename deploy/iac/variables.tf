@@ -55,6 +55,12 @@ variable "rds_password" {
   default     = ""
 }
 
+variable "rds_security_ips" {
+  description = "CIDR blocks allowed to reach the RDS instance. Defaults to the FC VPC subnet range. Add a maintenance IP (e.g. your office CIDR) via TF_VAR_rds_security_ips or secrets.tfvars. NEVER use 0.0.0.0/0 in production."
+  type        = list(string)
+  default     = ["172.16.0.0/12"]
+}
+
 # ---------------------------------------------------------------------------
 # OpenTofu auto-loads *.auto.tfvars or any *.tfvars passed via -var-file.
 # The convention here is: copy deploy/iac/secrets.tfvars.example -> secrets.tfvars,

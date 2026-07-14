@@ -92,12 +92,46 @@ _ALGO = "HS256"
 _TTL_SECONDS = int(os.environ.get("WASPADA_JWT_TTL_SECONDS", "86400"))  # 24h
 
 
+_DEV_FALLBACK_SECRET = "waspada-dev-secret-change-me"
+_MIN_SECRET_BYTES = 32
+
+
+def _is_dev_env() -> bool:
+    """True when WASPADA_ENV is unset or 'dev' (local/demo convenience)."""
+    return os.environ.get("WASPADA_ENV", "dev").lower() == "dev"
+
+
+def validate_jwt_secret() -> None:
+    """Startup guard — hard-fail outside dev if the JWT secret is weak.
+
+    Called once at app startup (module load + lifespan in api/main.py).
+    In dev (``WASPADA_ENV`` unset or ``"dev"``) the insecure fallback is kept
+    so local development and the demo are unaffected. In any other environment
+    a missing or sub-32-byte secret raises ``RuntimeError`` — refusing to start
+    is safer than silently signing tokens with a guessable key.
+
+    Tests monkeypatch ``WASPADA_JWT_SECRET`` *and* run with ``WASPADA_ENV``
+    unset (→ dev), so this guard never fires under pytest.
+    """
+    if _is_dev_env():
+        return
+    secret = os.environ.get("WASPADA_JWT_SECRET", "")
+    if len(secret) < _MIN_SECRET_BYTES:
+        raise RuntimeError(
+            "WASPADA_JWT_SECRET must be set to at least "
+            f"{_MIN_SECRET_BYTES} bytes in non-dev environments "
+            f"(WASPADA_ENV={os.environ.get('WASPADA_ENV')!r}). "
+            "Generate one with: python -c \"import secrets; print(secrets.token_urlsafe(32))\""
+        )
+
+
 def _jwt_secret() -> str:
     """JWT signing secret. Reads env at call time so tests can monkeypatch."""
     secret = os.environ.get("WASPADA_JWT_SECRET")
     if not secret:
-        # Dev fallback — logged once. Production sets the env var.
-        secret = "waspada-dev-secret-change-me"
+        # Dev fallback — logged once. Production must set the env var
+        # (validate_jwt_secret() enforces this at startup outside dev).
+        secret = _DEV_FALLBACK_SECRET
         log.warning("WASPADA_JWT_SECRET not set — using insecure dev default")
     return secret
 

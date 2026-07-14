@@ -180,7 +180,7 @@ resource "alicloud_db_instance" "auth" {
   instance_name        = "${local.name_prefix}-auth-db"
   instance_charge_type = "Postpaid"
 
-  security_ips = ["0.0.0.0/0"]
+  security_ips = var.rds_security_ips
 
   tags = {
     Project     = var.namespace
