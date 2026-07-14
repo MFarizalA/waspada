@@ -478,7 +478,7 @@ removed · README/HACKATHON rewritten · AgentDialogue panel + types + fixture.
 - EL-weighted product×region heat-map + HHI concentration (fold into WA-024
   only if its core lands early).
 
-**Post-hackathon roadmap (🟡 requirements frozen 2026-07-12, not started — full
+**Next-phase roadmap (🟡 requirements frozen 2026-07-12, not started — full
 specs in `backlog/WA-032..039`):**
 - **WA-032 — Human-configurable decision matrix (`RiskPolicy`).** The band→action
   map (`ACTION_BY_BAND`), alert thresholds, and NPL buckets move from hard-coded
