@@ -62,7 +62,7 @@ holding the gate at both layers.*
   disagreement is modeled in the protocol, not bolted on.
 - **Graceful degradation everywhere**: mock brain by default (offline CI),
   unparsable LLM replies → logged + safe fallback, gate fails closed, frozen
-  data contract validated at every seam. 131-test suite stays green offline.
+  data contract validated at every seam. 324-test suite stays green offline.
 
 **Problem Value & Impact:** real multifinance collections pain (stale manual
 work-lists → NPL losses); the society pattern generalizes to any

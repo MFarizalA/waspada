@@ -1,4 +1,4 @@
-"""WASPADA Cloud Run API server.
+"""WASPADA Function Compute API server.
 
 Serves the pre-built dashboard statically + exposes live pipeline endpoints:
 
@@ -43,7 +43,18 @@ from waspada.agents.protocol import AgentContext
 # exist on the configured store (ApsaraDB RDS PostgreSQL via DATABASE_URL,
 # or the SQLite local-dev fallback) before we try to seed.
 from api import db as db_mod
-from api.auth import current_user, current_user_ws, router as auth_router, seed_default_user
+from api.auth import (
+    current_user,
+    current_user_ws,
+    router as auth_router,
+    seed_default_user,
+    validate_jwt_secret,
+)
+
+# Startup guard (WA-040): refuse to boot outside dev with a weak/missing JWT
+# secret. Runs at import time so a misconfigured deploy crashes immediately —
+# before binding a port or seeding users — instead of silently signing tokens.
+validate_jwt_secret()
 
 
 @asynccontextmanager
@@ -51,7 +62,10 @@ async def lifespan(app: FastAPI):
     """Create tables if needed, then seed a demo analyst on startup.
 
     Idempotent: safe to run on every cold start against the same RDS instance.
+    The JWT-secret guard re-runs here so FC cold starts (which may import the
+    module from a cached artifact) still catch a missing secret before serving.
     """
+    validate_jwt_secret()
     db_mod.init_db()
     seed_default_user()
     yield

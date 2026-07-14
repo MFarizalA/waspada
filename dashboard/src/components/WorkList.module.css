@@ -199,7 +199,7 @@
   border: 1px solid var(--sev-moderate);
   border-radius: 999px;
   background: color-mix(in srgb, var(--sev-moderate) 10%, transparent);
-  color: var(--text-primary);
+  color: var(--text);
   font-size: 0.7rem;
   font-weight: 600;
   cursor: pointer;

@@ -38,13 +38,11 @@ from typing import Any, Callable, Dict, List, Optional
 import pyarrow as pa
 
 from ..config import COLLECTIONS, LANES
-from .analytics import AnalyticsAgent
 from .arbiter import ArbiterAgent
 from .data_analyst import DataAnalystAgent
 from .base import Agent, ApprovalGate, Approved
 from .data_engineer import DataEngineerAgent
 from .dispute_memory import DisputeMemory, MemoryBackend
-from .ingest import IngestAgent
 from .insight import InsightAgent
 from .llm import qwen_tier
 from .protocol import AgentContext, AgentResult, Dispute, DisputeRound, Handoff, Status

@@ -39,13 +39,4 @@ export function assessAlert(value: number, threshold: number): SeverityAssessmen
   return { severity: "info", breached: false, ratio };
 }
 
-/** Display label for a severity. */
-export function severityLabel(s: Severity): string {
-  switch (s) {
-    case "critical": return "Critical";
-    case "high": return "High";
-    case "moderate": return "Moderate";
-    case "low": return "Low";
-    case "info": return "Info";
-  }
-}
+
