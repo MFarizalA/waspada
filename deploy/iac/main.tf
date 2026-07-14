@@ -179,6 +179,10 @@ resource "alicloud_db_instance" "auth" {
   instance_storage     = "20"
   instance_name        = "${local.name_prefix}-auth-db"
   instance_charge_type = "Postpaid"
+  # WA-044: explicit, documented deletion setting.
+  # false = destroy is intentional (run `tofu destroy -target=alicloud_db_instance.auth`).
+  # Set true in long-lived prod to prevent accidental data loss.
+  deletion_protection = false
 
   security_ips = var.rds_security_ips
 
@@ -210,9 +214,9 @@ resource "alicloud_fcv3_function" "api" {
   runtime              = "custom-container"
   handler              = "index.handler"
   memory_size          = 2048
-  timeout              = 60
+  timeout              = 180 # WA-044: live Qwen debate ~70s; 60s killed it mid-debate
   cpu                  = 1.0
-  disk_size            = 512
+  disk_size            = 1024 # WA-044: 512MB was tight for container image + DuckDB + parquet
   instance_concurrency = 10
 
   custom_container_config {
