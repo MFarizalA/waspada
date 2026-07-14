@@ -28,7 +28,7 @@ from .dispute_memory import (
 )
 from .ingest import IngestAgent
 from .insight import InsightAgent
-from .llm import GeminiLLM, LLM, MockLLM, QwenLLM, get_llm
+from .llm import ChatResponse, GeminiLLM, LLM, MockLLM, QwenLLM, ToolCall, get_llm
 from .protocol import AgentContext, AgentResult, Dispute, DisputeRound, Handoff, Status, Step
 from .risk_auditor import RiskAuditorAgent
 
@@ -44,6 +44,8 @@ __all__ = [
     "MockLLM",
     "GeminiLLM",
     "QwenLLM",
+    "ToolCall",
+    "ChatResponse",
     "get_llm",
     # protocol
     "AgentContext",

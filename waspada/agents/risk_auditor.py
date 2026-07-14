@@ -32,12 +32,12 @@ from __future__ import annotations
 
 import json
 import re
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 import pyarrow as pa
 
 from .base import Agent
-from .llm import LLM, MockLLM
+from .llm import ChatResponse, LLM, MockLLM, ToolCall
 from .protocol import AgentContext, AgentResult, Dispute, DisputeRound, Status
 
 __all__ = ["RiskAuditorAgent"]
@@ -54,6 +54,68 @@ DISPUTE_GAP = 2  # |band_ordinal − view_ordinal| ≥ DISPUTE_GAP → dispute o
 
 # Valid auditor-view vocabulary (the Skeptic's independent read).
 _VIEWS = ("Low", "Medium", "High")
+
+# Maximum back-and-forth turns in the native tool-calling loop (WA-041).
+# Bounds the audit: the Skeptic gets at most a few tool pulls before it must
+# give its final verdict. Generous enough for portfolio_stats + lookup_account.
+_MAX_TOOL_TURNS = 4
+
+
+# --------------------------------------------------------------------------- #
+# Native tool schemas (WA-041) — the OpenAI-compatible ``tools`` array passed
+# to QwenLLM.chat(). Qwen decides when (and whether) to call these, not
+# hard-wired Python. The results are fed back so the model's final answer is
+# grounded in real evidence.
+# --------------------------------------------------------------------------- #
+_AUDITOR_TOOLS: List[Dict[str, Any]] = [
+    {
+        "type": "function",
+        "function": {
+            "name": "portfolio_stats",
+            "description": (
+                "Get portfolio-level and segment-level statistics for the "
+                "current loan book — NPL ratios, segment breakdowns. Call "
+                "this to understand the portfolio context before judging a "
+                "specific account."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "segment": {
+                        "type": "object",
+                        "description": (
+                            "Optional segment filter (product, region). "
+                            "Omit for book-wide stats."
+                        ),
+                    },
+                },
+                "required": [],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "lookup_account",
+            "description": (
+                "Look up the feature details for a specific loan account — "
+                "payment_ratio, outstanding_ratio, dti, rate, loan_age, "
+                "grade, delinquency_status. Call this to get the evidence "
+                "needed to form an independent risk view."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "loan_id": {
+                        "type": "string",
+                        "description": "The loan ID to look up.",
+                    },
+                },
+                "required": ["loan_id"],
+            },
+        },
+    },
+]
 
 
 class RiskAuditorAgent(Agent):
@@ -197,15 +259,19 @@ class RiskAuditorAgent(Agent):
     ) -> Optional[Tuple[str, Optional[float], str, List[str]]]:
         """Ask the Skeptic for its view on one account; parse JSON.
 
+        WA-041: When the brain supports native tool-calling (``chat`` with
+        ``tools``), the Skeptic runs a real Qwen tool-calling loop — Qwen
+        decides when to call ``portfolio_stats`` / ``lookup_account``, the
+        results are fed back, and the model's final answer is grounded in
+        real evidence. The JSON-mode fallback (``complete`` + ``_parse_view_json``)
+        is kept for brains that don't support native tools and as a safety net.
+
         Returns ``(view, confidence, claim, evidence)`` or ``None`` on parse
         failure (graceful degrade — the caller skips the account).
         """
         ctx = self._account_context(scored, features, idx)
-        prompt = self._prompt(ctx)
-        try:
-            raw = self.llm.complete(prompt)
-        except Exception as exc:  # brain unreachable → skip, not crash
-            self.step("audit_call", status=Status.ERROR, notes=f"llm error: {exc}")
+        raw = self._run_tool_loop(ctx)
+        if raw is None:
             return None
         parsed = _parse_view_json(raw)
         if parsed is None:
@@ -221,6 +287,128 @@ class RiskAuditorAgent(Agent):
         if not evidence:
             evidence = _mcp_evidence(ctx["portfolio_stats"]) or ctx["feature_facts"]
         return view, confidence, claim, evidence
+
+    def _run_tool_loop(self, ctx: Dict[str, Any]) -> Optional[str]:
+        """Run the native tool-calling loop for one account (WA-041).
+
+        If the brain supports ``chat()``, the Skeptic gets the native
+        ``portfolio_stats`` + ``lookup_account`` tool schemas and Qwen
+        decides when to call them. Tool results are fed back as assistant →
+        tool message pairs (the OpenAI conversation shape) so the model sees
+        the real evidence before giving its final verdict. When ``tool_calls``
+        is empty (or the budget is exhausted), the ``content`` is the final
+        JSON answer.
+
+        Falls back to the legacy ``complete()`` JSON-mode path if the brain
+        doesn't support ``chat()`` with ``tools`` (e.g. GeminiLLM, or a bare
+        legacy LLM subclass). Never crashes.
+        """
+        prompt = self._prompt(ctx)
+
+        # --- Native tool-calling path (QwenLLM, MockLLM with tool scripts) ---
+        if hasattr(self.llm, "chat"):
+            try:
+                return self._native_tool_loop(ctx, prompt)
+            except Exception as exc:
+                self.step("audit_call", status=Status.ERROR,
+                          notes=f"native tool loop error, falling back: {exc}")
+                # Fall through to legacy path
+
+        # --- Legacy JSON-mode fallback ---
+        try:
+            return self.llm.complete(prompt)
+        except Exception as exc:  # brain unreachable → skip, not crash
+            self.step("audit_call", status=Status.ERROR, notes=f"llm error: {exc}")
+            return None
+
+    def _native_tool_loop(self, ctx: Dict[str, Any], prompt: str) -> Optional[str]:
+        """The native tool-calling loop: call → execute → feed back → repeat.
+
+        Uses ``self.llm.chat(tools=..., messages=...)`` with the full
+        conversation threaded as OpenAI-format messages so the model sees
+        its own tool calls and the results. Terminates when the model stops
+        calling tools (``content`` is the final JSON) or the turn budget
+        is exhausted.
+        """
+        messages: List[Dict[str, Any]] = [
+            {"role": "user", "content": prompt},
+        ]
+
+        for turn in range(_MAX_TOOL_TURNS):
+            resp: ChatResponse = self.llm.chat(
+                prompt, tools=_AUDITOR_TOOLS, messages=messages,
+            )
+
+            if not resp.has_tool_calls:
+                # No tool calls → ``content`` is the final answer.
+                self.step("audit_native_done",
+                          notes=f"tool loop finished after {turn} turn(s); "
+                                f"content_len={len(resp.content)}")
+                return resp.content
+
+            # The model wants to call tools. Record its assistant message
+            # (with the raw tool_calls shape) and execute each one.
+            asst_msg: Dict[str, Any] = {
+                "role": "assistant",
+                "content": resp.content or "",
+                "tool_calls": [
+                    {
+                        "id": tc.id or f"call_{i}",
+                        "type": "function",
+                        "function": {"name": tc.name, "arguments": tc.arguments},
+                    }
+                    for i, tc in enumerate(resp.tool_calls)
+                ],
+            }
+            messages.append(asst_msg)
+
+            for tc in resp.tool_calls:
+                result = self._execute_tool_call(tc, ctx)
+                self.step(f"audit_tool:{tc.name}",
+                          notes=f"args={tc.arguments[:80]} result={str(result)[:120]}")
+                messages.append({
+                    "role": "tool",
+                    "tool_call_id": tc.id or f"call_0",
+                    "content": result,
+                })
+
+        # Budget exhausted — make one final call without tools to get the verdict.
+        self.step("audit_native_budget",
+                  notes=f"tool budget exhausted after {_MAX_TOOL_TURNS} turns; "
+                        f"requesting final verdict")
+        try:
+            final = self.llm.chat("\n".join(
+                m.get("content", "") for m in messages if m.get("role") == "user"
+            ), messages=messages)
+            return final.content
+        except Exception:
+            return None
+
+    def _execute_tool_call(self, tc: ToolCall, ctx: Dict[str, Any]) -> str:
+        """Execute one native tool call and return the result as a JSON string.
+
+        Routes ``portfolio_stats`` / ``lookup_account`` to the registered
+        tools (local stubs or MCP-backed). Never raises — a tool failure
+        degrades to an error string so the loop continues.
+        """
+        args = tc.parsed_arguments()
+        try:
+            if tc.name == "lookup_account":
+                loan_id = str(args.get("loan_id", ctx.get("loan_id", "")))
+                fn = self.tools.get("lookup_account", _default_lookup_account)
+                # The tool takes (features_table, loan_id); on the MCP path the
+                # table is ignored. We stash the features table on ctx.
+                row = fn(ctx.get("_features_table"), loan_id)
+                return json.dumps(row or {})
+            elif tc.name == "portfolio_stats":
+                segment = args.get("segment")
+                fn = self.tools.get("portfolio_stats", _default_portfolio_stats)
+                stats = fn(ctx.get("_scored_table"), segment)
+                return json.dumps(stats or {})
+            else:
+                return json.dumps({"error": f"unknown tool: {tc.name}"})
+        except Exception as exc:
+            return json.dumps({"error": str(exc)})
 
     def _account_context(
         self, scored: pa.Table, features: Optional[pa.Table], idx: int,
@@ -270,6 +458,11 @@ class RiskAuditorAgent(Agent):
             "feature_facts": feature_facts,
             "feature_row": feat_row or {},
             "portfolio_stats": stats,
+            # WA-041: stash the raw tables for native tool-call execution.
+            # The native loop's _execute_tool_call reads these when Qwen
+            # emits a tool_calls response.
+            "_features_table": features,
+            "_scored_table": scored,
         }
 
     def _prompt(self, ctx: Dict[str, Any]) -> str:

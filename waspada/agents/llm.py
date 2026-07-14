@@ -22,16 +22,71 @@ from __future__ import annotations
 
 import os
 from abc import ABC, abstractmethod
-from typing import List, Optional, Sequence
+from dataclasses import dataclass, field
+from typing import Any, Dict, List, Optional, Sequence
+
+
+# --------------------------------------------------------------------------- #
+# Native tool-calling types (WA-041)
+# --------------------------------------------------------------------------- #
+@dataclass
+class ToolCall:
+    """One native function call emitted by the LLM (OpenAI ``tool_calls`` shape).
+
+    Mirrors the ``response.choices[0].message.tool_calls[i]`` structure from
+    the OpenAI-compatible DashScope endpoint. ``arguments`` is a raw JSON
+    string (as returned by the API); callers parse it with ``json.loads``.
+    """
+
+    id: str = ""
+    name: str = ""
+    arguments: str = "{}"  # JSON string, never None
+
+    def parsed_arguments(self) -> Dict[str, Any]:
+        """Parse ``arguments`` as a dict (empty dict on failure)."""
+        import json
+
+        try:
+            obj = json.loads(self.arguments or "{}")
+            return obj if isinstance(obj, dict) else {}
+        except (ValueError, TypeError):
+            return {}
+
+
+@dataclass
+class ChatResponse:
+    """Structured LLM response carrying text content and/or native tool calls.
+
+    When ``tool_calls`` is non-empty the model wants to call functions — the
+    caller executes them and feeds results back in a subsequent ``chat()`` call.
+    When ``tool_calls`` is empty the model is done; ``content`` holds the final
+    answer (agents that expect JSON parse it from ``content``).
+    """
+
+    content: str = ""
+    tool_calls: List[ToolCall] = field(default_factory=list)
+
+    @property
+    def has_tool_calls(self) -> bool:
+        """True if the model emitted one or more tool calls."""
+        return bool(self.tool_calls)
 
 
 class LLM(ABC):
     """The reasoning surface every agent talks to.
 
-    One method, ``complete``: a prompt in, a string out. Kept minimal on
-    purpose — agents that need structured output parse it themselves
-    (WA-009's pipeline agents). The :attr:`name` is logged in the step log so
-    an audit can tell a mock run from a Gemini run.
+    Two methods:
+
+    * ``complete`` — a prompt in, a string out. The legacy surface every
+      agent used before WA-041. Agents that need structured output parse it
+      themselves (WA-009's pipeline agents).
+    * ``chat`` — the native tool-calling surface (WA-041). Returns a
+      :class:`ChatResponse` carrying ``content`` and/or ``tool_calls``. The
+      default implementation wraps ``complete()`` so every existing brain
+      gains tool-call support for free (returns content-only responses).
+
+    The :attr:`name` is logged in the step log so an audit can tell a mock
+    run from a Gemini run.
     """
 
     name: str = "llm"
@@ -45,6 +100,33 @@ class LLM(ABC):
         a conversation); implementations may ignore it.
         """
         raise NotImplementedError
+
+    def chat(
+        self,
+        prompt: str,
+        *,
+        tools: Optional[List[Dict[str, Any]]] = None,
+        messages: Optional[List[Dict[str, Any]]] = None,
+    ) -> ChatResponse:
+        """Native tool-calling surface (WA-041).
+
+        Returns a :class:`ChatResponse`. When ``tools`` is provided, a
+        supporting backend (QwenLLM) declares them natively and the model
+        may emit ``tool_calls`` in the response. When ``tools`` is ``None``
+        or the backend doesn't support native function calling, the response
+        is content-only (identical to :meth:`complete` wrapped in a
+        :class:`ChatResponse`).
+
+        ``messages`` is the full conversation as OpenAI-format message dicts
+        (for multi-turn tool-calling loops). When omitted, a single-user
+        message is built from ``prompt``.
+
+        The default implementation wraps :meth:`complete` — every brain gets
+        tool-call support for free, returning content-only responses. Override
+        in subclasses that actually support native ``tools``/``tool_calls``.
+        """
+        text = self.complete(prompt)
+        return ChatResponse(content=text, tool_calls=[])
 
     def with_model(self, model: str) -> "LLM":
         """Return a brain configured for a specific model tier.
@@ -67,27 +149,65 @@ class MockLLM(LLM):
 
     * **scripted** — pass ``script=[...]``; each :meth:`complete` call pops
       the next reply in order. Exhausts to the last entry. Useful for tests
-      that need specific responses per turn.
+      that need specific responses per turn. Each script entry may be a plain
+      ``str`` (legacy) or a :class:`ChatResponse` (WA-041 native tool_calls).
     * **canned** — no script: every call returns ``reply`` (default
       ``"mock-llm-ok"``). Useful when an agent just needs *a* string back.
+
+    WA-041: :meth:`chat` now exercises the native tool-calling path. When a
+    script entry is a :class:`ChatResponse` with ``tool_calls``, it is
+    returned directly by ``chat()``. When it's a plain string, it's wrapped
+    in a content-only :class:`ChatResponse`. This lets tests script full
+    tool-calling loops (call → result → call → final answer) without a
+    network.
     """
 
     name = "mock"
     model_name = "mock"
 
-    def __init__(self, *, reply: str = "mock-llm-ok", script: Optional[Sequence[str]] = None) -> None:
+    def __init__(self, *, reply: str = "mock-llm-ok", script: Optional[Sequence[Any]] = None) -> None:
         self._reply = reply
-        self._script: List[str] = list(script) if script else []
+        self._script: List[Any] = list(script) if script else []
         self._i = 0
         self.calls: List[str] = []  # exposed for tests / audit
+
+    def _next_scripted(self) -> Any:
+        """Pop the next scripted reply (or exhaust to the last entry)."""
+        out = self._script[min(self._i, len(self._script) - 1)]
+        self._i += 1
+        return out
 
     def complete(self, prompt: str, *, history: Optional[Sequence[str]] = None) -> str:
         self.calls.append(prompt)
         if self._script:
-            out = self._script[min(self._i, len(self._script) - 1)]
-            self._i += 1
+            out = self._next_scripted()
+            # A scripted ChatResponse used in legacy complete() → unwrap content.
+            if isinstance(out, ChatResponse):
+                return out.content
             return out
         return self._reply
+
+    def chat(
+        self,
+        prompt: str,
+        *,
+        tools: Optional[List[Dict[str, Any]]] = None,
+        messages: Optional[List[Dict[str, Any]]] = None,
+    ) -> ChatResponse:
+        """Native tool-calling mock (WA-041).
+
+        When a script entry is a :class:`ChatResponse`, return it as-is (this
+        is how tests script tool-call → tool-result → final-answer loops).
+        When a script entry is a plain string, wrap it in a content-only
+        :class:`ChatResponse`. When no script, return the canned reply.
+        """
+        self.calls.append(prompt)
+        if self._script:
+            out = self._next_scripted()
+            if isinstance(out, ChatResponse):
+                return out
+            return ChatResponse(content=str(out), tool_calls=[])
+        return ChatResponse(content=self._reply, tool_calls=[])
 
 
 # --------------------------------------------------------------------------- #
@@ -200,15 +320,66 @@ class QwenLLM(LLM):
         clone.json_mode = self.json_mode
         return clone
 
-    def complete(self, prompt: str, *, history: Optional[Sequence[str]] = None) -> str:  # pragma: no cover - network
+    def complete(
+        self,
+        prompt: str,
+        *,
+        history: Optional[Sequence[str]] = None,
+        tools: Optional[List[Dict[str, Any]]] = None,
+    ) -> str:  # pragma: no cover - network
         kwargs: dict = {
             "model": self.model_name,
             "messages": [{"role": "user", "content": prompt}],
         }
         if self.json_mode:
             kwargs["response_format"] = {"type": "json_object"}
+        if tools:
+            kwargs["tools"] = tools
         resp = self._client.chat.completions.create(**kwargs)
         return resp.choices[0].message.content or ""
+
+    def chat(
+        self,
+        prompt: str,
+        *,
+        tools: Optional[List[Dict[str, Any]]] = None,
+        messages: Optional[List[Dict[str, Any]]] = None,
+    ) -> "ChatResponse":  # pragma: no cover - network
+        """Native tool-calling surface (WA-041).
+
+        When ``tools`` is provided, the Qwen DashScope endpoint is called with
+        the OpenAI-compatible ``tools`` parameter. The model may emit
+        ``tool_calls`` in the response message (the caller executes them and
+        feeds results back via ``messages`` on the next turn). When ``tools``
+        is ``None``, this is identical to :meth:`complete` but returns a
+        :class:`ChatResponse`.
+
+        ``messages`` replaces the synthesized single-user-message when provided
+        (multi-turn tool-calling loops pass the full conversation).
+        """
+        msg_list = list(messages) if messages is not None else [
+            {"role": "user", "content": prompt}
+        ]
+        kwargs: dict = {"model": self.model_name, "messages": msg_list}
+        if self.json_mode and not tools:
+            kwargs["response_format"] = {"type": "json_object"}
+        if tools:
+            kwargs["tools"] = tools
+        resp = self._client.chat.completions.create(**kwargs)
+        msg = resp.choices[0].message
+        content = msg.content or ""
+        tool_calls: List[ToolCall] = []
+        raw_calls = getattr(msg, "tool_calls", None) or []
+        for tc in raw_calls:
+            fn = getattr(tc, "function", None)
+            if fn is None:
+                continue
+            tool_calls.append(ToolCall(
+                id=getattr(tc, "id", "") or "",
+                name=getattr(fn, "name", "") or "",
+                arguments=getattr(fn, "arguments", "{}") or "{}",
+            ))
+        return ChatResponse(content=content, tool_calls=tool_calls)
 
 
 # --------------------------------------------------------------------------- #

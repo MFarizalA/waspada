@@ -32,6 +32,7 @@ from waspada.agents.ingest import IngestAgent
 from waspada.agents.data_analyst import DataAnalystAgent
 from waspada.agents.data_engineer import DataEngineerAgent
 from waspada.agents.insight import InsightAgent
+from waspada.agents.llm import ChatResponse, ToolCall
 from waspada.agents.orchestrator import COLLECTIONS_STEP_ORDER, Orchestrator
 from waspada.agents.risk_auditor import RiskAuditorAgent, _parse_view_json
 from waspada.agents.risk_model import RiskModelAgent
@@ -406,3 +407,184 @@ def test_orchestrator_wires_mcp_before_auditor():
     # The Data Analyst (MockLLM) may produce empty aggregates, so this is
     # conditional — but the wiring code path should not crash.
     assert res.ok or res.status == Status.DISPUTED
+
+
+# --------------------------------------------------------------------------- #
+# WA-041 — Native tools/tool_calls function calling
+# --------------------------------------------------------------------------- #
+
+def test_mockllm_chat_returns_tool_calls_from_script():
+    """MockLLM.chat() returns ChatResponse objects from the script as-is."""
+    tc = ToolCall(id="call_0", name="lookup_account",
+                  arguments=json.dumps({"loan_id": "R0001"}))
+    resp = ChatResponse(content="", tool_calls=[tc])
+    mock = MockLLM(script=[resp])
+    out = mock.chat("test", tools=[{"type": "function", "function": {}}])
+    assert out.has_tool_calls
+    assert out.tool_calls[0].name == "lookup_account"
+    assert out.tool_calls[0].parsed_arguments()["loan_id"] == "R0001"
+
+
+def test_mockllm_chat_wraps_plain_string_in_content_only():
+    """Plain string script entries are wrapped in a content-only ChatResponse."""
+    mock = MockLLM(script=['{"auditor_view": "High"}'])
+    out = mock.chat("test")
+    assert not out.has_tool_calls
+    assert out.content == '{"auditor_view": "High"}'
+
+
+def test_mockllm_chat_no_script_returns_canned():
+    """Without a script, chat() returns the canned reply in a ChatResponse."""
+    mock = MockLLM(reply="hello")
+    out = mock.chat("anything")
+    assert not out.has_tool_calls
+    assert out.content == "hello"
+
+
+def test_auditor_native_tool_calls_opens_dispute(scored_ctx):
+    """WA-041: native tool_calls path opens a dispute just like JSON-mode.
+
+    The MockLLM script simulates Qwen's native tool-calling: first it calls
+    lookup_account (tool_calls), then it gives a final JSON verdict (content).
+    The dispute should open with the same shape as the legacy path.
+    """
+    challenge = json.dumps({
+        "auditor_view": "Low",      # Very High + Low → dispute
+        "confidence": 0.8,
+        "claim": "payment_ratio contradicts the band",
+        "evidence": ["payment_ratio=0.95"],
+    })
+    # Script: turn 1 = tool call, turn 2 = final JSON verdict.
+    script = [
+        ChatResponse(content="", tool_calls=[
+            ToolCall(id="call_0", name="lookup_account",
+                     arguments=json.dumps({"loan_id": "R0001"})),
+        ]),
+        ChatResponse(content=challenge, tool_calls=[]),
+    ]
+    auditor = RiskAuditorAgent(MockLLM(script=script), k=2)
+    res = auditor.run(scored_ctx)
+    assert res.ok
+    disputes = scored_ctx.data_handles["risk_disputes"]
+    assert len(disputes) >= 1
+    d = disputes[0]
+    assert d.auditor_view == "Low"
+    # The tool call was executed and logged.
+    assert any("audit_tool:lookup_account" in s.action for s in auditor.steps)
+    # The native loop completion was logged.
+    assert any(s.action == "audit_native_done" for s in auditor.steps)
+
+
+def test_auditor_native_tool_calls_multiple_turns(scored_ctx):
+    """WA-041: multiple tool calls across turns still resolve to a verdict."""
+    challenge = json.dumps({
+        "auditor_view": "Low", "confidence": 0.9,
+        "claim": "contradicts band", "evidence": ["dti=10"],
+    })
+    script = [
+        ChatResponse(content="", tool_calls=[
+            ToolCall(id="c0", name="portfolio_stats", arguments="{}"),
+        ]),
+        ChatResponse(content="", tool_calls=[
+            ToolCall(id="c1", name="lookup_account",
+                     arguments=json.dumps({"loan_id": "R0002"})),
+        ]),
+        ChatResponse(content=challenge, tool_calls=[]),
+    ]
+    auditor = RiskAuditorAgent(MockLLM(script=script), k=1)
+    res = auditor.run(scored_ctx)
+    assert res.ok
+    disputes = scored_ctx.data_handles["risk_disputes"]
+    assert len(disputes) >= 1
+    # Both tool calls were executed.
+    actions = [s.action for s in auditor.steps]
+    assert "audit_tool:portfolio_stats" in actions
+    assert "audit_tool:lookup_account" in actions
+
+
+def test_auditor_native_tool_calls_no_dispute_when_agreeing(scored_ctx):
+    """WA-041: native path respects the admissibility rule (no dispute)."""
+    agree = json.dumps({
+        "auditor_view": "High",  # Very High + High → no dispute
+        "confidence": 0.9, "claim": "score stands", "evidence": ["dti=30"],
+    })
+    script = [
+        ChatResponse(content=agree, tool_calls=[]),  # Qwen gives verdict directly
+    ]
+    auditor = RiskAuditorAgent(MockLLM(script=script), k=4)
+    res = auditor.run(scored_ctx)
+    assert res.ok
+    assert scored_ctx.data_handles["risk_disputes"] == []
+
+
+def test_auditor_native_tool_calls_parse_fail_degrades(scored_ctx):
+    """WA-041: unparsable final content degrades gracefully (no crash)."""
+    script = [
+        ChatResponse(content="I'm not sure about this one", tool_calls=[]),
+    ]
+    auditor = RiskAuditorAgent(MockLLM(script=script), k=4)
+    res = auditor.run(scored_ctx)
+    assert res.ok  # graceful degrade
+    assert scored_ctx.data_handles["risk_disputes"] == []
+    assert any(s.action == "audit_parse_fail" for s in auditor.steps)
+
+
+def test_auditor_native_tool_calls_unknown_tool_handled(scored_ctx):
+    """WA-041: an unknown tool call doesn't crash — error string returned."""
+    challenge = json.dumps({
+        "auditor_view": "Low", "confidence": 0.8,
+        "claim": "test", "evidence": ["x=1"],
+    })
+    script = [
+        ChatResponse(content="", tool_calls=[
+            ToolCall(id="c0", name="nonexistent_tool",
+                     arguments=json.dumps({"foo": "bar"})),
+        ]),
+        ChatResponse(content=challenge, tool_calls=[]),
+    ]
+    auditor = RiskAuditorAgent(MockLLM(script=script), k=1)
+    res = auditor.run(scored_ctx)
+    assert res.ok
+    disputes = scored_ctx.data_handles["risk_disputes"]
+    assert len(disputes) >= 1
+
+
+def test_orchestrator_works_with_native_tool_calls_brain():
+    """WA-041: orchestrator end-to-end with a native tool-calling brain.
+
+    The auditor brain uses ChatResponse scripts (native path); the Data
+    Engineer / Data Analyst get fresh MockLLMs (content-only). The run
+    should complete with DISPUTED status (disputes opened) — proving the
+    native path integrates with the existing debate protocol.
+    """
+    raw = _raw_table(_raw_rows())
+    challenge = json.dumps({
+        "auditor_view": "Low", "confidence": 0.8,
+        "claim": "balance nearly settled", "evidence": ["payment_ratio=0.95"],
+    })
+    # Auditor brain: tool call → verdict, repeated for each account.
+    auditor_script = [
+        ChatResponse(content="", tool_calls=[
+            ToolCall(id="c0", name="lookup_account",
+                     arguments=json.dumps({"loan_id": "R0001"})),
+        ]),
+        ChatResponse(content=challenge, tool_calls=[]),
+    ] * 20
+    brain = MockLLM(script=auditor_script)
+    orch = Orchestrator(brain, gate=ApprovalGate(auto_approve=True),
+                        as_of=dt.date(2024, 12, 1), top_n=10, audit_k=4)
+    _orig = orch._build_agents
+    def _build():
+        agents = _orig()
+        for a in agents:
+            if isinstance(a, (DataEngineerAgent, DataAnalystAgent)):
+                a.register_tool("fetch", _stub_fetch(raw))
+                a.llm = MockLLM()  # content-only for Tier-2 loops
+        return agents
+    orch._build_agents = _build  # type: ignore[method-assign]
+
+    ctx = AgentContext(lane="collections", data_handles={})
+    res = orch.run(ctx)
+    assert res.status == Status.DISPUTED
+    payload = orch._final_ctx.data_handles["dashboard_payload"]
+    assert "agent_dialogue" in payload and payload["agent_dialogue"]

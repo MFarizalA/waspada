@@ -35,9 +35,13 @@ holding the gate at both layers.*
 ## Judging rubric → design mapping
 
 **Technical Depth & Engineering (sophisticated QwenCloud API use):**
-- 🟡 (implemented as JSON-mode tool selection; native tools/tool_calls API not wired) · **Native function calling** — the Skeptic runs a real Qwen tool-calling loop
+- ✅ · **Native function calling** — the Skeptic runs a real Qwen tool-calling loop
   (`tools`/`tool_calls`, confirmed supported on all three models we use); *Qwen
-  decides* when to pull portfolio context, not hard-wired Python.
+  decides* when to pull portfolio context via the `portfolio_stats` and
+  `lookup_account` tool schemas (declared natively in the `tools` parameter), not
+  hard-wired Python. The results are fed back as `tool`-role messages so the
+  model's final verdict is grounded in real evidence. JSON-mode parsing is kept
+  as a fallback (if `tool_calls` is empty, content is parsed as JSON — never crashes).
 - ✅ · **MCP integration** — a real MCP server (`waspada/mcp/`) serves
   `portfolio_stats` + `lookup_account` over the Model Context Protocol; agents
   consume it through an MCP client session. Stretch: expose it over SSE on
