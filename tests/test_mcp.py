@@ -364,3 +364,123 @@ class TestJsonifyRow:
     def test_scalars_passthrough(self):
         out = _jsonify_row({"i": 5, "f": 1.5, "s": "x", "b": True, "n": None})
         assert out == {"i": 5, "f": 1.5, "s": "x", "b": True, "n": None}
+
+
+# --------------------------------------------------------------------------- #
+# WA-042 — analyst_aggregates served via AnalyticsStore / InProcessClient.
+# --------------------------------------------------------------------------- #
+def _sample_aggregates() -> dict:
+    """Simulate what the Data Analyst's reasoning loop produces."""
+    import json
+    return {
+        "queries_run": [
+            {"tool": "correlation", "arg": '{"a":"payment_ratio","b":"dti"}',
+             "reply": json.dumps({"table": "feature_frame", "a": "payment_ratio",
+                                  "b": "dti", "correlation": -0.42})},
+            {"tool": "distribution", "arg": "dti",
+             "reply": json.dumps({"table": "feature_frame", "column": "dti",
+                                  "n": 60, "min": 2.0, "max": 35.0, "mean": 15.3,
+                                  "q1": 8.0, "median": 14.0, "q3": 22.0,
+                                  "histogram": []})},
+            {"tool": "build_feature",
+             "arg": "SELECT grade, AVG(dti) AS avg_dti FROM feature_frame GROUP BY grade",
+             "reply": json.dumps({"feature": "aggregate", "count": 2,
+                                  "result": [{"grade": "A", "avg_dti": 6.5},
+                                             {"grade": "E", "avg_dti": 28.1}]})},
+        ],
+    }
+
+
+class TestAnalystAggregates:
+    """WA-042: AnalyticsStore serves analyst_aggregates in portfolio_stats."""
+
+    def test_store_without_aggregates_omits_key(self, scored, features):
+        """No analyst_aggregates → portfolio_stats has no analyst_aggregates key."""
+        store = AnalyticsStore(scored, features)
+        out = store.portfolio_stats()
+        assert "analyst_aggregates" not in out
+
+    def test_store_with_aggregates_includes_them(self, scored, features):
+        """With aggregates, portfolio_stats includes an analyst_aggregates summary."""
+        store = AnalyticsStore(scored, features, _sample_aggregates())
+        out = store.portfolio_stats()
+        assert "analyst_aggregates" in out
+        agg = out["analyst_aggregates"]
+        # Correlations extracted.
+        assert "correlations" in agg
+        assert any(c.get("a") == "payment_ratio" for c in agg["correlations"])
+        # Distributions extracted.
+        assert "distributions" in agg
+        assert any(d.get("column") == "dti" for d in agg["distributions"])
+        # Feature aggregates extracted.
+        assert "feature_aggregates" in agg
+
+    def test_set_aggregates_after_construction(self, scored, features):
+        """set_analyst_aggregates injects aggregates post-construction."""
+        store = AnalyticsStore(scored, features)
+        assert "analyst_aggregates" not in store.portfolio_stats()
+        store.set_analyst_aggregates(_sample_aggregates())
+        out = store.portfolio_stats()
+        assert "analyst_aggregates" in out
+
+    def test_segment_query_includes_aggregates(self, scored, features):
+        """Aggregates are whole-book context, available in segment queries too."""
+        store = AnalyticsStore(scored, features, _sample_aggregates())
+        out = store.portfolio_stats({"product": "card"})
+        assert "analyst_aggregates" in out
+
+    def test_empty_aggregates_omits_key(self, scored, features):
+        """An empty aggregates dict is treated as absent."""
+        store = AnalyticsStore(scored, features, {})
+        out = store.portfolio_stats()
+        assert "analyst_aggregates" not in out
+
+    def test_inprocess_client_serves_aggregates(self, scored, features):
+        """InProcessClient with aggregates → same enriched portfolio_stats."""
+        with InProcessClient(scored, features, _sample_aggregates()) as client:
+            via_client = client.portfolio_stats()
+        assert "analyst_aggregates" in via_client
+        assert "correlations" in via_client["analyst_aggregates"]
+
+    def test_inprocess_client_set_aggregates(self, scored, features):
+        """InProcessClient.set_analyst_aggregates injects post-construction."""
+        with InProcessClient(scored, features) as client:
+            assert "analyst_aggregates" not in client.portfolio_stats()
+            client.set_analyst_aggregates(_sample_aggregates())
+            assert "analyst_aggregates" in client.portfolio_stats()
+
+    def test_aggregates_survive_json_serialization(self, scored, features):
+        """The enriched response must be JSON-serializable (MCP wire-safe)."""
+        import json
+        store = AnalyticsStore(scored, features, _sample_aggregates())
+        out = store.portfolio_stats()
+        # Must not raise.
+        json.dumps(out)
+
+
+class TestMcpEvidenceHelper:
+    """WA-042: _mcp_evidence extracts citable strings from analyst aggregates."""
+
+    def test_extracts_correlation_evidence(self):
+        from waspada.agents.risk_auditor import _mcp_evidence
+        stats = {"analyst_aggregates": {"correlations": [
+            {"a": "payment_ratio", "b": "dti", "correlation": -0.42}]}}
+        facts = _mcp_evidence(stats)
+        assert any("corr(payment_ratio,dti)=-0.42" == f for f in facts)
+
+    def test_extracts_distribution_evidence(self):
+        from waspada.agents.risk_auditor import _mcp_evidence
+        stats = {"analyst_aggregates": {"distributions": [
+            {"column": "dti", "median": 14.0, "mean": 15.3}]}}
+        facts = _mcp_evidence(stats)
+        assert any("median(dti)=14.00" == f for f in facts)
+
+    def test_empty_stats_returns_empty(self):
+        from waspada.agents.risk_auditor import _mcp_evidence
+        assert _mcp_evidence({}) == []
+        assert _mcp_evidence(None) == []
+        assert _mcp_evidence({"npl_ratio": 0.5}) == []
+
+    def test_no_aggregates_key_returns_empty(self):
+        from waspada.agents.risk_auditor import _mcp_evidence
+        assert _mcp_evidence({"npl_ratio": 0.5, "account_count": 4}) == []

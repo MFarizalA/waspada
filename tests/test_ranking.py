@@ -291,3 +291,132 @@ def test_dashboard_payload_matches_sample_fixture_shape():
     # Same keys as the dashboard's sample-payload.json work-list entries.
     assert set(rec.keys()) == {"loan_id", "p_default", "score_band", "segment", "recommended_action"}
     assert set(rec["segment"].keys()) == {"product", "region"}
+
+
+# --------------------------------------------------------------------------- #
+# WA-024 — Expected Loss (PD × LGD × EAD) per-account + portfolio total.
+# --------------------------------------------------------------------------- #
+from waspada.insight.ranking import EXPECTED_LOSS_LGD
+
+
+def _scored_table_with_op(rows: list[dict]) -> pa.Table:
+    """ScoredAccounts table WITH outstanding_principal (WA-024 carry-forward)."""
+    seg_type = schema_from_dataclass(ScoredAccounts).field("segment").type
+    base = pa.table(
+        {
+            "loan_id": pa.array([r["loan_id"] for r in rows], type=pa.string()),
+            "p_default": pa.array([r["p_default"] for r in rows], type=pa.float64()),
+            "score_band": pa.array([r["score_band"] for r in rows], type=pa.string()),
+            "segment": pa.array([r["segment"] for r in rows], type=seg_type),
+            "recommended_action": pa.array(
+                [r.get("recommended_action", "") for r in rows], type=pa.string()
+            ),
+        },
+        schema=schema_from_dataclass(ScoredAccounts),
+    )
+    return (
+        base
+        .append_column("issue_year", pa.array([r["issue_year"] for r in rows], type=pa.int64()))
+        .append_column("delinquency_status", pa.array([r["delinquency_status"] for r in rows], type=pa.string()))
+        .append_column("label_default", pa.array([r["label_default"] for r in rows], type=pa.bool_()))
+        .append_column("outstanding_principal", pa.array([r["outstanding_principal"] for r in rows], type=pa.float64()))
+    )
+
+
+@pytest.fixture
+def scored_with_el() -> pa.Table:
+    """Scored table with outstanding_principal for EL tests."""
+    rows = [
+        dict(loan_id="EL1", p_default=0.90, score_band="Very High",
+             segment={"product": "card", "region": "West"},
+             issue_year=2022, delinquency_status="Default", label_default=True,
+             outstanding_principal=10000.0),
+        dict(loan_id="EL2", p_default=0.50, score_band="Medium",
+             segment={"product": "auto", "region": "East"},
+             issue_year=2023, delinquency_status="0", label_default=False,
+             outstanding_principal=4000.0),
+        dict(loan_id="EL3", p_default=0.10, score_band="Very Low",
+             segment={"product": "card", "region": "West"},
+             issue_year=2023, delinquency_status="0", label_default=False,
+             outstanding_principal=2000.0),
+    ]
+    return _scored_table_with_op(rows)
+
+
+def test_expected_loss_lgd_constant():
+    """LGD is 45% (the labeled assumption)."""
+    assert EXPECTED_LOSS_LGD == 0.45
+
+
+def test_rank_adds_expected_loss_when_op_present(scored_with_el):
+    """WA-024: work-list rows carry expected_loss when outstanding_principal exists."""
+    wl = rank(scored_with_el, top_n=3)
+    for rec in wl:
+        assert "expected_loss" in rec
+    # EL1: 0.90 × 0.45 × 10000 = 4050.0
+    by_id = {r["loan_id"]: r for r in wl}
+    assert by_id["EL1"]["expected_loss"] == pytest.approx(0.90 * 0.45 * 10000.0)
+    assert by_id["EL2"]["expected_loss"] == pytest.approx(0.50 * 0.45 * 4000.0)
+    assert by_id["EL3"]["expected_loss"] == pytest.approx(0.10 * 0.45 * 2000.0)
+
+
+def test_rank_omits_expected_loss_when_op_absent(scored_mixed):
+    """WA-024: no outstanding_principal → no expected_loss key (older payloads valid)."""
+    wl = rank(scored_mixed, top_n=5)
+    for rec in wl:
+        assert "expected_loss" not in rec
+
+
+def test_segment_health_includes_expected_loss(scored_with_el):
+    """WA-024: portfolio_health carries total expected_loss."""
+    health = segment_health(scored_with_el)
+    assert "expected_loss" in health
+    expected = (
+        0.90 * 0.45 * 10000.0 +
+        0.50 * 0.45 * 4000.0 +
+        0.10 * 0.45 * 2000.0
+    )
+    assert health["expected_loss"] == pytest.approx(expected)
+
+
+def test_segment_health_omits_expected_loss_without_op(scored_mixed):
+    """WA-024: no outstanding_principal → no expected_loss in health."""
+    health = segment_health(scored_mixed)
+    assert "expected_loss" not in health
+
+
+def test_dashboard_payload_includes_expected_loss(scored_with_el):
+    """WA-024: to_dashboard_payload forwards expected_loss in portfolio_health."""
+    wl = rank(scored_with_el, top_n=3)
+    health = segment_health(scored_with_el)
+    al = alerts(health)
+    payload = to_dashboard_payload(wl, health, al)
+    assert "expected_loss" in payload["portfolio_health"]
+    # Work-list rows also carry expected_loss.
+    assert all("expected_loss" in r for r in payload["work_list"])
+
+
+def test_dashboard_payload_without_el_still_valid(scored_mixed):
+    """WA-024: older payloads without EL stay valid (no key, no crash)."""
+    wl = rank(scored_mixed, top_n=5)
+    health = segment_health(scored_mixed)
+    payload = to_dashboard_payload(wl, health, alerts(health))
+    assert "expected_loss" not in payload["portfolio_health"]
+    assert all("expected_loss" not in r for r in payload["work_list"])
+    # Still JSON-serializable.
+    json.dumps(payload)
+
+
+def test_expected_loss_zero_outstanding():
+    """WA-024: an account with zero outstanding has zero expected_loss."""
+    rows = [
+        dict(loan_id="Z1", p_default=0.99, score_band="Very High",
+             segment={"product": "x", "region": "y"},
+             issue_year=2023, delinquency_status="0", label_default=False,
+             outstanding_principal=0.0),
+    ]
+    scored = _scored_table_with_op(rows)
+    wl = rank(scored, top_n=1)
+    assert wl[0]["expected_loss"] == 0.0
+    health = segment_health(scored)
+    assert health["expected_loss"] == 0.0

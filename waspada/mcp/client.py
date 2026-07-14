@@ -56,14 +56,18 @@ class InProcessClient:
 
     name = "mcp-inprocess"
 
-    def __init__(self, scored, features=None) -> None:
-        self._store = AnalyticsStore(scored, features)
+    def __init__(self, scored, features=None, analyst_aggregates=None) -> None:
+        self._store = AnalyticsStore(scored, features, analyst_aggregates)
 
     def portfolio_stats(self, segment: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         return self._store.portfolio_stats(segment)
 
     def lookup_account(self, loan_id: str) -> Dict[str, Any]:
         return self._store.lookup_account(str(loan_id))
+
+    def set_analyst_aggregates(self, aggregates) -> None:
+        """WA-042: passthrough to the store's analyst_aggregates setter."""
+        self._store.set_analyst_aggregates(aggregates)
 
     def close(self) -> None:
         """No-op (parity with :class:`StdioClient`'s surface)."""

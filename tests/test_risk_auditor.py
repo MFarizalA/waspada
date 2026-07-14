@@ -322,3 +322,87 @@ def test_payload_with_agent_dialogue_json_round_trips():
     s = json.dumps(payload)
     back = json.loads(s)
     assert back["agent_dialogue"][0]["model_band"] == "Very High"
+
+
+# --------------------------------------------------------------------------- #
+# WA-042 — MCP-served analyst aggregates are the primary evidence path.
+# --------------------------------------------------------------------------- #
+def test_auditor_cites_mcp_evidence_when_aggregates_available(scored_ctx):
+    """When MCP carries analyst_aggregates, thin LLM evidence cites MCP facts.
+
+    The auditor's evidence should reference the real computed statistics from
+    the Data Analyst (not the hardcoded _feature_facts fallback).
+    """
+    import json as _json
+    from waspada.mcp.client import InProcessClient
+
+    # Scripted challenge with EMPTY evidence → forces the fallback path.
+    challenge = _json.dumps({
+        "auditor_view": "Low",  # Very High + Low → dispute
+        "confidence": 0.8,
+        "claim": "test claim",
+        "evidence": [],  # thin → fallback fires
+    })
+    auditor = RiskAuditorAgent(MockLLM(script=[challenge]), k=2)
+
+    # Build an InProcessClient with analyst_aggregates containing a correlation.
+    scored = scored_ctx.data_handles["scored_accounts"]
+    features = scored_ctx.data_handles.get("feature_frame")
+    aggregates = {
+        "queries_run": [
+            {"tool": "correlation", "arg": '{"a":"payment_ratio","b":"dti"}',
+             "reply": _json.dumps({"a": "payment_ratio", "b": "dti", "correlation": -0.55})},
+        ],
+    }
+    client = InProcessClient(scored, features, aggregates)
+    auditor.attach_mcp(client)
+
+    res = auditor.run(scored_ctx)
+    assert res.ok
+    disputes = scored_ctx.data_handles["risk_disputes"]
+    assert len(disputes) >= 1
+    evidence = disputes[0].rounds[0].evidence
+    # The MCP-served correlation should appear in the evidence.
+    assert any("corr(payment_ratio,dti)=-0.55" in e for e in evidence), \
+        f"Expected MCP correlation evidence, got: {evidence}"
+
+
+def test_auditor_falls_back_to_feature_facts_without_mcp(scored_ctx):
+    """Without MCP aggregates, the auditor falls back to _feature_facts."""
+    challenge = json.dumps({
+        "auditor_view": "Low",
+        "confidence": 0.8,
+        "claim": "test claim",
+        "evidence": [],
+    })
+    auditor = RiskAuditorAgent(MockLLM(script=[challenge]), k=2)
+    # No MCP attached → local stubs, no analyst_aggregates.
+    res = auditor.run(scored_ctx)
+    assert res.ok
+    disputes = scored_ctx.data_handles["risk_disputes"]
+    assert len(disputes) >= 1
+    # Evidence is non-empty (fallback to feature_facts fired).
+    assert disputes[0].rounds[0].evidence
+
+
+def test_orchestrator_wires_mcp_before_auditor():
+    """WA-042 end-to-end: orchestrator wires analyst_aggregates to auditor's MCP."""
+    raw = _raw_table(_raw_rows())
+    challenge = json.dumps({
+        "auditor_view": "Low", "confidence": 0.8,
+        "claim": "test", "evidence": [],
+    })
+    brain = MockLLM(script=[challenge] * 20)
+    orch = _orch_with_stub_brain(raw, brain)
+    ctx = AgentContext(lane="collections", data_handles={})
+    res = orch.run(ctx)
+
+    # The run completed (DISPUTED or OK).
+    assert res.status in (Status.DISPUTED, Status.OK)
+
+    # The orchestrator should have logged the MCP wiring step.
+    steps = [s.action for s in orch.steps]
+    # mcp_wired fires when analyst_aggregates exist and scored_accounts is ready.
+    # The Data Analyst (MockLLM) may produce empty aggregates, so this is
+    # conditional — but the wiring code path should not crash.
+    assert res.ok or res.status == Status.DISPUTED

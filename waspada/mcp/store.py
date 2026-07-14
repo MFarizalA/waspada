@@ -50,10 +50,20 @@ class AnalyticsStore:
         are needed (the server accepts a stats-only configuration).
     """
 
-    def __init__(self, scored: pa.Table, features: Optional[pa.Table] = None) -> None:
+    def __init__(
+        self,
+        scored: pa.Table,
+        features: Optional[pa.Table] = None,
+        analyst_aggregates: Optional[Dict[str, Any]] = None,
+    ) -> None:
         self.scored = scored
         self.features = features
+        self._analyst_aggregates: Optional[Dict[str, Any]] = analyst_aggregates or None
         self._loan_index: Optional[Dict[str, int]] = None
+
+    def set_analyst_aggregates(self, aggregates: Optional[Dict[str, Any]]) -> None:
+        """Inject or replace analyst aggregates post-construction (WA-042)."""
+        self._analyst_aggregates = aggregates or None
 
     # ----------------------------------------------------------- portfolio_stats
     def portfolio_stats(self, segment: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
@@ -108,6 +118,12 @@ class AnalyticsStore:
         if vintage:
             worst_year = max(vintage, key=lambda y: vintage[y])
             out["worst_vintage"] = {"year": worst_year, "default_rate": vintage[worst_year]}
+
+        # WA-042: enrich queries with analyst aggregates (the Data Analyst's
+        # real computed stats) when available. Aggregates are whole-book
+        # computations but useful context even in segment-filtered queries.
+        if self._analyst_aggregates:
+            out["analyst_aggregates"] = _summarize_aggregates(self._analyst_aggregates)
         return out
 
     # ----------------------------------------------------------- lookup_account
@@ -180,4 +196,56 @@ def _jsonify_row(row: Dict[str, Any]) -> Dict[str, Any]:
             out[k] = v.decode("utf-8", "replace")
         else:
             out[k] = v
+    return out
+
+
+def _summarize_aggregates(aggregates: Dict[str, Any]) -> Dict[str, Any]:
+    """WA-042: extract citable summaries from the Data Analyst's aggregates.
+
+    Parses ``queries_run`` (the Data Analyst's function-calling log) and
+    extracts correlations, distributions, and feature aggregates into a
+    structured summary the Risk Auditor can cite as evidence.
+    """
+    import json as _json
+
+    out: Dict[str, Any] = {
+        "correlations": [],
+        "distributions": [],
+        "feature_aggregates": [],
+    }
+    queries = aggregates.get("queries_run", [])
+    if not isinstance(queries, list):
+        return out
+
+    for q in queries:
+        if not isinstance(q, dict):
+            continue
+        tool = q.get("tool", "")
+        reply = q.get("reply", "")
+        try:
+            data = _json.loads(reply) if isinstance(reply, str) else reply
+        except (ValueError, TypeError):
+            continue
+        if not isinstance(data, dict):
+            continue
+
+        if tool == "correlation" and "correlation" in data:
+            out["correlations"].append({
+                "a": data.get("a", "?"),
+                "b": data.get("b", "?"),
+                "correlation": data.get("correlation"),
+            })
+        elif tool == "distribution" and "median" in data or (tool == "distribution" and "mean" in data):
+            dist = {"column": data.get("column", "?")}
+            for k in ("n", "min", "max", "mean", "q1", "median", "q3"):
+                if k in data:
+                    dist[k] = data[k]
+            out["distributions"].append(dist)
+        elif tool == "build_feature" and "result" in data:
+            out["feature_aggregates"].append({
+                "feature": data.get("feature", "aggregate"),
+                "count": data.get("count", 0),
+                "result": data.get("result", []),
+            })
+
     return out

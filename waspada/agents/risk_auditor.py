@@ -212,10 +212,14 @@ class RiskAuditorAgent(Agent):
             self.step("audit_parse_fail", notes=f"unparsable reply: {raw[:80]!r}")
             return None
         view, confidence, claim, evidence = parsed
-        # Supplement thin LLM evidence with the hard feature facts the agent
-        # gathered, so an opened dispute always cites real numbers.
+        # WA-042: supplement thin LLM evidence with MCP-served analyst
+        # aggregates (the primary evidence path) first, then fall back to
+        # the per-account feature facts if those are also absent. The
+        # hardcoded ``_feature_facts`` is now a true fallback — the primary
+        # evidence comes from the MCP-served analyst aggregates when the
+        # Data Analyst's output is wired into the AnalyticsStore.
         if not evidence:
-            evidence = ctx["feature_facts"]
+            evidence = _mcp_evidence(ctx["portfolio_stats"]) or ctx["feature_facts"]
         return view, confidence, claim, evidence
 
     def _account_context(
@@ -470,7 +474,14 @@ def _seg_matches(seg: Any, product: str, region: str) -> bool:
 
 
 def _feature_facts(row: Dict[str, Any]) -> List[str]:
-    """Citeable feature facts for one account (the numbers a dispute references)."""
+    """Citeable feature facts for one account (the numbers a dispute references).
+
+    WA-042: This is now a FALLBACK. The primary evidence path is the MCP-served
+    analyst aggregates (see :func:`_mcp_evidence`). When the Data Analyst's
+    output is wired into the AnalyticsStore, the auditor cites those real
+    computed statistics first. This function only fires when the MCP path
+    returns no citable evidence (e.g. Data Analyst was skipped/blocked).
+    """
     facts: List[str] = []
     for key in ("payment_ratio", "outstanding_ratio", "dti", "rate", "loan_age"):
         if key in row and row[key] is not None:
@@ -483,4 +494,71 @@ def _feature_facts(row: Dict[str, Any]) -> List[str]:
         facts.append(f"delinquency_status={row['delinquency_status']}")
     if row.get("grade"):
         facts.append(f"grade={row['grade']}")
+    return facts
+
+
+def _mcp_evidence(stats: Optional[Dict[str, Any]]) -> List[str]:
+    """Extract citable evidence strings from MCP-served portfolio stats.
+
+    WA-042: When the Data Analyst's aggregates are wired into the
+    AnalyticsStore, ``portfolio_stats`` carries an ``analyst_aggregates``
+    key with real computed correlations, distributions, and feature
+    summaries. This function turns those into concise evidence strings
+    the Skeptic can cite in a dispute.
+
+    Returns an empty list when no analyst aggregates are present (the
+    caller falls back to per-account ``_feature_facts``).
+    """
+    if not isinstance(stats, dict) or not stats:
+        return []
+    agg = stats.get("analyst_aggregates")
+    if not isinstance(agg, dict) or not agg:
+        return []
+
+    facts: List[str] = []
+
+    # Cite correlations (the strongest cross-feature evidence).
+    for corr in agg.get("correlations", []):
+        if not isinstance(corr, dict):
+            continue
+        a = corr.get("a", "?")
+        b = corr.get("b", "?")
+        r = corr.get("correlation")
+        if r is not None:
+            try:
+                facts.append(f"corr({a},{b})={float(r):.2f}")
+            except (TypeError, ValueError):
+                pass
+
+    # Cite distribution summaries (quantiles, means).
+    for dist in agg.get("distributions", []):
+        if not isinstance(dist, dict):
+            continue
+        col = dist.get("column", "?")
+        median = dist.get("median")
+        mean = dist.get("mean")
+        if median is not None:
+            try:
+                facts.append(f"median({col})={float(median):.2f}")
+            except (TypeError, ValueError):
+                pass
+        elif mean is not None:
+            try:
+                facts.append(f"mean({col})={float(mean):.2f}")
+            except (TypeError, ValueError):
+                pass
+
+    # Cite feature aggregates (the Data Analyst's build_feature explorations).
+    for fa in agg.get("feature_aggregates", []):
+        if not isinstance(fa, dict):
+            continue
+        results = fa.get("result", [])
+        if isinstance(results, list):
+            for row in results[:3]:  # cap at 3 to keep evidence concise
+                if isinstance(row, dict):
+                    parts = [f"{k}={v}" for k, v in row.items()
+                             if not isinstance(v, (list, dict))]
+                    if parts:
+                        facts.append("; ".join(parts))
+
     return facts

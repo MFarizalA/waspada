@@ -246,6 +246,21 @@ def train(
     }
 
 
+def _try_outstanding_principal(features: pa.Table):
+    """WA-024: reconstruct outstanding_principal from the FeatureFrame.
+
+    outstanding_principal = outstanding_ratio × amount (when both columns
+    exist). Returns a pyarrow array, or None if either column is absent.
+    """
+    try:
+        op_ratio = features.column("outstanding_ratio").to_pylist()
+        amounts = features.column("amount").to_pylist()
+    except (KeyError, ValueError):
+        return None
+    vals = [float(r or 0.0) * float(a or 0.0) for r, a in zip(op_ratio, amounts)]
+    return pa.array(vals, type=pa.float64())
+
+
 # --------------------------------------------------------------------------- #
 # predict — ScoredAccounts-shaped output with p_default + risk-level band.
 # --------------------------------------------------------------------------- #
@@ -331,6 +346,11 @@ def predict(model: Dict, features: pa.Table) -> pa.Table:
         .append_column("delinquency_status", features.column("delinquency_status"))
         .append_column("label_default", features.column("label_default"))
     )
+    # WA-024: carry forward outstanding_principal for Expected Loss computation.
+    # Reconstructed from outstanding_ratio × amount if both are present.
+    op = _try_outstanding_principal(features)
+    if op is not None:
+        scored = scored.append_column("outstanding_principal", op)
     validate_table(scored, ScoredAccounts, name="predict(scored)")
     return scored
 

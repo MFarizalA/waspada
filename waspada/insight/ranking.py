@@ -34,12 +34,19 @@ __all__ = [
     "ACTION_BY_BAND",
     "DEFAULT_NPL_THRESHOLD",
     "DEFAULT_VINTAGE_THRESHOLD",
+    "EXPECTED_LOSS_LGD",
     "rank",
     "segment_health",
     "alerts",
     "to_dashboard_payload",
     "summarize_alerts",
 ]
+
+# WA-024: Loss Given Default assumption for Expected Loss (PD × LGD × EAD).
+# 45% is the Basel foundation-IRB benchmark for unsecured consumer credit —
+# labeled as an assumption, not measured. EAD = outstanding_principal
+# (defensible for amortizing installment loans; no revolving/undrawn component).
+EXPECTED_LOSS_LGD = 0.45
 
 # Recommended action by risk level. "Very High" → call; "Medium"/"High" →
 # watch; "Very Low"/"Low" → auto-cure. Keys are the frozen
@@ -84,6 +91,10 @@ def rank(scored: pa.Table, top_n: int = 50) -> List[Dict[str, object]]:
     segments = scored.column("segment").to_pylist()
     actions_in = scored.column("recommended_action").to_pylist()
 
+    # WA-024: optional outstanding_principal for Expected Loss computation.
+    op_col = _safe_get(scored, "outstanding_principal")
+    outstanding = op_col.to_pylist() if op_col is not None else None
+
     # Sort indices by (p_default desc, loan_id asc) for determinism.
     order = sorted(range(n), key=lambda i: (-probs[i], str(loan_ids[i])))
     top = order[: max(0, int(top_n))]
@@ -93,13 +104,17 @@ def rank(scored: pa.Table, top_n: int = 50) -> List[Dict[str, object]]:
         band = bands[i]
         action = ACTION_BY_BAND.get(band, actions_in[i] or "watch")
         seg = segments[i]
-        out.append({
+        rec: Dict[str, object] = {
             "loan_id": loan_ids[i],
             "p_default": float(probs[i]),
             "score_band": band,
             "segment": {"product": seg.get("product", ""), "region": seg.get("region", "")} if isinstance(seg, dict) else {"product": "", "region": ""},
             "recommended_action": action,
-        })
+        }
+        # WA-024: additive optional — only present when outstanding_principal exists.
+        if outstanding is not None:
+            rec["expected_loss"] = float(probs[i]) * EXPECTED_LOSS_LGD * float(outstanding[i] or 0.0)
+        out.append(rec)
     return out
 
 
@@ -112,6 +127,23 @@ def _safe_get(scored: pa.Table, name: str) -> Optional[pa.Array]:
         return scored.column(name)
     except (KeyError, ValueError):
         return None
+
+
+def _portfolio_expected_loss(scored: pa.Table) -> Dict[str, float]:
+    """WA-024: portfolio total Expected Loss (PD × LGD × EAD).
+
+    Returns ``{"expected_loss": total}`` when ``outstanding_principal`` is
+    present, or ``{}`` (omits the key entirely) when absent — so older
+    payloads without it stay valid.
+    """
+    op_col = _safe_get(scored, "outstanding_principal")
+    if op_col is None:
+        return {}
+    probs = scored.column("p_default").to_pylist()
+    outstanding = op_col.to_pylist()
+    total = sum(float(p) * EXPECTED_LOSS_LGD * float(op or 0.0)
+                for p, op in zip(probs, outstanding))
+    return {"expected_loss": total}
 
 
 def segment_health(scored: pa.Table) -> PortfolioHealth:
@@ -166,6 +198,7 @@ def segment_health(scored: pa.Table) -> PortfolioHealth:
         "npl_ratio": float(npl),
         "vintage_default_rate": vintage,
         "status_mix": status_mix,
+        **_portfolio_expected_loss(scored),
     }
 
 
@@ -246,6 +279,9 @@ def to_dashboard_payload(
             "npl_ratio": float(health["npl_ratio"]),
             "vintage_default_rate": {str(k): float(v) for k, v in health["vintage_default_rate"].items()},
             "status_mix": {str(k): float(v) for k, v in health["status_mix"].items()},
+            # WA-024: forward expected_loss when present (additive optional).
+            **({"expected_loss": float(health["expected_loss"])}
+               if "expected_loss" in health else {}),
         },
         "alerts": list(alert_list),
     }

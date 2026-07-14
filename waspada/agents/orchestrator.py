@@ -247,6 +247,12 @@ class Orchestrator(Agent):
                     frm=prev_agent.name, to=agent.name, result=res, rationale=rationale,
                 ))
 
+            # WA-042: after risk_model scores the book (and before the
+            # auditor runs), wire the Data Analyst's aggregates into the
+            # auditor's MCP client so it cites real computed statistics.
+            if agent.name == "risk_model" and res.ok:
+                self._wire_analyst_aggregates(ctx)
+
             # After the auditor opens disputes (and before insight consumes
             # them), run the 3-round debate resolution. This is the WA-016
             # seam: the dispute list is live on data_handles["risk_disputes"]
@@ -307,6 +313,41 @@ class Orchestrator(Agent):
         )
 
     # ----------------------------------------------- dispute resolution (WA-016)
+    def _wire_analyst_aggregates(self, ctx: AgentContext) -> None:
+        """WA-042: wire Data Analyst aggregates into the auditor's MCP client.
+
+        After risk_model scores the book, check if the Data Analyst produced
+        ``analyst_aggregates``. If so, create or enrich an ``InProcessClient``
+        and attach it to the auditor so its evidence cites real computed
+        statistics (correlations, distributions) instead of falling back to
+        hardcoded feature facts.
+
+        Falls back silently when aggregates or scored table are absent.
+        """
+        try:
+            from ..mcp.client import InProcessClient
+        except ImportError:
+            return
+
+        aggregates = ctx.data_handles.get("analyst_aggregates")
+        scored = ctx.data_handles.get("scored_accounts")
+        features = ctx.data_handles.get("feature_frame")
+        if not aggregates or scored is None:
+            return
+
+        # Find the auditor agent in the pipeline.
+        auditor = None
+        for agent in (self._pipeline_agents or []):
+            if getattr(agent, "name", "") == "risk_auditor":
+                auditor = agent
+                break
+        if auditor is None:
+            return
+
+        client = InProcessClient(scored, features, aggregates)
+        auditor.attach_mcp(client)
+        self.step("mcp_wired", notes=f"analyst_aggregates → auditor MCP ({len(aggregates.get('queries_run', []))} queries)")
+
     def _resolve_disputes(self, ctx: AgentContext) -> None:
         """Run the 3-round debate on every open dispute the auditor opened.
 
