@@ -61,6 +61,20 @@ variable "rds_security_ips" {
   default     = ["172.16.0.0/12"]
 }
 
+variable "dashscope_api_key" {
+  description = "Qwen Cloud / DashScope API key. Pass via TF_VAR_dashscope_api_key or secrets.tfvars. NEVER commit."
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
+variable "waspada_jwt_secret" {
+  description = "JWT signing secret (min 32 bytes). Generate with: python -c \"import secrets; print(secrets.token_urlsafe(32))\". NEVER commit."
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
 # ---------------------------------------------------------------------------
 # OpenTofu auto-loads *.auto.tfvars or any *.tfvars passed via -var-file.
 # The convention here is: copy deploy/iac/secrets.tfvars.example -> secrets.tfvars,

@@ -18,14 +18,14 @@ def test_defaults_when_env_missing(monkeypatch):
     ):
         monkeypatch.delenv(var, raising=False)
     cfg = load_config()
-    assert cfg == Config(
-        oss_raw_bucket="",
-        oss_staging_bucket="",
-        oss_mart_bucket="",
-        oss_endpoint="",
-        oss_key="",
-        lane="collections",
-    )
+    # Compare field-by-field (not ==) — importlib.reload in another test can
+    # create a stale Config class reference, breaking identity-based __eq__.
+    assert cfg.lane == "collections"
+    assert cfg.oss_raw_bucket == ""
+    assert cfg.oss_staging_bucket == ""
+    assert cfg.oss_mart_bucket == ""
+    assert cfg.oss_endpoint == ""
+    assert cfg.oss_key == ""
 
 
 def test_lane_switch_collections(monkeypatch):
