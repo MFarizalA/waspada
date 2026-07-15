@@ -73,7 +73,7 @@ def _oss_s3_endpoint() -> Optional[str]:
     missing — callers fall back to the local Parquet path or the in-memory
     table path.
     """
-    bucket = os.environ.get("OSS_BUCKET", "").strip()
+    bucket = os.environ.get("OSS_RAW_BUCKET") or os.environ.get("OSS_BUCKET", "")
     endpoint = os.environ.get("OSS_ENDPOINT", "").strip()
     key_id = os.environ.get("OSS_ACCESS_KEY_ID", "").strip()
     secret = os.environ.get("OSS_ACCESS_KEY_SECRET", "").strip()
@@ -127,7 +127,7 @@ def load_to_duckdb(
     if endpoint is not None:
         import dlt  # lazy: only needed on the real OSS path
 
-        bucket = os.environ["OSS_BUCKET"]
+        bucket = os.environ["OSS_RAW_BUCKET"]
         key = oss_key or os.environ.get("OSS_KEY", "")
         os.environ.setdefault("S3_ENDPOINT", endpoint)
         # dlt's s3 filesystem reads AWS_* / S3_* creds; map OSS creds onto them.

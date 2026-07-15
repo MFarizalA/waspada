@@ -7,8 +7,9 @@ simple truthiness checks, and raises ``ValueError`` for an invalid lane so a
 typo fails loudly instead of silently picking a lane.
 
 Vars (see ``.env.example``):
-  * ``OSS_BUCKET``, ``OSS_ENDPOINT``, ``OSS_KEY`` — Alibaba Cloud OSS location
-    of the committed loan-portfolio Parquet object.
+  * ``OSS_RAW_BUCKET``, ``OSS_STAGING_BUCKET``, ``OSS_MART_BUCKET``,
+    ``OSS_ENDPOINT``, ``OSS_KEY`` — Alibaba Cloud OSS location of the committed
+    loan-portfolio Parquet object (three-bucket medallion, WA-057).
   * ``WASPADA_LANE`` — decision lane: ``collections`` (default) or ``origination``.
 """
 from __future__ import annotations
@@ -37,15 +38,17 @@ class Config:
     """
 
     lane: str
-    oss_bucket: str
+    oss_raw_bucket: str
+    oss_staging_bucket: str
+    oss_mart_bucket: str
     oss_endpoint: str
     oss_key: str
 
     def require_oss(self) -> "Config":
-        """Return self if OSS is fully configured, else raise RuntimeError."""
-        if not (self.oss_bucket and self.oss_endpoint and self.oss_key):
+        """Return self if OSS Raw is fully configured, else raise RuntimeError."""
+        if not (self.oss_raw_bucket and self.oss_endpoint and self.oss_key):
             raise RuntimeError(
-                "OSS not configured: set OSS_BUCKET, OSS_ENDPOINT, OSS_KEY "
+                "OSS not configured: set OSS_RAW_BUCKET, OSS_ENDPOINT, OSS_KEY "
                 "(see .env.example)."
             )
         return self
@@ -69,7 +72,9 @@ def load_config() -> Config:
     """
     return Config(
         lane=_resolve_lane(),
-        oss_bucket=os.environ.get("OSS_BUCKET", ""),
+        oss_raw_bucket=os.environ.get("OSS_RAW_BUCKET", os.environ.get("OSS_BUCKET", "")),
+        oss_staging_bucket=os.environ.get("OSS_STAGING_BUCKET", ""),
+        oss_mart_bucket=os.environ.get("OSS_MART_BUCKET", ""),
         oss_endpoint=os.environ.get("OSS_ENDPOINT", ""),
         oss_key=os.environ.get("OSS_KEY", ""),
     )

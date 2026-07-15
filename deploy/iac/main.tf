@@ -19,22 +19,64 @@ provider "alicloud" {
 }
 
 # ---------------------------------------------------------------------------
-# OSS bucket — loan-portfolio Parquet data store (WA-018/WA-023)
-# ACL is split out (inline `acl` deprecated since provider 1.220).
+# OSS buckets — three-bucket medallion architecture (WA-057)
+# Raw (Bronze): immutable source Parquet, never rewritten by agents.
+# Staging (Silver): lane-specific curated views (FeatureFrame, quality reports).
+# Mart (Gold): serving layer — scored accounts, dashboard payloads, audit trail.
+# Each bucket is physically isolated: separate RAM policies, lifecycle rules.
 # ---------------------------------------------------------------------------
-resource "alicloud_oss_bucket" "loans" {
-  bucket = "${local.name_prefix}-loans"
+
+# --- Raw (Bronze) — immutable source -----------------------------------------
+resource "alicloud_oss_bucket" "raw" {
+  bucket = "${local.name_prefix}-raw"
 
   tags = {
     Project     = var.namespace
     Environment = var.environment
     ManagedBy   = "opentofu"
-    Component   = "loans-oss"
+    Component   = "raw-bronze"
+    Zone        = "raw"
   }
 }
 
-resource "alicloud_oss_bucket_acl" "loans" {
-  bucket = alicloud_oss_bucket.loans.bucket
+resource "alicloud_oss_bucket_acl" "raw" {
+  bucket = alicloud_oss_bucket.raw.bucket
+  acl    = "private"
+}
+
+# --- Staging (Silver) — curated lane views -----------------------------------
+resource "alicloud_oss_bucket" "staging" {
+  bucket = "${local.name_prefix}-staging"
+
+  tags = {
+    Project     = var.namespace
+    Environment = var.environment
+    ManagedBy   = "opentofu"
+    Component   = "staging-silver"
+    Zone        = "staging"
+  }
+}
+
+resource "alicloud_oss_bucket_acl" "staging" {
+  bucket = alicloud_oss_bucket.staging.bucket
+  acl    = "private"
+}
+
+# --- Mart (Gold) — serving layer ---------------------------------------------
+resource "alicloud_oss_bucket" "mart" {
+  bucket = "${local.name_prefix}-mart"
+
+  tags = {
+    Project     = var.namespace
+    Environment = var.environment
+    ManagedBy   = "opentofu"
+    Component   = "mart-gold"
+    Zone        = "mart"
+  }
+}
+
+resource "alicloud_oss_bucket_acl" "mart" {
+  bucket = alicloud_oss_bucket.mart.bucket
   acl    = "private"
 }
 
@@ -82,7 +124,7 @@ resource "alicloud_ram_role" "fc_execution" {
 JSON
 }
 
-# Allow FC to read from the OSS bucket (loans.parquet)
+# Allow FC to read from the Raw bucket (immutable source — agents never write here)
 resource "alicloud_ram_policy" "fc_oss_read" {
   policy_name     = "${local.name_prefix}-fc-oss-read"
   policy_document = <<JSON
@@ -98,8 +140,8 @@ resource "alicloud_ram_policy" "fc_oss_read" {
         "oss:GetBucketInfo"
       ],
       "Resource": [
-        "acs:oss:*:*:${alicloud_oss_bucket.loans.bucket}",
-        "acs:oss:*:*:${alicloud_oss_bucket.loans.bucket}/*"
+        "acs:oss:*:*:${alicloud_oss_bucket.raw.bucket}",
+        "acs:oss:*:*:${alicloud_oss_bucket.raw.bucket}/*"
       ]
     }
   ]
@@ -110,6 +152,40 @@ JSON
 resource "alicloud_ram_role_policy_attachment" "fc_oss_read" {
   role_name   = alicloud_ram_role.fc_execution.role_name
   policy_name = alicloud_ram_policy.fc_oss_read.policy_name
+  policy_type = "Custom"
+}
+
+# Allow FC to write to Staging + Mart (curated views + serving layer)
+resource "alicloud_ram_policy" "fc_oss_write" {
+  policy_name     = "${local.name_prefix}-fc-oss-write"
+  policy_document = <<JSON
+{
+  "Version": "1",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": [
+        "oss:GetObject",
+        "oss:PutObject",
+        "oss:DeleteObject",
+        "oss:ListObjects",
+        "oss:GetBucketInfo"
+      ],
+      "Resource": [
+        "acs:oss:*:*:${alicloud_oss_bucket.staging.bucket}",
+        "acs:oss:*:*:${alicloud_oss_bucket.staging.bucket}/*",
+        "acs:oss:*:*:${alicloud_oss_bucket.mart.bucket}",
+        "acs:oss:*:*:${alicloud_oss_bucket.mart.bucket}/*"
+      ]
+    }
+  ]
+}
+JSON
+}
+
+resource "alicloud_ram_role_policy_attachment" "fc_oss_write" {
+  role_name   = alicloud_ram_role.fc_execution.role_name
+  policy_name = alicloud_ram_policy.fc_oss_write.policy_name
   policy_type = "Custom"
 }
 
@@ -241,6 +317,18 @@ resource "alicloud_fcv3_function" "api" {
     CAPort           = "8080"
     PYTHONPATH       = "/app"
     PYTHONUNBUFFERED = "1"
+    # WA-018: runtime credentials for the FC function
+    WASPADA_ENV           = "prod"
+    DASHSCOPE_API_KEY     = var.dashscope_api_key
+    WASPADA_JWT_SECRET    = var.waspada_jwt_secret
+    OSS_RAW_BUCKET        = "${local.name_prefix}-raw"
+    OSS_STAGING_BUCKET    = "${local.name_prefix}-staging"
+    OSS_MART_BUCKET       = "${local.name_prefix}-mart"
+    OSS_ENDPOINT          = "oss-ap-southeast-1.aliyuncs.com"
+    OSS_KEY               = "loans.parquet"
+    OSS_ACCESS_KEY_ID     = var.access_key
+    OSS_ACCESS_KEY_SECRET = var.secret_key
+    DATABASE_URL          = "postgres://waspada:${var.rds_password}@${alicloud_db_instance.auth.connection_string}:5432/waspada"
   }
 
   tags = {

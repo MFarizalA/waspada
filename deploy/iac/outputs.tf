@@ -9,19 +9,29 @@ output "fc_function_name" {
   value       = alicloud_fcv3_function.api.function_name
 }
 
-output "oss_bucket_name" {
-  description = "OSS bucket holding loans.parquet."
-  value       = alicloud_oss_bucket.loans.bucket
+output "oss_raw_bucket_name" {
+  description = "OSS Raw (Bronze) bucket — immutable source (loans.parquet)."
+  value       = alicloud_oss_bucket.raw.bucket
+}
+
+output "oss_staging_bucket_name" {
+  description = "OSS Staging (Silver) bucket — curated lane views."
+  value       = alicloud_oss_bucket.staging.bucket
+}
+
+output "oss_mart_bucket_name" {
+  description = "OSS Mart (Gold) bucket — serving layer for agents + dashboard."
+  value       = alicloud_oss_bucket.mart.bucket
 }
 
 output "oss_endpoint_internal" {
-  description = "OSS internal endpoint (use from within Alibaba Cloud / FC)."
-  value       = alicloud_oss_bucket.loans.intranet_endpoint
+  description = "OSS internal endpoint (use from within Alibaba Cloud / FC). All three buckets share the same endpoint."
+  value       = alicloud_oss_bucket.raw.intranet_endpoint
 }
 
 output "oss_endpoint_public" {
-  description = "OSS public endpoint."
-  value       = alicloud_oss_bucket.loans.extranet_endpoint
+  description = "OSS public endpoint. All three buckets share the same endpoint."
+  value       = alicloud_oss_bucket.raw.extranet_endpoint
 }
 
 output "acr_registry_domain" {

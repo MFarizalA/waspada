@@ -35,14 +35,9 @@ _RAW_LOANS_COLUMNS: tuple[str, ...] = tuple(f.name for f in dataclasses.fields(R
 
 
 def _creds_configured() -> bool:
-    """True iff the OSS bucket/endpoint/key + AccessKey pair are all set.
-
-    We check the AccessKey env vars are *set* (not that they're valid) so a
-    misconfigured key still fails loudly at fetch time with the SDK's own
-    auth error, rather than a confusing error from this gate.
-    """
+    """True iff the OSS Raw bucket/endpoint/key + AccessKey pair are all set."""
     return bool(
-        os.environ.get("OSS_BUCKET")
+        (os.environ.get("OSS_RAW_BUCKET") or os.environ.get("OSS_BUCKET"))
         and os.environ.get("OSS_ENDPOINT")
         and os.environ.get("OSS_KEY")
         and os.environ.get("OSS_ACCESS_KEY_ID")
@@ -54,7 +49,7 @@ class OSSClient:
     """Thin wrapper over ``oss2`` returning Arrow tables from a committed
     Parquet object (the loan-portfolio snapshot) in Alibaba Cloud OSS.
 
-    Built from the ``OSS_BUCKET``/``OSS_ENDPOINT`` env vars. :meth:`fetch_loans`
+    Built from the ``OSS_RAW_BUCKET``/``OSS_ENDPOINT`` env vars. :meth:`fetch_loans`
     downloads the object, reads it as Parquet, and returns Arrow. There is no
     server-side query — the whole object is the "table" — so ``limit`` is
     applied client-side after the read, not pushed down.
@@ -63,7 +58,7 @@ class OSSClient:
     def __init__(self, config: Optional[Config] = None, *, _bucket: Any = None) -> None:
         if not _creds_configured():
             raise RuntimeError(
-                "OSS credentials not configured: set OSS_BUCKET, OSS_ENDPOINT, "
+                "OSS credentials not configured: set OSS_RAW_BUCKET, OSS_ENDPOINT, "
                 "OSS_KEY, OSS_ACCESS_KEY_ID, OSS_ACCESS_KEY_SECRET (see .env.example)."
             )
         self._cfg = config or load_config()
@@ -77,8 +72,10 @@ class OSSClient:
             auth = oss2.Auth(
                 os.environ["OSS_ACCESS_KEY_ID"], os.environ["OSS_ACCESS_KEY_SECRET"]
             )
+            # WA-057: read from the Raw bucket (Bronze layer).
+            raw_bucket = os.environ.get("OSS_RAW_BUCKET") or os.environ.get("OSS_BUCKET", "")
             self._bucket = oss2.Bucket(
-                auth, os.environ["OSS_ENDPOINT"], self._cfg.oss_bucket
+                auth, os.environ["OSS_ENDPOINT"], raw_bucket
             )
 
     # ------------------------------------------------------------------ core

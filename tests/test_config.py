@@ -10,11 +10,18 @@ from waspada import config as config_mod
 from waspada.config import Config, load_config
 
 
-def test_defaults_when_env_missing():
+def test_defaults_when_env_missing(monkeypatch):
     """With no env, load_config returns empty OSS fields + lane=collections."""
+    for var in (
+        "OSS_BUCKET", "OSS_RAW_BUCKET", "OSS_STAGING_BUCKET", "OSS_MART_BUCKET",
+        "OSS_ENDPOINT", "OSS_KEY",
+    ):
+        monkeypatch.delenv(var, raising=False)
     cfg = load_config()
     assert cfg == Config(
-        oss_bucket="",
+        oss_raw_bucket="",
+        oss_staging_bucket="",
+        oss_mart_bucket="",
         oss_endpoint="",
         oss_key="",
         lane="collections",
@@ -43,13 +50,13 @@ def test_lane_is_case_insensitive(monkeypatch):
 
 
 def test_env_vars_flow_through(monkeypatch):
-    monkeypatch.setenv("OSS_BUCKET", "bucket")
+    monkeypatch.setenv("OSS_RAW_BUCKET", "waspada-prod-raw")
     monkeypatch.setenv("OSS_ENDPOINT", "oss-ap-southeast-1.aliyuncs.com")
-    monkeypatch.setenv("OSS_KEY", "collections/loans.parquet")
+    monkeypatch.setenv("OSS_KEY", "loans.parquet")
     cfg = load_config()
-    assert cfg.oss_bucket == "bucket"
+    assert cfg.oss_raw_bucket == "waspada-prod-raw"
     assert cfg.oss_endpoint == "oss-ap-southeast-1.aliyuncs.com"
-    assert cfg.oss_key == "collections/loans.parquet"
+    assert cfg.oss_key == "loans.parquet"
 
 
 def test_module_level_config_reloadable(monkeypatch):
