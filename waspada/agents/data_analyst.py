@@ -376,7 +376,23 @@ def _check_column_allowlist(sql: str) -> Optional[str]:
     isn't in the FeatureFrame / RawLoans column contract. This is deliberately
     conservative — it may reject exotic but valid SQL, but the Data Analyst's
     tools should only ever query the known feature set.
+
+    WA-045: column aliases introduced via ``AS <name>`` inside the query (e.g.
+    ``AVG(dti) AS avg_dti``) and subquery aliases (``FROM (...) sub``) are
+    recognised as locally-defined names so they don't trip the allowlist.
     """
+    # Collect locally-defined aliases: ``AS <ident>`` (column aliases) and
+    # ``) <ident>`` trailing a subquery (table aliases). These are names the
+    # query itself invents, so referencing them is safe.
+    local_aliases: set[str] = set()
+    # AS aliases — ``AS foo`` or ``AS "foo"`` (case-insensitive).
+    for m in re.finditer(r'\bAS\s+(?:"([^"]+)"|([A-Za-z_][A-Za-z0-9_]*))', sql, re.IGNORECASE):
+        local_aliases.add((m.group(1) or m.group(2)).strip().lower())
+    # Subquery table aliases — ``) sub`` at the end of a derived table.
+    # Match a closing paren followed by whitespace and a bare identifier.
+    for m in re.finditer(r'\)\s+([A-Za-z_][A-Za-z0-9_]*)', sql):
+        local_aliases.add(m.group(1).strip().lower())
+
     # Tokenize: match identifiers (including dotted refs like table.col and
     # quoted identifiers like "col"). Numbers and strings are ignored.
     # Pattern: word chars, dots, and quoted identifiers.
@@ -393,6 +409,8 @@ def _check_column_allowlist(sql: str) -> Optional[str]:
         if ident in _SQL_NON_COLUMN_KEYWORDS:
             continue
         if ident in _ALLOWED_COLUMNS:
+            continue
+        if ident in local_aliases:
             continue
         # Numeric-looking tokens (e.g. quantile params) are not identifiers.
         if ident.isdigit() or ident.replace(".", "", 1).isdigit():

@@ -228,6 +228,13 @@ class QwenLLM(LLM):
     DEFAULT_MODEL = "qwen3.7-plus"
     DEFAULT_BASE_URL = "https://dashscope-intl.aliyuncs.com/compatible-mode/v1"
 
+    # WA-045 egress control — the only domains QwenLLM is ever allowed to call.
+    # Both the intl (dashscope-intl) and CN (dashscope) variants are valid.
+    _ALLOWED_BASE_DOMAINS = (
+        "dashscope.aliyuncs.com",       # CN endpoint
+        "dashscope-intl.aliyuncs.com",  # international endpoint
+    )
+
     def __init__(
         self,
         api_key: Optional[str] = None,
@@ -242,6 +249,24 @@ class QwenLLM(LLM):
                 "QwenLLM needs DASHSCOPE_API_KEY (see .env.example); for offline "
                 "runs use MockLLM or set WASPADA_LLM_PROVIDER=mock."
             )
+
+        # WA-045: validate base_url against the DashScope allowlist BEFORE
+        # creating the client. Both the explicit param and the env override
+        # are checked — a prompt injection that flips DASHSCOPE_BASE_URL to
+        # an attacker-controlled host must be rejected at construction.
+        resolved_base = (
+            base_url
+            or os.environ.get("DASHSCOPE_BASE_URL")
+            or self.DEFAULT_BASE_URL
+        )
+        if not any(d in (resolved_base or "") for d in self._ALLOWED_BASE_DOMAINS):
+            raise ValueError(
+                f"Blocked: QwenLLM base_url must contain "
+                f"{' or '.join(self._ALLOWED_BASE_DOMAINS)!r} (got {resolved_base!r}). "
+                f"This is an egress control (WA-045) — loan data must only "
+                f"be sent to dashscope.aliyuncs.com."
+            )
+
         try:
             from openai import OpenAI  # type: ignore
         except ImportError as exc:  # pragma: no cover - exercised only with SDK absent
@@ -252,7 +277,7 @@ class QwenLLM(LLM):
 
         self._client = OpenAI(
             api_key=api_key,
-            base_url=base_url or os.environ.get("DASHSCOPE_BASE_URL") or self.DEFAULT_BASE_URL,
+            base_url=resolved_base,
         )
         self.model_name = model or os.environ.get("QWEN_MODEL") or self.DEFAULT_MODEL
         self.json_mode = json_mode
