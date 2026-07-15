@@ -190,7 +190,7 @@ def test_stream_scripted_debate_emits_rounds_resolution_done(client, token, monk
 
 
 def test_stream_scripted_multiple_disputes_one_resolution_each(client, token, monkeypatch):
-    """Four disputes → each gets its own resolution, then done."""
+    """Several disputes → each gets exactly one resolution, then done."""
     n = 4
     scripted = _debate_brain_script(n_disputes=n)
     orig_build = main_mod._build_demo_orchestrator
@@ -208,7 +208,16 @@ def test_stream_scripted_multiple_disputes_one_resolution_each(client, token, mo
     events = _parse_sse(r.text)
 
     types = [e.get("type") for e in events]
-    assert types.count("resolution") == n
+    # ONE resolution per dispute — the invariant. (Pre WA-049 this asserted
+    # exactly ``n``, which held only because audit_k=n and every audited account
+    # was top-K/"Very High" and so always disputed. The slice is now stratified,
+    # so some audited accounts legitimately agree with the model and open no
+    # dispute. What must never break is the 1:1 pairing.)
+    resolved_ids = [e["loan_id"] for e in events if e.get("type") == "resolution"]
+    disputed_ids = {e["loan_id"] for e in events if e.get("type") == "round"}
+    assert 1 <= len(resolved_ids) <= n
+    assert len(resolved_ids) == len(set(resolved_ids)), "a dispute resolved twice"
+    assert set(resolved_ids) == disputed_ids, "every dispute resolves exactly once"
     assert types[-1] == "done"
 
     # Every resolution has a real loan_id and a valid terminal state.

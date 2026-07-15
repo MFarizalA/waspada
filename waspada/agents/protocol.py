@@ -178,6 +178,22 @@ class Dispute:
     ``"overridden"`` (risk_model conceded the auditor's critique), or
     ``"escalated_approved"`` / ``"escalated_rejected"`` (unresolved after the
     bounded rounds, sent to the human :class:`~waspada.agents.base.ApprovalGate`).
+
+    WA-048 — the adjudication fields. A resolution alone is a *verdict*; these
+    two are what make it a *decision*:
+
+    * ``revised_band`` — the risk level the society rules the account should
+      carry (a :data:`~waspada.schema.RISK_LEVELS` value), set when the debate
+      goes against the model. Empty when the model's band stands.
+    * ``applied`` — whether that revision actually reached the work-list. An
+      **escalation** (society raises risk) applies automatically; a
+      **de-escalation** (society cancels a collector call) applies only on a
+      human ``escalated_approved``, because the failure modes are asymmetric —
+      a wasted call is cheap, a missed default is not.
+
+    ``model_band`` and the account's ``p_default`` are never rewritten: the
+    model's score is the auditable fact, the revision is a reason-coded override
+    on top of it.
     """
 
     loan_id: str
@@ -188,6 +204,8 @@ class Dispute:
     rationale: str = ""
     model_band: str = ""
     auditor_view: str = ""
+    revised_band: str = ""
+    applied: bool = False
 
     @staticmethod
     def round_to_dict(r: "DisputeRound") -> Dict[str, Any]:
@@ -214,4 +232,6 @@ class Dispute:
             "resolution": self.resolution,
             "resolved_by": self.resolved_by,
             "rationale": self.rationale,
+            "revised_band": self.revised_band,
+            "applied": self.applied,
         }

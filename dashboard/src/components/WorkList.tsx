@@ -3,7 +3,7 @@ import type { ScoredAccount } from "@/types";
 import { segmentLabel, idr } from "@/lib/format";
 import { useI18n } from "@/lib/i18n";
 import { ActionBadge } from "@/components/ActionBadge";
-import { BandBadge, ScoreText } from "@/components/BandBadge";
+import { BandCell, ScoreText } from "@/components/BandBadge";
 import styles from "./WorkList.module.css";
 
 type SortDir = "asc" | "desc";
@@ -31,11 +31,13 @@ const TOP_N_OPTIONS = [10, 25, 50, 100] as const;
  * to ASC to surface the clean tail.
  *
  * Rows whose loan_id the Agent Society disputed are flagged "contested" — a pill
- * that, when present, jumps to the matching debate card. The contest marker
- * makes the audit/review outcome visible at a glance (e.g. an "Overridden" row
- * no longer reads as a plain collector call). NOTE: the row's
- * `recommended_action` itself is the frozen backend field (WA-006); reflecting
- * the debate's resolved action in the work-list is a backend change (WA-014).
+ * that, when present, jumps to the matching debate card.
+ *
+ * WA-048 closed the loop: when the society overruled the model, `recommended_action`
+ * and `final_band` already reflect the ruling (the backend adjudicates before the
+ * payload is built), and the band cell (`BandCell`) shows the model→final
+ * transition. An overridden row therefore no longer reads as a plain collector
+ * call — the change is in the data, not just a marker.
  */
 export function WorkList({ accounts, contestedLoanIds, onSelectAccount, onJumpToDebate }: WorkListProps) {
   const { t } = useI18n();
@@ -137,7 +139,7 @@ export function WorkList({ accounts, contestedLoanIds, onSelectAccount, onJumpTo
                 <td className={styles.loanId}>{account.loan_id}</td>
                 <td className={styles.segment}>{segmentLabel(account.segment)}</td>
                 <td className={styles.score}><ScoreText account={account} /></td>
-                <td className={styles.band}><BandBadge band={account.score_band} /></td>
+                <td className={styles.band}><BandCell account={account} /></td>
                 {showEl && (
                   <td className={styles.el}>
                     {typeof account.expected_loss === "number"

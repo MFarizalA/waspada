@@ -117,6 +117,10 @@ const EN: Dict = {
   "band.val.Very High": "Very High",
   // FICO-style pairing: "{score} ({level})" -> e.g. "0.91 (Very High)".
   "band.paired": "{score} ({level})",
+  // WA-048 — the Agent Society's override, shown in the work-list band cell.
+  "band.override.aria": "Model rated {from}; the Agent Society ruled {to}",
+  "band.override.title": "Overridden by the Agent Society: {from} → {to}. {reason}",
+  "band.override.model": "was {from}",
 
   // --- agent dialogue ---
   "ad.title": "Agent Society · Risk Debate",
@@ -284,6 +288,10 @@ const ZH: Dict = {
   "band.val.Very High": "极高",
   // FICO-style pairing: "{score}（{level}）" -> e.g. "0.91（极高）" (full-width parens, CJK convention).
   "band.paired": "{score}（{level}）",
+  // WA-048 — 智能体协作社会的改判，显示在工作清单评级列。
+  "band.override.aria": "模型评级为 {from}；智能体社会改判为 {to}",
+  "band.override.title": "经智能体社会改判：{from} → {to}。{reason}",
+  "band.override.model": "原为 {from}",
 
   // --- agent dialogue ---
   "ad.title": "智能体协作 · 风险辩论",

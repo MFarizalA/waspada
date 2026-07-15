@@ -5,7 +5,7 @@ import { segmentLabel } from "@/lib/format";
 import { useI18n } from "@/lib/i18n";
 import { riskLevelColor, riskLevelDisplay } from "@/lib/riskLevel";
 import { ActionBadge } from "@/components/ActionBadge";
-import { BandBadge } from "@/components/BandBadge";
+import { BandCell } from "@/components/BandBadge";
 import styles from "./AccountDrawer.module.css";
 
 interface AccountDrawerProps {
@@ -105,7 +105,7 @@ export function AccountDrawer({ account, onClose }: AccountDrawerProps) {
             </div>
             <div className={styles.detailItem}>
               <dt>{t("dr.band")}</dt>
-              <dd><BandBadge band={account.score_band} /></dd>
+              <dd><BandCell account={account} /></dd>
             </div>
           </dl>
         </div>

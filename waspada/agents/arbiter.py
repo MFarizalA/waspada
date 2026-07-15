@@ -20,6 +20,13 @@ The orchestrator maps the arbiter's ruling onto the terminal dispute states:
     uphold    → resolution="upheld",       resolved_by="arbiter"
     override  → resolution="overridden",   resolved_by="arbiter"
     escalate  → routed to the gate → escalated_approved / escalated_rejected
+
+WA-048: an ``override`` must also say **what the band becomes** — a ruling that
+only says "the model is wrong" cannot change a decision. The arbiter therefore
+names a ``revised_band`` (a :data:`~waspada.schema.RISK_LEVELS` value), which
+:meth:`ArbiterAgent.rule` stamps onto the dispute for the orchestrator to apply.
+When the brain rules ``override`` but names no band, we fall back to projecting
+the Skeptic's view onto the risk scale (:func:`~waspada.schema.view_to_risk_level`).
 """
 from __future__ import annotations
 
@@ -27,6 +34,7 @@ import json
 import re
 from typing import Any, List, Optional, Tuple
 
+from ..schema import RISK_LEVELS, view_to_risk_level
 from .base import Agent
 from .llm import LLM, MockLLM, qwen_tier
 from .protocol import AgentContext, AgentResult, Dispute, DisputeRound, Status
@@ -77,6 +85,12 @@ class ArbiterAgent(Agent):
         confidence (below :attr:`threshold`) forces ``escalate`` even if the
         brain offered a confident-ish uphold/override — the human gate gets the
         borderline calls. Unparsable → ``escalate``.
+
+        WA-048 side effect: on an ``override`` (or an escalated override
+        proposal), ``dispute.revised_band`` is stamped with the risk level the
+        arbiter rules the account should carry. The orchestrator applies it —
+        subject to the escalation/de-escalation direction rule — so the ruling
+        reaches the work-list instead of dying in the transcript.
         """
         brain = self.llm.with_model(qwen_tier("max"))
         model_name = getattr(brain, "model_name", None) or getattr(brain, "name", None)
@@ -92,7 +106,17 @@ class ArbiterAgent(Agent):
         if parsed is None:
             self.step("rule_parse_fail", notes=f"unparsable ruling: {raw[:80]!r}")
             return self._escalate_round(model_name, "could not parse ruling")
-        ruling, confidence, rationale, evidence = parsed
+        ruling, confidence, rationale, evidence, revised = parsed
+
+        # A ruling against the model must name the band it rules FOR — otherwise
+        # it cannot change a decision. Fall back to the Skeptic's view when the
+        # brain names none (or names one outside RISK_LEVELS).
+        if ruling == "override":
+            dispute.revised_band = revised or (view_to_risk_level(dispute.auditor_view) or "")
+            if not dispute.revised_band:
+                self.step("rule_no_band",
+                          notes=f"override with no nameable band (view={dispute.auditor_view!r}) → escalate")
+                return self._escalate_round(model_name, "override proposed but no valid band named")
 
         # Low-confidence uphold/override → escalate (borderline calls go human).
         if ruling in ("uphold", "override") and confidence is not None and confidence < self.threshold:
@@ -110,7 +134,9 @@ class ArbiterAgent(Agent):
             claim=claim, confidence=confidence,
             model=model_name, evidence=list(evidence),
         )
-        self.step("rule_done", notes=f"ruling={ruling} conf={confidence}")
+        self.step("rule_done",
+                  notes=f"ruling={ruling} conf={confidence}"
+                        + (f" revised_band={dispute.revised_band}" if dispute.revised_band else ""))
         return ruling, (rationale or ""), float(confidence) if confidence is not None else 0.0, round_
 
     # --------------------------------------------------------- ruling helpers
@@ -134,12 +160,23 @@ class ArbiterAgent(Agent):
                 f"(confidence={r2.confidence})."
             )
         lines.append(
-            "Rule which side wins, or escalate if genuinely uncertain. Reply "
-            "with ONLY a JSON object, no prose, exactly this shape:"
+            "Rule which side wins, or escalate if genuinely uncertain. If you "
+            "rule 'override', you MUST also name the risk level the account "
+            "should carry instead — a ruling that the model is wrong without "
+            "saying what is right cannot change any decision. "
+            f"revised_band must be one of: {' | '.join(RISK_LEVELS)}."
         )
         lines.append(
-            '{"ruling": "uphold|override|escalate", "confidence": 0.0-1.0, '
+            "Reply with ONLY a JSON object, no prose, exactly this shape:"
+        )
+        lines.append(
+            '{"ruling": "uphold|override|escalate", "revised_band": '
+            f'"{"|".join(RISK_LEVELS)}", '
+            '"confidence": 0.0-1.0, '
             '"rationale": "one-sentence decision", "evidence": ["fact1"]}'
+        )
+        lines.append(
+            'Omit revised_band (or set it to "") when ruling uphold or escalate.'
         )
         return "\n".join(lines)
 
@@ -158,12 +195,17 @@ class ArbiterAgent(Agent):
 _JSON_OBJ_RE = re.compile(r"\{[\s\S]*\}")
 
 
-def _parse_ruling_json(raw: str) -> Optional[Tuple[str, Optional[float], str, List[str]]]:
-    """Parse the Arbiter's ruling JSON → (ruling, confidence, rationale, evidence).
+def _parse_ruling_json(
+    raw: str,
+) -> Optional[Tuple[str, Optional[float], str, List[str], str]]:
+    """Parse the Arbiter's ruling JSON → (ruling, confidence, rationale, evidence,
+    revised_band).
 
     ``ruling`` must be ``uphold`` / ``override`` / ``escalate`` (lower-cased);
-    anything else returns ``None`` (caller escalates). Returns ``None`` on any
-    parse failure.
+    anything else returns ``None`` (caller escalates). ``revised_band`` (WA-048)
+    is the risk level the arbiter rules the account should carry; it is ``""``
+    unless the brain named a valid :data:`~waspada.schema.RISK_LEVELS` value.
+    Returns ``None`` on any parse failure.
     """
     if not raw or not raw.strip():
         return None
@@ -189,4 +231,8 @@ def _parse_ruling_json(raw: str) -> Optional[Tuple[str, Optional[float], str, Li
     rationale = str(obj.get("rationale", "")).strip()
     ev_raw = obj.get("evidence", [])
     evidence = [str(e) for e in ev_raw] if isinstance(ev_raw, list) else []
-    return ruling, confidence, rationale, evidence
+    # An unrecognized band is dropped rather than trusted — the caller then falls
+    # back to projecting the Skeptic's view, or escalates.
+    band = str(obj.get("revised_band", "")).strip().title()
+    revised = band if band in RISK_LEVELS else ""
+    return ruling, confidence, rationale, evidence, revised

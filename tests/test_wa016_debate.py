@@ -138,10 +138,12 @@ def test_parse_verdict_json_clamps_confidence():
 
 
 def test_parse_ruling_json_extracts_valid_blob():
-    r, conf, rat, ev = _parse_ruling_json(
-        'noise {"ruling":"override","confidence":0.66,"rationale":"skeptic wins","evidence":["x"]} tail'
+    r, conf, rat, ev, band = _parse_ruling_json(
+        'noise {"ruling":"override","revised_band":"Medium","confidence":0.66,'
+        '"rationale":"skeptic wins","evidence":["x"]} tail'
     )
     assert r == "override" and conf == 0.66 and rat == "skeptic wins" and ev == ["x"]
+    assert band == "Medium"
 
 
 def test_parse_ruling_json_rejects_garbage():
@@ -150,8 +152,18 @@ def test_parse_ruling_json_rejects_garbage():
 
 
 def test_parse_ruling_json_clamps_confidence():
-    _, conf, _, _ = _parse_ruling_json('{"ruling":"uphold","confidence":9}')
+    _, conf, _, _, _ = _parse_ruling_json('{"ruling":"uphold","confidence":9}')
     assert conf == 1.0
+
+
+def test_parse_ruling_json_drops_band_outside_the_vocabulary():
+    """A band the arbiter invents is dropped, not trusted (caller then falls back
+    to projecting the Skeptic's view, or escalates)."""
+    _, _, _, _, band = _parse_ruling_json('{"ruling":"override","revised_band":"Catastrophic"}')
+    assert band == ""
+    # And a legitimate band survives case sloppiness.
+    _, _, _, _, band = _parse_ruling_json('{"ruling":"override","revised_band":"very high"}')
+    assert band == "Very High"
 
 
 # --------------------------------------------------------------------------- #
