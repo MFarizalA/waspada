@@ -1,0 +1,97 @@
+# WASPADA — Continuous Integration
+#
+# Runs on every push (any branch) and every pull_request to main.
+# Three parallel jobs: backend tests, frontend build, terraform validate.
+# CI only — no deploy/CD steps (see WA-018 deploy runbook for CD).
+#
+# Offline by design: tests/conftest.py strips DASHSCOPE_API_KEY and forces
+# MockLLM, so the backend job needs no secrets.
+
+name: CI
+
+on:
+  push:
+  pull_request:
+    branches: [main]
+
+# Cancel in-flight runs for the same ref when a new push lands.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: Backend tests (pytest)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: api/requirements.txt
+
+      - name: Install dependencies
+        run: pip install -r api/requirements.txt
+
+      - name: Run pytest
+        # Tests are offline by design — conftest strips API keys and forces
+        # MockLLM. Runs from repo root so the top-level `waspada` package and
+        # `tests/` are both discoverable.
+        run: python -m pytest -q
+
+  frontend:
+    name: Frontend build (vite + tsc)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: dashboard/package-lock.json
+
+      - name: Install dependencies
+        working-directory: dashboard
+        # package-lock.json is committed, so npm ci is preferred. Fall back to
+        # npm install if the lockfile is ever missing or out of sync.
+        run: npm ci || npm install
+
+      - name: Build (tsc -b + vite build)
+        working-directory: dashboard
+        run: npm run build
+
+  terraform-validate:
+    name: Terraform validate (OpenTofu)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up OpenTofu
+        uses: opentofu/setup-opentofu@v1
+        with:
+          tofu_version: "1.8.0"
+
+      - name: tofu fmt -check
+        working-directory: deploy/iac
+        run: tofu fmt -check -diff
+        continue-on-error: true # advisory for now
+
+      - name: tofu init -backend=false
+        working-directory: deploy/iac
+        # Backend=false: CI has no cloud creds. We validate syntax/config only.
+        run: tofu init -backend=false
+
+      - name: tofu validate
+        working-directory: deploy/iac
+        run: tofu validate
