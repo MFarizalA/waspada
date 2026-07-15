@@ -102,6 +102,42 @@ class FeatureFrame:
 # actions, the auditor projects them onto its ordinal, the dashboard renders
 # them. (Previously the quintile labels Q1..Q5.)
 RISK_LEVELS: Tuple[str, ...] = ("Very Low", "Low", "Medium", "High", "Very High")
+
+# The Skeptic's independent read uses a coarser 3-point vocabulary. It is a
+# projection of RISK_LEVELS onto its odd positions (1/3/5) — the same projection
+# the dispute-admissibility gate already assumes
+# (``risk_auditor._VIEW_ORDINAL``: low=1, medium=3, high=5). Inverting it here
+# gives the two layers one shared, non-duplicated source of truth.
+AUDITOR_VIEWS: Tuple[str, ...] = ("Low", "Medium", "High")
+_VIEW_TO_LEVEL: Dict[str, str] = {
+    "low": RISK_LEVELS[0], "medium": RISK_LEVELS[2], "high": RISK_LEVELS[4],
+}
+
+
+def risk_level_ordinal(level: str) -> Optional[int]:
+    """1-based rank of ``level`` on the risk scale ("Very Low"=1 … "Very High"=5).
+
+    ``None`` when ``level`` is not a RISK_LEVELS value. Callers compare two
+    ordinals to learn the *direction* of a change — which is what decides whether
+    a society override is an escalation (auto-apply) or a de-escalation (human
+    sign-off). See ``Orchestrator._apply_adjudications``.
+    """
+    try:
+        return RISK_LEVELS.index(str(level).strip().title()) + 1
+    except ValueError:
+        return None
+
+
+def view_to_risk_level(view: str) -> Optional[str]:
+    """Project a Skeptic view ("Low"|"Medium"|"High") onto RISK_LEVELS.
+
+    Used as the fallback when the Arbiter rules against the model but does not
+    name a band itself, and on the Actuary's concede path (conceding means the
+    Skeptic's view stands). ``None`` on an unrecognized view.
+    """
+    return _VIEW_TO_LEVEL.get(str(view).strip().lower())
+
+
 @dataclasses.dataclass(frozen=True)
 class Segment:
     """A portfolio slice by product and region."""
@@ -112,11 +148,30 @@ class Segment:
 
 @dataclasses.dataclass(frozen=True)
 class ScoredAccounts:
-    """Per-loan model output: P(default) + band/segment/action."""
+    """Per-loan model output: P(default) + band/segment/action.
+
+    ``p_default`` and ``score_band`` are the **model's** output and are never
+    rewritten downstream — they stay the auditable statistical fact.
+
+    WA-048 adds two **additive optional Arrow columns** (not dataclass fields, so
+    the contract is unchanged — :func:`validate_table` allows supersets):
+
+    * ``final_band`` — the risk level after the Agent Society's debate. Equals
+      ``score_band`` unless a dispute went against the model *and* the revision
+      was applied. This is what ``ranking.rank()`` derives
+      ``recommended_action`` from, which is what makes the debate load-bearing
+      rather than decorative.
+    * ``override_reason`` — why the society moved the band (the arbiter's or the
+      conceding model's rationale). Empty when the model's band stands.
+
+    Same additive discipline as ``expected_loss``/``outstanding_principal``
+    (WA-024) and ``agent_dialogue`` below: producers may omit them, consumers
+    probe with ``_safe_get`` and degrade to the model's band.
+    """
 
     loan_id: str
-    p_default: float               # P(eventual default) ∈ [0, 1]
-    score_band: str                # risk level (see RISK_LEVELS; quintile-derived)
+    p_default: float               # P(eventual default) ∈ [0, 1] — never rewritten
+    score_band: str                # the MODEL's risk level (RISK_LEVELS) — never rewritten
     segment: Segment
     recommended_action: str        # "call" | "watch" | "auto-cure"
 

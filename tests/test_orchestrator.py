@@ -261,4 +261,11 @@ def test_cli_completes_on_disputed_run(tmp_path, monkeypatch):
     assert code == 0
     payload = _json.loads(out.read_text())
     assert payload.get("agent_dialogue"), "disputed run must serialize agent_dialogue"
-    assert payload["agent_dialogue"][0]["model_band"] == "Very High"
+    # Every dispute carries the model's band from the frozen vocabulary. (Pre
+    # WA-049 this asserted the FIRST dispute was "Very High" — true only because
+    # the audit slice was top-K by p_default. The slice is now stratified, so a
+    # disputed account may legitimately come from the boundary or contradictory
+    # stratum and carry a lower band. That widening IS the fix, not a regression.)
+    from waspada.schema import RISK_LEVELS
+    bands = [d["model_band"] for d in payload["agent_dialogue"]]
+    assert bands and all(b in RISK_LEVELS for b in bands)

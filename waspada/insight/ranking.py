@@ -81,6 +81,21 @@ def rank(scored: pa.Table, top_n: int = 50) -> List[Dict[str, object]]:
     Returns a list of JSON-serializable dicts shaped like
     :class:`ScoredAccounts` rows (``loan_id``, ``p_default``, ``score_band``,
     ``segment``, ``recommended_action``). Deterministic on ties by ``loan_id``.
+
+    WA-048 — **the action follows the debate, not just the model.** When the
+    orchestrator has adjudicated the book, the table carries an additive
+    ``final_band`` column: the risk level after the Agent Society ruled (equal to
+    ``score_band`` wherever the model's band stood). The action is derived from
+    *that*, which is what makes a conceded dispute actually change the work-list
+    instead of only the transcript. Absent the column — a standalone rank(), or
+    any pre-WA-048 payload — we fall back to ``score_band`` and behave exactly as
+    before.
+
+    Note the ordering is still by ``p_default``: the model's calibrated
+    probability is never rewritten by the debate, so it stays the honest sort key.
+    An overridden account keeps its position and changes its *action* — you can
+    see the society disagreeing with the model rather than hiding the
+    disagreement.
     """
     validate_table(scored, ScoredAccounts, name="rank(scored)")
 
@@ -95,6 +110,12 @@ def rank(scored: pa.Table, top_n: int = 50) -> List[Dict[str, object]]:
     op_col = _safe_get(scored, "outstanding_principal")
     outstanding = op_col.to_pylist() if op_col is not None else None
 
+    # WA-048: optional adjudication columns (same additive probe as above).
+    fb_col = _safe_get(scored, "final_band")
+    final_bands = fb_col.to_pylist() if fb_col is not None else None
+    or_col = _safe_get(scored, "override_reason")
+    override_reasons = or_col.to_pylist() if or_col is not None else None
+
     # Sort indices by (p_default desc, loan_id asc) for determinism.
     order = sorted(range(n), key=lambda i: (-probs[i], str(loan_ids[i])))
     top = order[: max(0, int(top_n))]
@@ -102,7 +123,10 @@ def rank(scored: pa.Table, top_n: int = 50) -> List[Dict[str, object]]:
     out: List[Dict[str, object]] = []
     for i in top:
         band = bands[i]
-        action = ACTION_BY_BAND.get(band, actions_in[i] or "watch")
+        # The decisive band: the society's ruling when it made one, else the
+        # model's. This single line is what closes the loop.
+        decisive = (final_bands[i] or band) if final_bands is not None else band
+        action = ACTION_BY_BAND.get(decisive, actions_in[i] or "watch")
         seg = segments[i]
         rec: Dict[str, object] = {
             "loan_id": loan_ids[i],
@@ -114,6 +138,14 @@ def rank(scored: pa.Table, top_n: int = 50) -> List[Dict[str, object]]:
         # WA-024: additive optional — only present when outstanding_principal exists.
         if outstanding is not None:
             rec["expected_loss"] = float(probs[i]) * EXPECTED_LOSS_LGD * float(outstanding[i] or 0.0)
+        # WA-048: additive optional — surface the override so the analyst can see
+        # the model was overruled, and why. Only when it actually differs.
+        if final_bands is not None:
+            rec["final_band"] = decisive
+            if decisive != band:
+                rec["override_reason"] = (
+                    override_reasons[i] if override_reasons is not None else ""
+                ) or ""
         out.append(rec)
     return out
 

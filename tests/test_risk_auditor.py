@@ -138,9 +138,12 @@ def test_dispute_to_dict_matches_frozen_shape():
     )
     obj = d.to_dict()
     # Exact key set + order against the fixture's first dispute.
+    # WA-048 appended revised_band + applied: a resolution alone is a verdict,
+    # these two are what make it a decision the work-list can act on.
     assert list(obj.keys()) == [
         "loan_id", "opened_by", "model_band", "auditor_view",
         "rounds", "resolution", "resolved_by", "rationale",
+        "revised_band", "applied",
     ]
     r1 = obj["rounds"][0]
     assert list(r1.keys()) == [

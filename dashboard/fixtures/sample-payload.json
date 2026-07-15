@@ -9,7 +9,8 @@
         "region": "Bali"
       },
       "recommended_action": "call",
-      "expected_loss": 37542043.22
+      "expected_loss": 37542043.22,
+      "final_band": "Very High"
     },
     {
       "loan_id": "LN00961668",
@@ -20,7 +21,8 @@
         "region": "Banten"
       },
       "recommended_action": "call",
-      "expected_loss": 5496437.09
+      "expected_loss": 5496437.09,
+      "final_band": "Very High"
     },
     {
       "loan_id": "LN00321200",
@@ -31,7 +33,8 @@
         "region": "DKI Jakarta"
       },
       "recommended_action": "call",
-      "expected_loss": 20621592.76
+      "expected_loss": 20621592.76,
+      "final_band": "Very High"
     },
     {
       "loan_id": "LN00999998",
@@ -41,8 +44,10 @@
         "product": "credit_card",
         "region": "Sulawesi Selatan"
       },
-      "recommended_action": "call",
-      "expected_loss": 49134.61
+      "recommended_action": "auto-cure",
+      "expected_loss": 49134.61,
+      "final_band": "Very Low",
+      "override_reason": "The Actuary conceded: near-settled balance contradicts the banding — flagged for data-quality review instead of a collector call."
     },
     {
       "loan_id": "LN00416177",
@@ -53,7 +58,8 @@
         "region": "DKI Jakarta"
       },
       "recommended_action": "call",
-      "expected_loss": 9649905.15
+      "expected_loss": 9649905.15,
+      "final_band": "Very High"
     },
     {
       "loan_id": "LN00187484",
@@ -63,7 +69,8 @@
         "product": "medical",
         "region": "Bali"
       },
-      "recommended_action": "call"
+      "recommended_action": "call",
+      "final_band": "Very High"
     },
     {
       "loan_id": "LN00123339",
@@ -73,7 +80,8 @@
         "product": "medical",
         "region": "Kalimantan Timur"
       },
-      "recommended_action": "call"
+      "recommended_action": "call",
+      "final_band": "Very High"
     },
     {
       "loan_id": "LN00531515",
@@ -83,7 +91,8 @@
         "product": "major_purchase",
         "region": "Sumatera Utara"
       },
-      "recommended_action": "call"
+      "recommended_action": "call",
+      "final_band": "Very High"
     },
     {
       "loan_id": "LN00573356",
@@ -93,7 +102,8 @@
         "product": "small_business",
         "region": "Other"
       },
-      "recommended_action": "call"
+      "recommended_action": "call",
+      "final_band": "Very High"
     },
     {
       "loan_id": "LN00808576",
@@ -103,7 +113,8 @@
         "product": "debt_consolidation",
         "region": "Jawa Tengah"
       },
-      "recommended_action": "call"
+      "recommended_action": "call",
+      "final_band": "Very High"
     },
     {
       "loan_id": "LN00881010",
@@ -113,7 +124,8 @@
         "product": "medical",
         "region": "Jawa Timur"
       },
-      "recommended_action": "call"
+      "recommended_action": "call",
+      "final_band": "Very High"
     },
     {
       "loan_id": "LN00769308",
@@ -123,7 +135,8 @@
         "product": "medical",
         "region": "Sumatera Utara"
       },
-      "recommended_action": "call"
+      "recommended_action": "call",
+      "final_band": "Very High"
     },
     {
       "loan_id": "LN00420209",
@@ -133,7 +146,8 @@
         "product": "debt_consolidation",
         "region": "Kalimantan Timur"
       },
-      "recommended_action": "call"
+      "recommended_action": "call",
+      "final_band": "Very High"
     },
     {
       "loan_id": "LN00723520",
@@ -144,7 +158,8 @@
         "region": "Jawa Barat"
       },
       "recommended_action": "call",
-      "expected_loss": 4287502.99
+      "expected_loss": 4287502.99,
+      "final_band": "Very High"
     },
     {
       "loan_id": "LN00486480",
@@ -154,7 +169,8 @@
         "product": "credit_card",
         "region": "DKI Jakarta"
       },
-      "recommended_action": "call"
+      "recommended_action": "call",
+      "final_band": "Very High"
     },
     {
       "loan_id": "LN00327111",
@@ -164,7 +180,8 @@
         "product": "major_purchase",
         "region": "Bali"
       },
-      "recommended_action": "call"
+      "recommended_action": "call",
+      "final_band": "Very High"
     },
     {
       "loan_id": "LN00388125",
@@ -174,7 +191,8 @@
         "product": "debt_consolidation",
         "region": "Sulawesi Selatan"
       },
-      "recommended_action": "call"
+      "recommended_action": "call",
+      "final_band": "Very High"
     },
     {
       "loan_id": "LN00304066",
@@ -184,7 +202,8 @@
         "product": "debt_consolidation",
         "region": "Bali"
       },
-      "recommended_action": "call"
+      "recommended_action": "call",
+      "final_band": "Very High"
     },
     {
       "loan_id": "LN00679649",
@@ -194,7 +213,8 @@
         "product": "small_business",
         "region": "Bali"
       },
-      "recommended_action": "call"
+      "recommended_action": "call",
+      "final_band": "Very High"
     },
     {
       "loan_id": "LN00176593",
@@ -204,7 +224,8 @@
         "product": "credit_card",
         "region": "Jawa Timur"
       },
-      "recommended_action": "call"
+      "recommended_action": "call",
+      "final_band": "Very High"
     }
   ],
   "portfolio_health": {
@@ -274,7 +295,9 @@
       ],
       "resolution": "upheld",
       "resolved_by": "arbiter",
-      "rationale": "Active 31-120 DPD plus p95 DTI dominates the strong early payment history; keep band Very High and the call action."
+      "rationale": "Active 31-120 DPD plus p95 DTI dominates the strong early payment history; keep band Very High and the call action.",
+      "revised_band": "",
+      "applied": false
     },
     {
       "loan_id": "LN00999998",
@@ -307,7 +330,9 @@
       ],
       "resolution": "overridden",
       "resolved_by": "risk_model",
-      "rationale": "The Actuary conceded: near-settled balance contradicts the banding — flagged for data-quality review instead of a collector call."
+      "rationale": "The Actuary conceded: near-settled balance contradicts the banding — flagged for data-quality review instead of a collector call.",
+      "revised_band": "Very Low",
+      "applied": true
     },
     {
       "loan_id": "LN00187484",
@@ -348,7 +373,9 @@
       ],
       "resolution": "escalated_approved",
       "resolved_by": "human",
-      "rationale": "Analyst kept the call action: collector capacity is available this cycle and the deteriorating payment trend is the safer read."
+      "rationale": "Analyst kept the call action: collector capacity is available this cycle and the deteriorating payment trend is the safer read.",
+      "revised_band": "",
+      "applied": false
     }
   ]
 }

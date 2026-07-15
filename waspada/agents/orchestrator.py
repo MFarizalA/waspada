@@ -38,6 +38,8 @@ from typing import Any, Callable, Dict, List, Optional
 import pyarrow as pa
 
 from ..config import COLLECTIONS, LANES
+from ..insight.ranking import ACTION_BY_BAND
+from ..schema import risk_level_ordinal, view_to_risk_level
 from .arbiter import ArbiterAgent
 from .data_analyst import DataAnalystAgent
 from .base import Agent, ApprovalGate, Approved
@@ -259,6 +261,10 @@ class Orchestrator(Agent):
             # but their resolutions are still open ("").
             if agent.name == "risk_auditor" and res.ok:
                 self._resolve_disputes(ctx)
+                # WA-048: and then WRITE THE OUTCOME BACK. Resolving a dispute
+                # only settles the argument; this is what lets it change the
+                # work-list insight is about to build.
+                self._apply_adjudications(ctx)
 
             # ERROR / BLOCKED are failures → short-circuit. DISPUTED is a
             # *completion* with live disputes: it is NOT a failure — the
@@ -402,13 +408,18 @@ class Orchestrator(Agent):
             self._emit_round(d, r2)
             verdict = self._rebuttal_verdict(r2.claim)
             if verdict == "concede":
-                # Concession closes the dispute — auditor's critique wins.
+                # Concession closes the dispute — auditor's critique wins. The
+                # Actuary conceding *means* the Skeptic's view stands, so that
+                # view is the revised band (WA-048). Without this the concession
+                # would change nothing but the transcript.
                 d.resolution = "overridden"
                 d.resolved_by = "risk_model"
                 d.rationale = r2.claim.split(":", 1)[-1].strip() or r2.claim
+                d.revised_band = view_to_risk_level(d.auditor_view) or ""
                 counts["overridden"] += 1
                 self.step("dispute_resolved",
-                          notes=f"{d.loan_id} overridden (risk_model conceded)")
+                          notes=f"{d.loan_id} overridden (risk_model conceded"
+                                + (f"; band → {d.revised_band}" if d.revised_band else "") + ")")
                 self._emit_resolved(d)
                 continue
             if verdict == "unparsable":
@@ -462,6 +473,137 @@ class Orchestrator(Agent):
                    f"precedent_hits={self.memory.precedent_hits} "
                    f"misses={self.memory.misses} remembered={n_remembered}"),
         )
+
+    # ------------------------------------------- adjudication (WA-048)
+    def _apply_adjudications(self, ctx: AgentContext) -> None:
+        """Write the society's rulings back onto the scored book.
+
+        This is the step that makes the debate a *decision* rather than a
+        transcript. Before WA-048 nothing downstream ever read a dispute's
+        outcome: ``scored_accounts`` was written once by the risk-model agent and
+        ranked verbatim, so an account whose own model had **conceded** still
+        shipped with its original band and its original ``call`` action.
+
+        The model's ``p_default`` and ``score_band`` are never rewritten — they
+        stay the auditable statistical fact. Instead two additive columns are
+        appended, and ``recommended_action`` is re-derived from the outcome:
+
+            final_band       the risk level after the debate (== score_band
+                             when the model's band stands)
+            override_reason  why the society moved it ("" when it didn't)
+
+        **The direction rule.** Collections error costs are asymmetric, so the
+        governance is too:
+
+        * An **escalation** (society raises the risk) applies automatically —
+          the worst case is a wasted collector call.
+        * A **de-escalation** (society talks the model down and cancels a call)
+          needs a human ``approve_deescalation`` ruling — the worst case is a
+          real default walking away.
+        * A dispute already settled at the human gate (``escalated_approved`` /
+          ``escalated_rejected``) is *not* re-gated: a person has ruled once and
+          that ruling is honoured in both directions.
+        """
+        disputes: List[Dispute] = list(ctx.data_handles.get("risk_disputes") or [])
+        scored = self._table(ctx, "scored_accounts")
+        if not disputes or scored is None:
+            return
+
+        deescalations: List[Dispute] = []
+        for d in disputes:
+            if not d.revised_band:
+                continue  # nothing to apply — the model's band stands
+            new_ord = risk_level_ordinal(d.revised_band)
+            old_ord = risk_level_ordinal(d.model_band)
+            if new_ord is None or old_ord is None or new_ord == old_ord:
+                continue  # unparseable, or a "revision" that changes nothing
+            if d.resolution == "escalated_approved":
+                d.applied = True   # a human already approved this ruling
+            elif d.resolution == "escalated_rejected":
+                d.applied = False  # a human already refused it
+            elif d.resolution == "overridden":
+                if new_ord > old_ord:
+                    d.applied = True          # escalation → auto-apply
+                else:
+                    deescalations.append(d)   # de-escalation → ask a human
+            # "upheld" never carries a revised band.
+
+        if deescalations:
+            self._gate_deescalations(deescalations)
+
+        applied = [d for d in disputes if d.applied and d.revised_band]
+        self._write_final_bands(ctx, scored, applied)
+        self.step(
+            "adjudication_done",
+            notes=(f"{len(applied)} of {len(disputes)} dispute(s) changed the work-list; "
+                   f"de-escalations gated={len(deescalations)}"),
+        )
+
+    def _gate_deescalations(self, deescalations: List[Dispute]) -> None:
+        """Ask a human before the society is allowed to cancel a collector call.
+
+        One batched gate call (mirrors :meth:`_route_escalations`), under its own
+        action name so the audit log distinguishes "the society wants to LOWER
+        risk" from an ordinary escalation — they carry very different downside.
+        """
+        detail = ", ".join(
+            f"{d.loan_id} {d.model_band}→{d.revised_band}" for d in deescalations[:5]
+        )
+        decision = self.gate.request(
+            "approve_deescalation",
+            rationale=(f"{len(deescalations)} account(s) the society wants to DE-ESCALATE "
+                       f"(lower risk, cancelling collection): {detail}"),
+        )
+        approved = isinstance(decision, Approved)
+        for d in deescalations:
+            d.applied = approved
+            if not approved:
+                d.rationale = (d.rationale or "") + " (de-escalation refused by human gate)"
+        self.step(
+            "deescalation_gate",
+            notes=(f"approve_deescalation {'approved' if approved else 'rejected'} "
+                   f"(auto={getattr(decision, 'auto', False)}) for {len(deescalations)} account(s)"),
+        )
+
+    def _write_final_bands(
+        self, ctx: AgentContext, scored: pa.Table, applied: List[Dispute],
+    ) -> None:
+        """Append ``final_band`` + ``override_reason`` and re-derive the action.
+
+        Additive columns only (:func:`~waspada.schema.validate_table` allows
+        supersets), so the frozen contract is untouched and any consumer that
+        doesn't know about them keeps working off ``score_band``.
+        """
+        bands = scored.column("score_band").to_pylist()
+        actions = scored.column("recommended_action").to_pylist()
+        loan_ids = scored.column("loan_id").to_pylist()
+
+        final_bands = list(bands)
+        reasons = [""] * len(bands)
+        final_actions = list(actions)
+
+        pos = {lid: i for i, lid in enumerate(loan_ids)}
+        for d in applied:
+            i = pos.get(d.loan_id)
+            if i is None:
+                continue  # dispute references an account not in this book
+            final_bands[i] = d.revised_band
+            reasons[i] = (d.rationale.strip()
+                          or f"{d.resolved_by or 'society'}: {d.model_band} → {d.revised_band}")
+            final_actions[i] = ACTION_BY_BAND.get(d.revised_band, actions[i] or "watch")
+
+        # Idempotent: a second call replaces rather than duplicates the columns.
+        for name, values in (("final_band", final_bands), ("override_reason", reasons)):
+            col = pa.array(values, pa.string())
+            if name in scored.column_names:
+                scored = scored.set_column(scored.column_names.index(name), name, col)
+            else:
+                scored = scored.append_column(name, col)
+        scored = scored.set_column(
+            scored.column_names.index("recommended_action"),
+            "recommended_action", pa.array(final_actions, pa.string()),
+        )
+        ctx.data_handles["scored_accounts"] = scored
 
     # ----------------------------------------------- WA-026 memory helpers
     def _apply_recalled(self, d: Dispute, recalled: Dict[str, Any],

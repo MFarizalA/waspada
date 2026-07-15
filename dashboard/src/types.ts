@@ -27,11 +27,22 @@ export interface Segment {
  */
 export interface ScoredAccount {
   loan_id: string;
-  p_default: number; // P(eventual default) ∈ [0, 1]
-  score_band: string; // risk level (quintile-derived), e.g. "Very Low".."Very High"
+  p_default: number; // P(eventual default) ∈ [0, 1] — the MODEL's score, never rewritten
+  score_band: string; // the MODEL's risk level, e.g. "Very Low".."Very High"
   segment: Segment;
   recommended_action: "call" | "watch" | "auto-cure";
   expected_loss?: number; // IDR at risk = PD × LGD(0.45) × EAD (WA-024, additive optional)
+
+  /**
+   * The risk level AFTER the Agent Society's debate (WA-048, additive optional).
+   * Equals `score_band` wherever the model's band stood; differs only when a
+   * dispute went against the model and the override was applied. This is what
+   * `recommended_action` is derived from — the society's ruling reaches the
+   * work-list instead of dying in the transcript. Absent on pre-WA-048 payloads.
+   */
+  final_band?: string;
+  /** Why the society moved the band (present only when final_band ≠ score_band). */
+  override_reason?: string;
 }
 
 /** Portfolio-level cross-sectional aggregates (PortfolioHealth TypedDict). */
@@ -86,6 +97,10 @@ export interface DisputeRecord {
   resolution: "upheld" | "overridden" | "escalated_approved" | "escalated_rejected";
   resolved_by: string; // "risk_model" (conceded) | "arbiter" | "human"
   rationale: string;
+  /** WA-048: the risk level the society ruled for ("" when the model's band stands). */
+  revised_band?: string;
+  /** WA-048: whether that ruling actually reached the work-list (see the direction rule). */
+  applied?: boolean;
 }
 
 /**

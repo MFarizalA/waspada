@@ -266,6 +266,9 @@ async def run_stream(brain: str = "mock", _user: dict = Depends(current_user_ws)
     def _round_event(d: Any, r: Any) -> Dict[str, Any]:
         return {
             "type": "round",
+            # Which account this turn belongs to. Disputes stream interleaved, so
+            # without it a client cannot attribute a round to its debate.
+            "loan_id": d.loan_id,
             "round_no": r.round_no,
             "speaker": r.speaker,
             "model": r.model,
@@ -282,6 +285,12 @@ async def run_stream(brain: str = "mock", _user: dict = Depends(current_user_ws)
             "resolution": ddict["resolution"],
             "resolved_by": ddict["resolved_by"],
             "rationale": ddict["rationale"],
+            # WA-048: what the ruling actually DID to the account. ``applied`` is
+            # False here for a de-escalation still awaiting its human gate — the
+            # payload carries the settled value.
+            "model_band": ddict["model_band"],
+            "revised_band": ddict["revised_band"],
+            "applied": ddict["applied"],
         }
 
     def on_round_complete(d: Any, r: Any) -> None:

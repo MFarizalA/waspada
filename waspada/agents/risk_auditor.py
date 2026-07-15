@@ -1,9 +1,17 @@
-"""Risk-auditor agent (WA-014) — the Skeptic.
+"""Risk-auditor agent (WA-014 + WA-049) — the Skeptic.
 
 After the classical-ML Actuary (:class:`~waspada.agents.risk_model.RiskModelAgent`)
-scores 100% of the book, the Skeptic audits the **top-K riskiest accounts**
+scores 100% of the book, the Skeptic audits a **stratified slice of K accounts**
 (K=8 default) and, where its independent view diverges from the Actuary's band,
 opens a :class:`~waspada.agents.protocol.Dispute` with a Round-1 challenge round.
+
+WA-049 changed *which* K. The audit used to be top-K by ``p_default`` — only the
+accounts the model had already flagged — which meant the Skeptic could only ever
+review candidate **false positives** (a wasted collector call: cheap) and never
+**false negatives** (a "Very Low" account that rolls to NPL: the loss the product
+exists to prevent). The slice is now stratified across ``riskiest`` /
+``boundary`` / ``contradictory`` (see :func:`_select_audit_slice`), at the same K
+and therefore the same LLM-call ceiling.
 
 This is Round 1 only (challenge). Rebuttal (Round 2) + Arbiter (Round 3) land in
 WA-016; an opened dispute therefore carries an *open* resolution here (``""``)
@@ -195,11 +203,13 @@ class RiskAuditorAgent(Agent):
             notes=f"mcp={getattr(self._mcp_client, 'name', None) or 'local-stub'}",
         )
 
-        # Top-K by p_default (the riskiest slice is where a wrong band costs most).
-        probs = scored.column("p_default").to_pylist()
-        order = sorted(range(scored.num_rows), key=lambda i: (-float(probs[i]), i))
-        top = order[: max(0, int(self.k))]
-        self.step("audit_top_k", notes=f"auditing top-{len(top)} of {scored.num_rows} by p_default")
+        # WA-049: the audit slice is STRATIFIED, not top-K.
+        top, strata = _select_audit_slice(scored, max(0, int(self.k)))
+        self.step(
+            "audit_slice",
+            notes=(f"auditing {len(top)} of {scored.num_rows} — "
+                   + " ".join(f"{k}={v}" for k, v in strata.items())),
+        )
 
         disputes: List[Dispute] = []
         n_parsed = 0
@@ -600,6 +610,131 @@ def _parse_view_json(raw: str) -> Optional[Tuple[str, Optional[float], str, List
     ev_raw = obj.get("evidence", [])
     evidence = [str(e) for e in ev_raw] if isinstance(ev_raw, list) else []
     return view, confidence, claim, evidence
+
+
+# --------------------------------------------------------------------------- #
+# WA-049 — the audit slice.
+#
+# The Skeptic used to audit the top-K by ``p_default``: the accounts the model
+# had ALREADY flagged. That can only ever surface candidate *false positives* —
+# a wasted collector call, which is cheap. The expensive error in collections is
+# the *false negative*: an account the model bands "Very Low" that quietly rolls
+# to NPL. Top-K never samples those, so the society was structurally incapable of
+# catching the error class that motivates the product — and the symmetric half of
+# the admissibility rule (``Very Low`` + auditor ``High`` → dispute) was
+# unreachable dead code.
+#
+# So we stratify. Same K, same ≤K×3 LLM-call ceiling, strictly better coverage:
+#
+#   riskiest       top by p_default — catches over-calling (the old behaviour)
+#   boundary       nearest a band edge — where the model is least certain
+#   contradictory  low band, adverse evidence — THE FALSE-NEGATIVE CATCHER
+#
+# ``contradictory`` is a pure rule-based screen over columns already on the
+# table: zero extra LLM cost. Short strata spill their quota to ``riskiest`` so
+# the audit always spends its full budget.
+# --------------------------------------------------------------------------- #
+AUDIT_MIX: Dict[str, int] = {"riskiest": 3, "boundary": 2, "contradictory": 3}
+
+# Priority when the budget doesn't divide evenly (and the backfill order). The
+# riskiest slice is the Skeptic's primary duty, so a shrinking K degrades
+# gracefully back to the pre-WA-049 top-K behaviour rather than starving it.
+_STRATA_PRIORITY = ("riskiest", "contradictory", "boundary")
+
+# Delinquency buckets that count as non-performing. Mirrors
+# ``waspada.insight.ranking._NPL_BUCKETS`` (kept local to avoid an insight
+# import in the agent layer; the two must stay in step).
+_NPL_BUCKETS = {"Default", "31-120", "16-30"}
+
+# Bands low enough that active delinquency is a contradiction worth auditing.
+_LOW_BANDS = {"Very Low", "Low"}
+
+
+def _select_audit_slice(scored: pa.Table, k: int) -> Tuple[List[int], Dict[str, int]]:
+    """Pick ≤ ``k`` row indices to audit, stratified per :data:`AUDIT_MIX`.
+
+    Returns ``(indices, strata_counts)``. The counts are for the audit log — they
+    are how you prove the false-negative stratum actually fired on a given book.
+    """
+    n = scored.num_rows
+    if n == 0 or k <= 0:
+        return [], {}
+
+    probs = [float(p) for p in scored.column("p_default").to_pylist()]
+    bands = [str(b) for b in scored.column("score_band").to_pylist()]
+    try:
+        delinq = [str(x) for x in scored.column("delinquency_status").to_pylist()]
+    except (KeyError, ValueError, pa.ArrowInvalid):
+        delinq = None  # optional monitoring column; without it the screen is off
+
+    budget = min(k, n)
+
+    # Scale AUDIT_MIX (written for the k=8 default) to the actual budget by
+    # largest-remainder, so the quotas sum to exactly ``budget``. Ties break on
+    # _STRATA_PRIORITY, which is what makes a small K collapse back to plain
+    # top-K rather than spending its only slot on a non-riskiest stratum.
+    total = sum(AUDIT_MIX.values())
+    exact = {name: budget * share / total for name, share in AUDIT_MIX.items()}
+    quota = {name: int(v) for name, v in exact.items()}
+    for name in sorted(
+        exact,
+        key=lambda nm: (-(exact[nm] - int(exact[nm])), _STRATA_PRIORITY.index(nm)),
+    )[: budget - sum(quota.values())]:
+        quota[name] += 1
+
+    # --- candidate orderings, one per stratum ---
+    # riskiest: top by p_default (the pre-WA-049 behaviour).
+    riskiest = sorted(range(n), key=lambda i: (-probs[i], i))
+
+    # contradictory: the model says safe, the raw evidence says distressed.
+    # Ordered by p_default ASC — the *most* confidently-safe delinquent account
+    # is the most damning miss, so it is audited first.
+    contradictory: List[int] = []
+    if delinq is not None:
+        contradictory = sorted(
+            (i for i in range(n)
+             if bands[i] in _LOW_BANDS and delinq[i] in _NPL_BUCKETS),
+            key=lambda i: (probs[i], i),
+        )
+
+    # boundary: nearest a band edge — where the model is least certain. The edges
+    # are the per-batch quintile cutpoints the model itself used (WA-051 makes
+    # these absolute; "least certain" survives that change unchanged).
+    boundary: List[int] = []
+    if n >= 5:
+        srt = sorted(probs)
+        edges = [srt[int(n * q)] for q in (0.2, 0.4, 0.6, 0.8)]
+        boundary = sorted(
+            range(n), key=lambda i: (min(abs(probs[i] - e) for e in edges), i),
+        )
+
+    pools = {"riskiest": riskiest, "contradictory": contradictory, "boundary": boundary}
+
+    chosen: List[int] = []
+    counts: Dict[str, int] = {}
+    seen: set = set()
+
+    def take(name: str, limit: int) -> None:
+        picked = 0
+        for i in pools[name]:
+            if len(chosen) >= budget or picked >= limit:
+                break
+            if i in seen:
+                continue
+            seen.add(i)
+            chosen.append(i)
+            picked += 1
+        counts[name] = counts.get(name, 0) + picked
+
+    for name in _STRATA_PRIORITY:
+        take(name, quota[name])
+
+    # Backfill: a short stratum (e.g. no contradictory accounts on a clean book)
+    # spills its quota to the riskiest so the audit always spends its full K.
+    if len(chosen) < budget:
+        take("riskiest", budget - len(chosen))
+
+    return chosen, counts
 
 
 # --------------------------------------------------------------------------- #
