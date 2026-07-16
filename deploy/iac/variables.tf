@@ -31,9 +31,9 @@ variable "environment" {
 }
 
 variable "acr_registry_domain" {
-  description = "ACR registry domain (push images here in the WA-018 deploy step). Personal Edition default = registry.<region>.aliyuncs.com. Use VPC domain if running FC from a VPC."
+  description = "ACR Personal Edition registry domain. Personal Edition uses instance-specific endpoint: crpi-<id>.<region>.personal.cr.aliyuncs.com"
   type        = string
-  default     = "registry.ap-southeast-1.aliyuncs.com"
+  default     = "crpi-6cd1t4pmi9pottyq.ap-southeast-1.personal.cr.aliyuncs.com"
 }
 
 variable "fc_image_tag" {
