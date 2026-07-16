@@ -43,12 +43,9 @@ variable "fc_image_tag" {
 }
 
 variable "rds_instance_type" {
-  description = "RDS PostgreSQL instance type for ap-southeast-1 (Singapore)."
+  description = "RDS PostgreSQL instance type. pg.n2.small.1 is the cheapest (free-tier eligible)."
   type        = string
-  # pg.n2.small.1 was deprecated/offline (InvalidDBInstanceClass.Offline) as of 2026-07.
-  # pg.n2.1c.1m is the cheapest currently-purchasable general-purpose PG spec (1 vCPU, 2 GB).
-  # Ref: https://www.alibabacloud.com/help/en/rds/apsaradb-rds-for-postgresql/primary-apsaradb-rds-for-postgresql-instance-types
-  default = "pg.n2.1c.1m"
+  default     = "pg.n2.small.1"
 }
 
 variable "rds_password" {
