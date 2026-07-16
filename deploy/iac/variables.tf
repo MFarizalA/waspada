@@ -45,10 +45,11 @@ variable "fc_image_tag" {
 variable "rds_instance_type" {
   description = "RDS PostgreSQL instance type for ap-southeast-1 (Singapore)."
   type        = string
-  # pg.n2.small.1 was deprecated/offline (InvalidDBInstanceClass.Offline) as of 2026-07.
-  # pg.n2.1c.1m is the cheapest currently-purchasable general-purpose PG spec (1 vCPU, 2 GB).
-  # Ref: https://www.alibabacloud.com/help/en/rds/apsaradb-rds-for-postgresql/primary-apsaradb-rds-for-postgresql-instance-types
-  default = "pg.n2.1c.1m"
+  # pg.n2.1c.1m appears in global docs but is NOT purchasable in ap-southeast-1.
+  # pg.n2.small.1 (same specs: 1 vCPU, 2 GB) IS purchasable when paired with
+  # category="Basic" + db_instance_storage_type="cloud_essd". The original
+  # "Offline" error was caused by missing category/storage params, not the type.
+  default = "pg.n2.small.1"
 }
 
 variable "rds_password" {
