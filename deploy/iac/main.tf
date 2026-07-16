@@ -84,7 +84,7 @@ resource "alicloud_oss_bucket_acl" "mart" {
 
 # ---------------------------------------------------------------------------
 # ACR Container Registry (Personal Edition, free tier) — hosts the FC image.
-# WA-018: The namespace "small-company" and repo "api" were created manually in
+# WA-018: The namespace "waspada" and repo "api" were created manually in
 # the Alibaba console (Personal Edition ACR). Tofu cannot manage either because
 # the provider returns a "jurisdiction error" on read and NAMESPACE_NOT_EXIST
 # on create (known ACR Personal Edition cross-region quirk). Both are treated
@@ -273,6 +273,19 @@ resource "alicloud_db_instance" "auth" {
   instance_charge_type = "Postpaid"
   # WA-018: VPC network type (classic network is no longer supported)
   vswitch_id = alicloud_vswitch.main.id
+  # WA-018: explicitly pin the zone to the VSwitch zone. RDS needs a zone that
+  # has the chosen instance_type + storage combination in stock; without this
+  # the create call fails with Commodity.InvalidComponent.
+  zone_id = alicloud_vswitch.main.zone_id
+  # WA-018: Commodity.InvalidComponent ("module you purchased is not legal")
+  # fires when the instance_type + category + storage_type combination is not
+  # a valid purchasable SKU. Per the RDS PostgreSQL instance-type docs, the
+  # entry-level spec pg.n2.1c.1m (1 vCPU, 2 GB) is ONLY available in the
+  # Basic edition — HighAvailability's smallest general-purpose type is
+  # pg.n2.2c.2m (2 vCPU, 4 GB). So we must pair pg.n2.1c.1m with Basic.
+  # cloud_essd = PL1 ESSD (valid for PostgreSQL in ap-southeast-1).
+  db_instance_storage_type = "cloud_essd"
+  category                 = "Basic"
   # WA-044: explicit, documented deletion setting.
   # false = destroy is intentional (run `tofu destroy -target=alicloud_db_instance.auth`).
   # Set true in long-lived prod to prevent accidental data loss.
