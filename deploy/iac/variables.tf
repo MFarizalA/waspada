@@ -61,6 +61,12 @@ variable "rds_security_ips" {
   default     = ["172.16.0.0/12"]
 }
 
+variable "rds_vswitch_id" {
+  description = "VSwitch ID for the RDS instance (VPC network type is required). Find it in the Alibaba console: VPC > VSwitch. The RAM user lacks VPC read permissions, so this must be supplied explicitly."
+  type        = string
+  default     = ""
+}
+
 variable "dashscope_api_key" {
   description = "Qwen Cloud / DashScope API key. Pass via TF_VAR_dashscope_api_key or secrets.tfvars. NEVER commit."
   type        = string

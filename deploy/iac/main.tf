@@ -2,8 +2,10 @@
 # Local values
 # ---------------------------------------------------------------------------
 locals {
-  name_prefix   = "${var.namespace}-${var.environment}"
-  acr_namespace = replace(local.name_prefix, "-", "")
+  name_prefix = "${var.namespace}-${var.environment}"
+  # WA-018: ACR namespace was manually created in the Alibaba console as
+  # "small-company". Hardcode it instead of deriving from name_prefix.
+  acr_namespace = "small-company"
   # Personal Edition ACR default internet domain. Override via var.acr_registry_domain
   # if using Enterprise Edition or a different endpoint.
   fc_image = "${var.acr_registry_domain}/${local.acr_namespace}/api:${var.fc_image_tag}"
@@ -82,24 +84,12 @@ resource "alicloud_oss_bucket_acl" "mart" {
 
 # ---------------------------------------------------------------------------
 # ACR Container Registry (Personal Edition, free tier) — hosts the FC image.
-# Personal Edition uses namespace + repo directly (no instance resource).
-# NOTE: alicloud_cr_namespace/repo carry deprecation warnings in favor of the
-# Enterprise Edition (alicloud_cr_ee_*) resources; Personal remains free and
-# functional for the hackathon. Switch to EE if you need VPC-only endpoints.
+# WA-018: The namespace "small-company" and repo "api" were created manually in
+# the Alibaba console (Personal Edition ACR). Tofu cannot manage either because
+# the provider returns a "jurisdiction error" on read and NAMESPACE_NOT_EXIST
+# on create (known ACR Personal Edition cross-region quirk). Both are treated
+# as externally managed — the image is pushed via `docker push` directly.
 # ---------------------------------------------------------------------------
-resource "alicloud_cr_namespace" "waspada" {
-  name               = local.acr_namespace
-  auto_create        = false
-  default_visibility = "PRIVATE"
-}
-
-resource "alicloud_cr_repo" "api" {
-  namespace = alicloud_cr_namespace.waspada.name
-  name      = "api"
-  summary   = "WASPADA FastAPI image for Function Compute (CAPort 8080)"
-  repo_type = "PRIVATE"
-  detail    = "Custom-container image consumed by the FC function."
-}
 
 # ---------------------------------------------------------------------------
 # RAM role for Function Compute — trust FC, permit OSS read + SLS write
@@ -247,7 +237,11 @@ resource "alicloud_log_store" "audit" {
 # --------------------------------------------------------------------------- #
 # ApsaraDB RDS PostgreSQL — user store for auth (WA-028)
 # 5th Alibaba Cloud service. Cheapest instance type for the demo.
-# ---------------------------------------------------------------------------
+# WA-018: RDS requires a VPC network type — classic network creation is
+# unsupported. The RAM user lacks VPC read/create permissions, so the
+# vswitch_id must be supplied via a variable. Find your default VSwitch in
+# the Alibaba console (VPC > VSwitch) and set var.rds_vswitch_id in tfvars.
+# --------------------------------------------------------------------------- #
 resource "alicloud_db_instance" "auth" {
   engine               = "PostgreSQL"
   engine_version       = "15.0"
@@ -255,6 +249,8 @@ resource "alicloud_db_instance" "auth" {
   instance_storage     = "20"
   instance_name        = "${local.name_prefix}-auth-db"
   instance_charge_type = "Postpaid"
+  # WA-018: VPC network type (classic network is no longer supported)
+  vswitch_id = var.rds_vswitch_id
   # WA-044: explicit, documented deletion setting.
   # false = destroy is intentional (run `tofu destroy -target=alicloud_db_instance.auth`).
   # Set true in long-lived prod to prevent accidental data loss.

@@ -40,8 +40,8 @@ output "acr_registry_domain" {
 }
 
 output "acr_repo" {
-  description = "Full ACR repository path (image push target)."
-  value       = "${var.acr_registry_domain}/${alicloud_cr_namespace.waspada.name}/${alicloud_cr_repo.api.name}"
+  description = "Full ACR repository path (image push target). Namespace/repo are managed manually in the console."
+  value       = "${var.acr_registry_domain}/${local.acr_namespace}/api"
 }
 
 output "sls_project" {
