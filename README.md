@@ -267,13 +267,13 @@ every push to `main` (or via manual `workflow_dispatch`). Jal must set these
 | Secret | Value | Notes |
 |---|---|---|
 | `ACR_REGISTRY` | `registry.ap-southeast-1.aliyuncs.com` | ACR Personal Edition registry endpoint (Singapore region) |
-| `ACR_NAMESPACE` | `small-company` | ACR namespace (the image is `…/<namespace>/api`) |
+| `ACR_NAMESPACE` | `waspada` | ACR namespace (the image is `…/<namespace>/api`) |
 | `ACR_USERNAME` | *(your ACR login username)* | From ACR console → Access Credential |
 | `ACR_PASSWORD` | *(your ACR login password)* | Set during registry creation (not the Alibaba cloud account password) |
 
 The image is pushed with two tags — `latest` and the commit SHA
 (`${{ github.sha }}`) — to
-`registry.ap-southeast-1.aliyuncs.com/small-company/api`.
+`crpi-6cd1t4pmi9pottyq.ap-southeast-1.personal.cr.aliyuncs.com/waspada/api`.
 
 > The dashboard (vite) is built inside the workflow before `docker build`, so
 > the static assets land in `dashboard/dist/` and the Dockerfile can `COPY`

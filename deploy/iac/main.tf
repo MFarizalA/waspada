@@ -5,7 +5,7 @@ locals {
   name_prefix = "${var.namespace}-${var.environment}"
   # WA-018: ACR namespace was manually created in the Alibaba console as
   # "small-company". Hardcode it instead of deriving from name_prefix.
-  acr_namespace = "small-company"
+  acr_namespace = "waspada"
   # Personal Edition ACR default internet domain. Override via var.acr_registry_domain
   # if using Enterprise Edition or a different endpoint.
   fc_image = "${var.acr_registry_domain}/${local.acr_namespace}/api:${var.fc_image_tag}"
