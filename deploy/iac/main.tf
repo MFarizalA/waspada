@@ -259,14 +259,14 @@ resource "alicloud_security_group" "fc" {
 }
 
 # --------------------------------------------------------------------------- #
-# ApsaraDB RDS PostgreSQL — user store for auth (WA-028)
-# 5th Alibaba Cloud service. Cheapest instance type for the demo.
-# WA-018: RDS requires a VPC network type — classic network creation is
-# unsupported. The instance now uses the managed VSwitch above.
+# ApsaraDB RDS MySQL — user store for auth (WA-028)
+# 5th Alibaba Cloud service. MySQL 8.0 with the DuckDB analytical engine
+# integration. WA-018: RDS requires a VPC network type — classic network
+# creation is unsupported. The instance uses the managed VSwitch above.
 # --------------------------------------------------------------------------- #
 resource "alicloud_db_instance" "auth" {
-  engine               = "PostgreSQL"
-  engine_version       = "15.0"
+  engine               = "MySQL"
+  engine_version       = "8.0"
   instance_type        = var.rds_instance_type
   instance_storage     = "20"
   instance_name        = "${local.name_prefix}-auth-db"
@@ -279,13 +279,13 @@ resource "alicloud_db_instance" "auth" {
   zone_id = alicloud_vswitch.main.zone_id
   # WA-018: Commodity.InvalidComponent ("module you purchased is not legal")
   # fires when the instance_type + category + storage_type combination is not
-  # a valid purchasable SKU. Per the RDS PostgreSQL instance-type docs, the
-  # entry-level spec pg.n2.1c.1m (1 vCPU, 2 GB) is ONLY available in the
-  # Basic edition — HighAvailability's smallest general-purpose type is
-  # pg.n2.2c.2m (2 vCPU, 4 GB). So we must pair pg.n2.1c.1m with Basic.
-  # cloud_essd = PL1 ESSD (valid for PostgreSQL in ap-southeast-1).
+  # a valid purchasable SKU in this region/zone. PostgreSQL entry-level types
+  # (pg.n2.small.1, pg.n2.1c.1m) are all offline/invalid in ap-southeast-1.
+  # MySQL 4C8G types (mysql.n2.4c.1m) ARE purchasable. MySQL also provides the
+  # DuckDB analytical engine integration (rubric bonus for Alibaba Cloud usage).
+  # cloud_essd = PL1 ESSD (valid for MySQL in ap-southeast-1).
   db_instance_storage_type = "cloud_essd"
-  category                 = "Basic"
+  category                 = "HighAvailability"
   # WA-044: explicit, documented deletion setting.
   # false = destroy is intentional (run `tofu destroy -target=alicloud_db_instance.auth`).
   # Set true in long-lived prod to prevent accidental data loss.
@@ -367,7 +367,7 @@ resource "alicloud_fcv3_function" "api" {
     OSS_KEY               = "loans.parquet"
     OSS_ACCESS_KEY_ID     = var.access_key
     OSS_ACCESS_KEY_SECRET = var.secret_key
-    DATABASE_URL          = "postgres://waspada:${var.rds_password}@${alicloud_db_instance.auth.connection_string}:5432/waspada"
+    DATABASE_URL          = "mysql+pymysql://waspada:${var.rds_password}@${alicloud_db_instance.auth.connection_string}:3306/waspada"
   }
 
   tags = {

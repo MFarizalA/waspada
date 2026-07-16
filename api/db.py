@@ -1,8 +1,8 @@
 """WASPADA auth DB layer — DATABASE_URL-driven, smallest correct thing.
 
 Driver selection (per WA-028):
-* ``DATABASE_URL`` starting with ``postgres`` → ApsaraDB RDS PostgreSQL via
-  ``psycopg2`` (lazy-imported so the module loads cleanly without the dep).
+* ``DATABASE_URL`` starting with ``mysql`` → ApsaraDB RDS MySQL via
+  ``pymysql`` (lazy-imported so the module loads cleanly without the dep).
 * Otherwise (no URL, or ``sqlite://`` / a ``.db`` path) → stdlib ``sqlite3``,
   the documented local-dev fallback. Keeps the test suite offline and green.
 
@@ -39,9 +39,9 @@ log = logging.getLogger("waspada.db")
 def _ddl() -> list[str]:
     """Return the CREATE TABLE statements, in driver-agnostic form.
 
-    SQLite and PostgreSQL both accept ``SERIAL``→``INTEGER ... AUTOINCREMENT``
+    SQLite and MySQL both accept ``AUTO_INCREMENT``→``INTEGER ... AUTOINCREMENT``
     differently, so the ``users.id`` column is rendered per-driver in
-    ``_SQLiteDb._create`` / ``_PostgresDb._create``. Everything else is plain
+    ``_SQLiteDb._create`` / ``_MySQLDb._create``. Everything else is plain
     ANSI SQL that both accept.
     """
     return [
@@ -77,7 +77,7 @@ class _Db:
 
     Every method opens a short-lived connection (per-call) so the FastAPI
     routes never hold a connection across requests and never need a pool for
-    the demo's load. PostgreSQL's psycopg2 uses its own connection; SQLite
+    the demo's load. MySQL's pymysql uses its own connection; SQLite
     uses ``check_same_thread=False`` so TestClient's thread works.
     """
 
@@ -138,7 +138,7 @@ class _SQLiteDb(_Db):
             path, check_same_thread=False, isolation_level=None
         )
         self._conn.row_factory = sqlite3.Row
-        # Make LIKE/equals case-sensitive like Postgres for email uniqueness.
+        # Make LIKE/equals case-sensitive like MySQL for email uniqueness.
         self._conn.execute("PRAGMA case_sensitive_like = ON;")
         self.create_tables()
 
@@ -152,7 +152,7 @@ class _SQLiteDb(_Db):
         with self._cx() as cx:
             for stmt in _ddl():
                 cx.execute(stmt)
-            # SQLite doesn't have TIMESTAMPTZ; TEXT ISO8601 is what we store.
+            # SQLite doesn't have DATETIME; TEXT ISO8601 is what we store.
 
     # --- users -------------------------------------------------------------
     def get_user(self, email: str) -> Optional[dict]:
@@ -228,29 +228,29 @@ class _SQLiteDb(_Db):
 
 
 # --------------------------------------------------------------------------- #
-# PostgreSQL adapter (ApsaraDB RDS, via psycopg2 — lazy import)
+# MySQL adapter (ApsaraDB RDS, via pymysql — lazy import)
 # --------------------------------------------------------------------------- #
-class _PostgresDb(_Db):
-    backend = "postgres"
+class _MySQLDb(_Db):
+    backend = "mysql"
 
     def __init__(self, url: str):
         try:
-            import psycopg2  # lazy: not a hard dep for local dev / tests
+            import pymysql  # lazy: not a hard dep for local dev / tests
         except ImportError as e:  # pragma: no cover - env dependent
             raise RuntimeError(
-                "DATABASE_URL points at PostgreSQL but psycopg2 is not "
-                "installed. Install with: pip install psycopg2-binary"
+                "DATABASE_URL points at MySQL but pymysql is not "
+                "installed. Install with: pip install pymysql"
             ) from e
-        self._url = url
-        self._psycopg2 = psycopg2
+        self._pymysql = pymysql
+        self._connect_kwargs = _parse_mysql_url(url)
         self.create_tables()
 
     @contextmanager
     def _cx(self) -> Iterator[Any]:
         # One fresh connection per call. RDS + a hackathon demo's QPS does not
         # need a pool; keeping connections short-lived avoids idle-session
-        # issues on managed PG.
-        conn = self._psycopg2.connect(self._url)
+        # issues on managed MySQL.
+        conn = self._pymysql.connect(**self._connect_kwargs)
         try:
             yield conn
             conn.commit()
@@ -263,24 +263,25 @@ class _PostgresDb(_Db):
     def create_tables(self) -> None:
         with self._cx() as cx:
             with cx.cursor() as cur:
-                # SERIAL PK + TIMESTAMPTZ are the PostgreSQL-native spellings.
+                # AUTO_INCREMENT PK + DATETIME are the MySQL-native spellings.
                 cur.execute(
                     """
                     CREATE TABLE IF NOT EXISTS users (
-                        id          SERIAL PRIMARY KEY,
-                        email       TEXT UNIQUE NOT NULL,
-                        password    TEXT NOT NULL,
-                        created_at  TIMESTAMPTZ DEFAULT now()
+                        id          INT AUTO_INCREMENT PRIMARY KEY,
+                        email       VARCHAR(255) UNIQUE NOT NULL,
+                        password    VARCHAR(255) NOT NULL,
+                        created_at  DATETIME DEFAULT CURRENT_TIMESTAMP
                     )
                     """
                 )
                 cur.execute(
                     """
                     CREATE TABLE IF NOT EXISTS reset_tokens (
-                        token       TEXT PRIMARY KEY,
-                        email       TEXT NOT NULL REFERENCES users(email),
-                        expires_at  TIMESTAMPTZ NOT NULL,
-                        used        BOOLEAN DEFAULT FALSE
+                        token       VARCHAR(255) PRIMARY KEY,
+                        email       VARCHAR(255) NOT NULL,
+                        expires_at  DATETIME NOT NULL,
+                        used        TINYINT(1) DEFAULT 0,
+                        INDEX idx_reset_tokens_email (email)
                     )
                     """
                 )
@@ -308,8 +309,11 @@ class _PostgresDb(_Db):
                         (email, password_hash, created_at),
                     )
             return True
-        except self._psycopg2.errors.UniqueViolation:
-            return False
+        except self._pymysql.err.IntegrityError as e:
+            # 1062 = ER_DUP_ENTRY (unique constraint violation)
+            if e.args[0] == 1062:
+                return False
+            raise
 
     def set_user_password(self, email: str, password_hash: str) -> bool:
         with self._cx() as cx:
@@ -341,7 +345,7 @@ class _PostgresDb(_Db):
             with cx.cursor() as cur:
                 cur.execute(
                     "INSERT INTO reset_tokens (token, email, expires_at, used) "
-                    "VALUES (%s, %s, %s, FALSE)",
+                    "VALUES (%s, %s, %s, 0)",
                     (token, email, expires_at),
                 )
 
@@ -361,7 +365,7 @@ class _PostgresDb(_Db):
         with self._cx() as cx:
             with cx.cursor() as cur:
                 cur.execute(
-                    "UPDATE reset_tokens SET used = TRUE WHERE token = %s", (token,)
+                    "UPDATE reset_tokens SET used = 1 WHERE token = %s", (token,)
                 )
 
     def wipe(self) -> None:
@@ -369,6 +373,21 @@ class _PostgresDb(_Db):
             with cx.cursor() as cur:
                 cur.execute("DELETE FROM reset_tokens")
                 cur.execute("DELETE FROM users")
+
+
+def _parse_mysql_url(url: str) -> dict:
+    """Parse a ``mysql+pymysql://user:pass@host:3306/db`` URL into pymysql kwargs."""
+    import urllib.parse as _up
+
+    u = _up.urlparse(url)
+    return {
+        "host": u.hostname or "127.0.0.1",
+        "port": u.port or 3306,
+        "user": u.username or "root",
+        "password": u.password or "",
+        "database": u.path.lstrip("/") if u.path else None,
+        "charset": "utf8mb4",
+    }
 
 
 # --------------------------------------------------------------------------- #
@@ -379,12 +398,12 @@ _db_lock = threading.Lock()
 
 
 def _classify_url(url: Optional[str]) -> str:
-    """Return 'postgres' or 'sqlite' for a DATABASE_URL value."""
+    """Return 'mysql' or 'sqlite' for a DATABASE_URL value."""
     if not url:
         return "sqlite"
     u = url.strip().lower()
-    if u.startswith("postgres://") or u.startswith("postgresql://"):
-        return "postgres"
+    if u.startswith("mysql://") or u.startswith("mysql+pymysql://"):
+        return "mysql"
     return "sqlite"  # 'sqlite:///path.db' or bare path → sqlite
 
 
@@ -392,9 +411,9 @@ def _build_db() -> _Db:
     """Construct the adapter for the current DATABASE_URL env var."""
     url = os.environ.get("DATABASE_URL")
     kind = _classify_url(url)
-    if kind == "postgres":
-        log.info("auth DB: PostgreSQL (RDS) via DATABASE_URL")
-        return _PostgresDb(url)  # type: ignore[arg-type]
+    if kind == "mysql":
+        log.info("auth DB: MySQL (RDS) via DATABASE_URL")
+        return _MySQLDb(url)  # type: ignore[arg-type]
     # SQLite local-dev fallback. Allow an explicit sqlite:///path; default
     # to a process-local file so the demo persists between requests.
     if url:
