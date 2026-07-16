@@ -1,0 +1,119 @@
+# WASPADA — Build & Push Docker Image to Alibaba Cloud Container Registry (ACR)
+#
+# Separate from the test CI workflow (ci.yml). This workflow builds the Docker
+# image (dashboard + backend) and pushes it to ACR so Function Compute / deploy
+# runbooks can pull the tagged image.
+#
+# Triggers:
+#   - On push to main (merging a PR lands on main → image builds)
+#   - Manually via workflow_dispatch
+#
+# The dashboard (vite) MUST be built before docker build, because the root
+# Dockerfile copies dashboard/dist/ into the image.
+#
+# Prerequisite: the 4 ACR GitHub Secrets documented in README.md must be set:
+#   ACR_REGISTRY, ACR_NAMESPACE, ACR_USERNAME, ACR_PASSWORD
+#
+# This workflow runs CI tests (backend + frontend build) as a gate before the
+# image build job, so a broken main never produces a pushed image.
+
+name: Build & Push Image
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Cancel in-flight runs for the same ref when a new push lands.
+concurrency:
+  group: build-image-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ─────────────────────────────────────────────────────────────────────────
+  # Gate job: re-run backend tests before we spend time building an image.
+  # Mirrors ci.yml's backend job so this workflow is self-contained (does not
+  # depend on ci.yml's workflow_run — cross-workflow gates are brittle).
+  # ─────────────────────────────────────────────────────────────────────────
+  backend-tests:
+    name: Backend tests gate (pytest)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: api/requirements.txt
+
+      - name: Install dependencies
+        run: pip install -r api/requirements.txt
+
+      - name: Run pytest
+        # Tests are offline by design — conftest strips API keys and forces
+        # MockLLM. Runs from repo root so the top-level `waspada` package and
+        # `tests/` are both discoverable.
+        run: python -m pytest -q
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # Build the dashboard, build the Docker image, push to ACR.
+  # Only runs on main branch (the push trigger already restricts to main, and
+  # workflow_dispatch carries its own ref). needs: backend-tests gates it.
+  # ─────────────────────────────────────────────────────────────────────────
+  build-and-push:
+    name: Build & push image to ACR
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: backend-tests
+    # Belt-and-suspenders: only build from main.
+    if: github.ref == 'refs/heads/main'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # ── Build the dashboard (vite) BEFORE docker build ──────────────────
+      # The root Dockerfile COPYs dashboard/dist/ into the image, so the
+      # static assets must exist at docker-build time.
+      - name: Set up Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: dashboard/package-lock.json
+
+      - name: Build dashboard (npm ci + vite build)
+        working-directory: dashboard
+        # package-lock.json is committed, so npm ci is preferred. Fall back to
+        # npm install if the lockfile is ever missing or out of sync.
+        run: npm ci || npm install
+      - name: Build dashboard (vite build)
+        working-directory: dashboard
+        run: npm run build
+
+      # ── Docker: set up Buildx, login to ACR, build & push ───────────────
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to Alibaba Cloud Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ secrets.ACR_REGISTRY }}
+          username: ${{ secrets.ACR_USERNAME }}
+          password: ${{ secrets.ACR_PASSWORD }}
+
+      - name: Build and push image to ACR
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          tags: |
+            ${{ secrets.ACR_REGISTRY }}/${{ secrets.ACR_NAMESPACE }}/api:latest
+            ${{ secrets.ACR_REGISTRY }}/${{ secrets.ACR_NAMESPACE }}/api:${{ github.sha }}
+          # Build from repo root so Dockerfile can COPY waspada/, api/, tests/,
+          # and the freshly-built dashboard/dist/.
