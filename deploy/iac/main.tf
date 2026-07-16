@@ -235,12 +235,34 @@ resource "alicloud_log_store" "audit" {
 }
 
 # --------------------------------------------------------------------------- #
+# VPC networking (WA-018: RDS + FC must live in a VPC — classic network is
+# no longer supported in ap-southeast-1). This replaces the previous approach
+# of supplying rds_vswitch_id via a variable.
+# --------------------------------------------------------------------------- #
+resource "alicloud_vpc" "main" {
+  vpc_name   = "${local.name_prefix}-vpc"
+  cidr_block = "172.16.0.0/12"
+}
+
+resource "alicloud_vswitch" "main" {
+  vpc_id     = alicloud_vpc.main.id
+  cidr_block = "172.16.1.0/24"
+  zone_id    = "${var.region}a"
+}
+
+# Security group for Function Compute — attached to the FC function's
+# vpc_config so it can reach RDS inside the VPC. No ingress rules are needed
+# (FC uses the group for outbound/NAT); leaving it default = allow all egress.
+resource "alicloud_security_group" "fc" {
+  security_group_name = "${local.name_prefix}-fc-sg"
+  vpc_id              = alicloud_vpc.main.id
+}
+
+# --------------------------------------------------------------------------- #
 # ApsaraDB RDS PostgreSQL — user store for auth (WA-028)
 # 5th Alibaba Cloud service. Cheapest instance type for the demo.
 # WA-018: RDS requires a VPC network type — classic network creation is
-# unsupported. The RAM user lacks VPC read/create permissions, so the
-# vswitch_id must be supplied via a variable. Find your default VSwitch in
-# the Alibaba console (VPC > VSwitch) and set var.rds_vswitch_id in tfvars.
+# unsupported. The instance now uses the managed VSwitch above.
 # --------------------------------------------------------------------------- #
 resource "alicloud_db_instance" "auth" {
   engine               = "PostgreSQL"
@@ -250,7 +272,7 @@ resource "alicloud_db_instance" "auth" {
   instance_name        = "${local.name_prefix}-auth-db"
   instance_charge_type = "Postpaid"
   # WA-018: VPC network type (classic network is no longer supported)
-  vswitch_id = var.rds_vswitch_id
+  vswitch_id = alicloud_vswitch.main.id
   # WA-044: explicit, documented deletion setting.
   # false = destroy is intentional (run `tofu destroy -target=alicloud_db_instance.auth`).
   # Set true in long-lived prod to prevent accidental data loss.
@@ -307,6 +329,14 @@ resource "alicloud_fcv3_function" "api" {
     logstore                = alicloud_log_store.audit.logstore_name
     enable_request_metrics  = true
     enable_instance_metrics = false
+  }
+
+  # WA-018: Place the function inside the VPC so it can reach the RDS instance
+  # over the private network. Requires a security group + at least one vswitch.
+  vpc_config {
+    vpc_id            = alicloud_vpc.main.id
+    vswitch_ids       = [alicloud_vswitch.main.id]
+    security_group_id = alicloud_security_group.fc.id
   }
 
   environment_variables = {

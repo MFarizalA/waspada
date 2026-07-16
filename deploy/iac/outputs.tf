@@ -64,6 +64,11 @@ output "rds_connection_string" {
   value       = alicloud_db_instance.auth.connection_string
 }
 
+output "vpc_id" {
+  description = "ID of the managed VPC (RDS + FC live inside it)."
+  value       = alicloud_vpc.main.id
+}
+
 output "rds_port" {
   description = "RDS PostgreSQL port."
   value       = alicloud_db_instance.auth.port
