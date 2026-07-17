@@ -45,11 +45,10 @@ variable "fc_image_tag" {
 variable "rds_instance_type" {
   description = "RDS MySQL instance type for ap-southeast-1 (Singapore)."
   type        = string
-  # WA-018: PostgreSQL instance types (pg.n2.small.1, pg.n2.1c.1m, pg.n2e.1c.1m)
-  # are ALL offline/invalid in ap-southeast-1. MySQL is the replacement:
-  #   - mysql.n2.4c.1m (4 vCPU, 8 GB) — purchasable with HighAvailability
-  # MySQL also provides the DuckDB analytical engine integration (rubric bonus).
-  default = "mysql.n2.4c.1m"
+  # Queried live API (alicloud_db_instance_classes) for ap-southeast-1b.
+  # Instance types use .xc suffix. myduck.* types include the DuckDB analytical
+  # engine (Alibaba Cloud native integration). myduck.x4.large.xc = 4 vCPU, 8 GB.
+  default = "myduck.x4.large.xc"
 }
 
 variable "rds_password" {

@@ -247,7 +247,7 @@ resource "alicloud_vpc" "main" {
 resource "alicloud_vswitch" "main" {
   vpc_id     = alicloud_vpc.main.id
   cidr_block = "172.16.1.0/24"
-  zone_id    = "${var.region}a"
+  zone_id    = "${var.region}b"  # Zone A doesn't support myduck.* instance types
 }
 
 # Security group for Function Compute — attached to the FC function's
