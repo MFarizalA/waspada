@@ -210,6 +210,29 @@ resource "alicloud_ram_role_policy_attachment" "fc_sls_write" {
   policy_type = "Custom"
 }
 
+# FC execution role needs VPC + ECS permissions for VPC-configured functions.
+# Standard Alibaba pattern: grant the ENI management policy set which covers
+# CreateNetworkInterface, DeleteNetworkInterface, DescribeNetworkInterfaces, etc.
+# Using the built-in ENI role policy that Alibaba recommends for FC VPC access.
+resource "alicloud_ram_role_policy_attachment" "fc_eni" {
+  role_name   = alicloud_ram_role.fc_execution.role_name
+  policy_name = "AliyunECSNetworkInterfaceManagementAccess"
+  policy_type = "System"
+}
+
+resource "alicloud_ram_role_policy_attachment" "fc_vpc_read" {
+  role_name   = alicloud_ram_role.fc_execution.role_name
+  policy_name = "AliyunVPCReadOnlyAccess"
+  policy_type = "System"
+}
+
+# FC needs ACR read access to pull the custom-container image
+resource "alicloud_ram_role_policy_attachment" "fc_acr_read" {
+  role_name   = alicloud_ram_role.fc_execution.role_name
+  policy_name = "AliyunContainerRegistryReadOnlyAccess"
+  policy_type = "System"
+}
+
 # ---------------------------------------------------------------------------
 # Simple Log Service — audit stream (WA-023)
 # Uses the non-deprecated field names (project_name / logstore_name).
@@ -247,7 +270,15 @@ resource "alicloud_vpc" "main" {
 resource "alicloud_vswitch" "main" {
   vpc_id     = alicloud_vpc.main.id
   cidr_block = "172.16.1.0/24"
-  zone_id    = "${var.region}b"  # Zone A doesn't support myduck.* instance types
+  zone_id    = "${var.region}b"
+}
+
+# Second VSwitch in zone A — required for HA instance types (.xc suffix)
+# which need multi-zone deployment (primary in one zone, standby in another).
+resource "alicloud_vswitch" "secondary" {
+  vpc_id     = alicloud_vpc.main.id
+  cidr_block = "172.16.2.0/24"
+  zone_id    = "${var.region}a"
 }
 
 # Security group for Function Compute — attached to the FC function's
@@ -273,10 +304,7 @@ resource "alicloud_db_instance" "auth" {
   instance_charge_type = "Postpaid"
   # WA-018: VPC network type (classic network is no longer supported)
   vswitch_id = alicloud_vswitch.main.id
-  # WA-018: explicitly pin the zone to the VSwitch zone. RDS needs a zone that
-  # has the chosen instance_type + storage combination in stock; without this
-  # the create call fails with Commodity.InvalidComponent.
-  zone_id = alicloud_vswitch.main.zone_id
+  zone_id    = "ap-southeast-1b"
   # WA-018: Commodity.InvalidComponent ("module you purchased is not legal")
   # fires when the instance_type + category + storage_type combination is not
   # a valid purchasable SKU in this region/zone. PostgreSQL entry-level types
@@ -285,7 +313,7 @@ resource "alicloud_db_instance" "auth" {
   # DuckDB analytical engine integration (rubric bonus for Alibaba Cloud usage).
   # cloud_essd = PL1 ESSD (valid for MySQL in ap-southeast-1).
   db_instance_storage_type = "cloud_essd"
-  category                 = "HighAvailability"
+  category                 = "Basic"
   # WA-044: explicit, documented deletion setting.
   # false = destroy is intentional (run `tofu destroy -target=alicloud_db_instance.auth`).
   # Set true in long-lived prod to prevent accidental data loss.
@@ -323,7 +351,7 @@ resource "alicloud_fcv3_function" "api" {
   memory_size          = 2048
   timeout              = 180 # WA-044: live Qwen debate ~70s; 60s killed it mid-debate
   cpu                  = 1.0
-  disk_size            = 1024 # WA-044: 512MB was tight for container image + DuckDB + parquet
+  disk_size            = 10240 # WA-044: FC disk must be 512 or multiple of 10240
   instance_concurrency = 10
 
   custom_container_config {

@@ -39,7 +39,7 @@ variable "acr_registry_domain" {
 variable "fc_image_tag" {
   description = "Tag of the ACR image to deploy (owner pushes this in the WA-018 deploy step)."
   type        = string
-  default     = "latest"
+  default     = "v2"
 }
 
 variable "rds_instance_type" {
@@ -48,7 +48,7 @@ variable "rds_instance_type" {
   # Queried live API (alicloud_db_instance_classes) for ap-southeast-1b.
   # Instance types use .xc suffix. myduck.* types include the DuckDB analytical
   # engine (Alibaba Cloud native integration). myduck.x4.large.xc = 4 vCPU, 8 GB.
-  default = "myduck.x4.large.xc"
+  default = "mysql.n2.medium.1"
 }
 
 variable "rds_password" {
