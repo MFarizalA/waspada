@@ -27,6 +27,7 @@ import pyarrow as pa
 
 from ..config import COLLECTIONS, LANES
 from ..schema import RawLoans, schema_from_dataclass
+from .dispute_memory import get_memory_backend
 from .llm import get_llm
 from .orchestrator import Orchestrator
 from .protocol import AgentContext, Status
@@ -106,7 +107,8 @@ def main(argv: Optional[list[str]] = None) -> int:
     # WASPADA_LLM_PROVIDER selects the reasoning brain (mock/qwen);
     # defaults to the offline mock so the CLI never reaches for the network
     # unless a caller explicitly opts in via the env var.
-    orch = Orchestrator(get_llm(), as_of=as_of, top_n=args.top_n)
+    orch = Orchestrator(get_llm(), as_of=as_of, top_n=args.top_n,
+                        memory_backend=get_memory_backend())
     # Auto-approve for the CLI smoke run unless a real gate channel is wired.
     if args.auto_approve or os.environ.get("WASPADA_AUTO_APPROVE", "").strip() in ("1", "true", "yes"):
         from .base import ApprovalGate

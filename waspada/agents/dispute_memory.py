@@ -59,6 +59,7 @@ __all__ = [
     "LocalFileMemory",
     "DisputeMemory",
     "DEFAULT_MEMORY_PATH",
+    "get_memory_backend",
 ]
 
 # Default on-disk location for the demo. Resolves under the repo-root ``data/``
@@ -157,6 +158,19 @@ class LocalFileMemory(MemoryBackend):
         tmp = self.path.with_suffix(self.path.suffix + ".tmp")
         tmp.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
         os.replace(tmp, self.path)
+
+
+def get_memory_backend() -> MemoryBackend:
+    """Pick the OSS backend when fully configured, else the local-file fallback.
+
+    Mirrors the ``get_audit_sink()`` fail-safe pattern in
+    ``waspada/audit/sls.py``: never return ``InMemoryMemory`` in a real
+    entrypoint. The OSS backend is deferred (WA-047); when it lands, this
+    helper gains an ``oss_configured()`` branch and drops in behind the same
+    two-method interface with no orchestrator changes.
+    """
+    # TODO(WA-047): add OSSMemory when the bucket policy allows PutObject.
+    return LocalFileMemory()
 
 
 # --------------------------------------------------------------------------- #

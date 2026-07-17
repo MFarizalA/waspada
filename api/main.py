@@ -117,12 +117,14 @@ def _build_demo_orchestrator(
     """
     from waspada.agents.__main__ import _sample_raw_table
     from waspada.agents.data_engineer import DataEngineerAgent
+    from waspada.agents.dispute_memory import get_memory_backend
 
     llm = get_llm(brain) if brain and brain != "mock" else MockLLM()
     orch = Orchestrator(
         llm,
         as_of=dt.date(2024, 12, 1),
         top_n=20,
+        memory_backend=get_memory_backend(),
         on_round_complete=on_round_complete,
         on_dispute_resolved=on_dispute_resolved,
     )

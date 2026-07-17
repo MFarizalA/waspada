@@ -75,7 +75,14 @@ def _isolated_de_brain(orch: Orchestrator) -> Orchestrator:
     Both data agents run function-calling loops on ``self.llm``; without this,
     they would consume the scripted debate script before the Risk Auditor speaks.
     Mirrors the isolation WA-030 applied to the other debate tests.
+
+    WA-046: also reset the dispute memory to a fresh in-process one — the
+    endpoint now wires a LocalFileMemory by default, and a leftover
+    ``data/dispute_memory.json`` from a prior run would short-circuit these
+    scripted disputes (a recalled human ruling trumps the script).
     """
+    from waspada.agents.dispute_memory import DisputeMemory, InMemoryMemory
+    orch.memory = DisputeMemory(InMemoryMemory())
     orig = orch._build_agents
     def _build():
         agents = orig()
