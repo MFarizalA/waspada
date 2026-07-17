@@ -43,17 +43,17 @@ variable "fc_image_tag" {
 }
 
 variable "rds_instance_type" {
-  description = "RDS PostgreSQL instance type for ap-southeast-1 (Singapore)."
+  description = "RDS MySQL instance type for ap-southeast-1 (Singapore)."
   type        = string
-  # pg.n2.1c.1m appears in global docs but is NOT purchasable in ap-southeast-1.
-  # pg.n2.small.1 (same specs: 1 vCPU, 2 GB) IS purchasable when paired with
-  # category="Basic" + db_instance_storage_type="cloud_essd". The original
-  # "Offline" error was caused by missing category/storage params, not the type.
-  default = "pg.n2.small.1"
+  # WA-018: PostgreSQL instance types (pg.n2.small.1, pg.n2.1c.1m, pg.n2e.1c.1m)
+  # are ALL offline/invalid in ap-southeast-1. MySQL is the replacement:
+  #   - mysql.n2.4c.1m (4 vCPU, 8 GB) — purchasable with HighAvailability
+  # MySQL also provides the DuckDB analytical engine integration (rubric bonus).
+  default = "mysql.n2.4c.1m"
 }
 
 variable "rds_password" {
-  description = "RDS PostgreSQL master password. Pass via TF_VAR_rds_password or secrets.tfvars. NEVER commit."
+  description = "RDS MySQL master password. Pass via TF_VAR_rds_password or secrets.tfvars. NEVER commit."
   type        = string
   sensitive   = true
   default     = ""

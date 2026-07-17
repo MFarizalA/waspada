@@ -40,7 +40,7 @@ from waspada.agents.protocol import AgentContext
 
 # Auth (WA-028): JWT gate on protected routes + auth router.
 # ``init_db()`` is idempotent — it ensures the users / reset_tokens tables
-# exist on the configured store (ApsaraDB RDS PostgreSQL via DATABASE_URL,
+# exist on the configured store (ApsaraDB RDS MySQL via DATABASE_URL,
 # or the SQLite local-dev fallback) before we try to seed.
 from api import db as db_mod
 from api.auth import (

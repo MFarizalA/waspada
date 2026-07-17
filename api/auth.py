@@ -8,7 +8,7 @@ Routes (mounted under ``/api/auth``):
                                         (logged in dev; no SMTP for the demo)
 * ``POST /api/auth/reset-password``  — token + new password → update + invalidate
 
-The user store is ApsaraDB RDS PostgreSQL in production, selected by
+The user store is ApsaraDB RDS MySQL in production, selected by
 ``DATABASE_URL`` (the 5th Alibaba Cloud service in the submission). For local
 dev and tests the same connection layer falls back to stdlib SQLite — see
 ``api/db.py``. Passwords are bcrypt-hashed; reset tokens are opaque server-side
