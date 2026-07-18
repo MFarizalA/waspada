@@ -123,7 +123,8 @@ def _smoke_test(db) -> None:
 
     # 3. Forgot-password (create reset token)
     print("3. Forgot-password ... ", end="", flush=True)
-    token = auth_mod.new_token()
+    import secrets as _secrets
+    token = _secrets.token_urlsafe(32)
     expires = auth_mod._expiry_iso()
     db.create_reset_token(token, test_email, expires)
     tok_rec = db.get_reset_token(token)
@@ -199,6 +200,12 @@ def main() -> int:
     # Inject into the environment so api.db picks it up
     os.environ["DATABASE_URL"] = url
 
+    # Set a short default socket timeout so MySQL connection attempts fail
+    # fast (the RDS is VPC-only; without this the OS default can hang for
+    # minutes on a blocked whitelist).
+    import socket
+    socket.setdefaulttimeout(15)
+
     # Reset any cached adapter so we build a fresh one for this URL
     from api import db as db_mod
 
@@ -210,8 +217,17 @@ def main() -> int:
     try:
         db = db_mod.init_db()
     except Exception as e:
-        print(f"FAILED")
-        print(f"\nERROR: could not connect / initialise: {e}", file=sys.stderr)
+        latency_ms = (time.perf_counter() - t0) * 1000
+        print(f"FAILED after {latency_ms:.1f} ms")
+        print(f"\nERROR: could not connect / initialise: {type(e).__name__}: {e}", file=sys.stderr)
+        # If the error is a timeout, add a diagnostic hint about security_ips.
+        if "timed out" in str(e).lower() or "timeout" in str(e).lower():
+            print(
+                "\nHINT: The RDS security_ips whitelist likely does not include "
+                "this machine's public IP. The instance is VPC-only by default "
+                "(deploy/iac/variables.tf: rds_security_ips defaults to 172.16.0.0/12).",
+                file=sys.stderr,
+            )
         return 1
     latency_ms = (time.perf_counter() - t0) * 1000
     print(f"OK ({latency_ms:.1f} ms)")
