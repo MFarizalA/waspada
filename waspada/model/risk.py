@@ -37,7 +37,7 @@ from __future__ import annotations
 import datetime as dt
 import pickle
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Sequence, Tuple
 
 import numpy as np
 import pandas as pd
@@ -238,14 +238,40 @@ def train(
         probs = pipeline.predict_proba(X.iloc[test_idx])[:, 1]
         metrics["auc"] = float(roc_auc_score(y[test_idx], probs))
 
+    # WA-051: freeze the reference band edges — the [20,40,60,80] percentiles of
+    # THIS book's scores — so future batches are banded on absolute PD cutoffs
+    # rather than re-quintiled against themselves. Computed with the same
+    # clip as predict() so scoring the training frame reproduces the historical
+    # per-batch quintiles byte-for-byte. Collapsed (constant-prob) → None, so
+    # predict() falls back to the relative path and the degenerate handling.
+    band_edges = _reference_band_edges(pipeline, X)
+
     return {
         "pipeline": pipeline,
         "feature_columns": list(FEATURE_COLUMNS),
         "leakage_excluded": list(LEAKAGE_EXCLUDED),
         "split": split,
         "metrics": metrics,
+        "band_edges": band_edges,
         "trained_at": dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z"),
     }
+
+
+def _reference_band_edges(pipeline: Pipeline, X: pd.DataFrame) -> Optional[List[float]]:
+    """The four absolute PD cutoffs to band future batches against (WA-051).
+
+    The reference distribution is the whole training book's scores; its
+    ``[20,40,60,80]`` percentiles become the frozen cutoffs. Matches predict()'s
+    clip so ``predict(model, same_frame)`` is byte-identical to the old
+    per-batch quintile output. Returns ``None`` when the cutoffs collapse
+    (constant probabilities) so predict() degrades to the relative path.
+    """
+    probs = pipeline.predict_proba(X)[:, 1].astype(float)
+    probs = np.clip(np.nan_to_num(probs, nan=0.0), 0.0, 1.0)
+    qs = np.percentile(probs, [20, 40, 60, 80])
+    if len(set(qs.tolist())) == 1:
+        return None
+    return [float(q) for q in qs]
 
 
 def _try_outstanding_principal(features: pa.Table):
@@ -266,31 +292,46 @@ def _try_outstanding_principal(features: pa.Table):
 # --------------------------------------------------------------------------- #
 # predict — ScoredAccounts-shaped output with p_default + risk-level band.
 # --------------------------------------------------------------------------- #
-def _risk_level_bands(probs: np.ndarray) -> List[str]:
-    """Assign "Very Low" (lowest risk) .. "Very High" (highest) by p_default quintile.
+def _risk_level_bands(
+    probs: np.ndarray, edges: Optional[Sequence[float]] = None,
+) -> List[str]:
+    """Assign "Very Low" (lowest risk) .. "Very High" (highest) from ``probs``.
 
-    The labels come from :data:`waspada.schema.RISK_LEVELS` (the frozen
-    vocabulary). Per-batch relative banding (the work-list ranks within the
-    scored population). Degenerate cases (constant probs, tiny N) collapse to
-    the middle level so banding never throws.
+    Two modes (WA-051):
+
+    * ``edges=None`` (default) — **per-batch relative** banding: the four
+      cutpoints are this batch's ``[20,40,60,80]`` percentiles, so ~20% land in
+      each level. This is the historical behaviour, preserved byte-for-byte.
+    * ``edges`` supplied — **absolute** banding against four fixed PD cutoffs
+      ``[e1,e2,e3,e4]``. "Very High" then means ``PD > e4`` for real, not "top
+      20% of whatever batch this happens to be." This is what makes the dispute
+      gate calibrated: the Skeptic's absolute view and the band are finally on
+      the same scale.
+
+    The labels come from :data:`waspada.schema.RISK_LEVELS`. Degenerate relative
+    cases (constant probs) collapse to the middle level so banding never throws.
     """
     lo, low, mid, high, hi = RISK_LEVELS
     n = len(probs)
     if n == 0:
         return []
-    qs = np.percentile(probs, [20, 40, 60, 80])
-    # If all cutpoints collapse (constant probs), everyone is mid ("Medium").
-    if len(set(qs.tolist())) == 1:
-        return [mid] * n
+    if edges is not None:
+        cuts = [float(e) for e in edges]
+    else:
+        qs = np.percentile(probs, [20, 40, 60, 80])
+        # If all cutpoints collapse (constant probs), everyone is mid ("Medium").
+        if len(set(qs.tolist())) == 1:
+            return [mid] * n
+        cuts = qs.tolist()
     bands: List[str] = []
     for p in probs:
-        if p <= qs[0]:
+        if p <= cuts[0]:
             bands.append(lo)
-        elif p <= qs[1]:
+        elif p <= cuts[1]:
             bands.append(low)
-        elif p <= qs[2]:
+        elif p <= cuts[2]:
             bands.append(mid)
-        elif p <= qs[3]:
+        elif p <= cuts[3]:
             bands.append(high)
         else:
             bands.append(hi)
@@ -318,7 +359,10 @@ def predict(model: Dict, features: pa.Table) -> pa.Table:
     # Guard: probabilities must be finite and in [0,1] (clip tiny float drift).
     probs = np.clip(np.nan_to_num(probs, nan=0.0), 0.0, 1.0)
 
-    bands = _risk_level_bands(probs)
+    # WA-051: band on the frozen absolute edges when the artifact carries them
+    # (new models); fall back to per-batch quintiles for edge-less artifacts
+    # (back-compat). On the training frame the two are identical by construction.
+    bands = _risk_level_bands(probs, edges=model.get("band_edges"))
 
     # Segment struct per the frozen ScoredAccounts contract.
     seg_type = schema_from_dataclass(ScoredAccounts).field("segment").type

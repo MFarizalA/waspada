@@ -92,7 +92,15 @@ class RiskModelAgent(Agent):
         # Flag the highest-risk level ("Very High") count — the "flags score bands" check.
         bands = scored.column("score_band").to_pylist()
         n_highest = sum(1 for b in bands if b == "Very High")
-        self.step("score_bands", notes=f"Very High(highest)={n_highest} of {len(bands)}")
+        # WA-051: record which banding calibration was used, so the audit trail
+        # is honest about whether "Very High" meant an absolute PD threshold or a
+        # per-batch rank.
+        edges = model.get("band_edges")
+        banding_mode = "absolute" if edges else "relative"
+        edges_note = (" edges=[" + ", ".join(f"{e:.3f}" for e in edges) + "]") if edges else ""
+        self.step("score_bands",
+                  notes=f"Very High(highest)={n_highest} of {len(bands)}; "
+                        f"banding={banding_mode}{edges_note}")
 
         handle = "scored_accounts"
         context.data_handles[handle] = scored
