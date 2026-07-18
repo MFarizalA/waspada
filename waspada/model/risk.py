@@ -37,7 +37,7 @@ from __future__ import annotations
 import datetime as dt
 import pickle
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Sequence, Tuple
 
 import numpy as np
 import pandas as pd
@@ -58,6 +58,8 @@ __all__ = [
     "LEAKAGE_EXCLUDED",
     "train",
     "predict",
+    "explain",
+    "format_drivers",
     "save_model",
     "load_model",
     "issue_year_from_frame",
@@ -236,14 +238,40 @@ def train(
         probs = pipeline.predict_proba(X.iloc[test_idx])[:, 1]
         metrics["auc"] = float(roc_auc_score(y[test_idx], probs))
 
+    # WA-051: freeze the reference band edges — the [20,40,60,80] percentiles of
+    # THIS book's scores — so future batches are banded on absolute PD cutoffs
+    # rather than re-quintiled against themselves. Computed with the same
+    # clip as predict() so scoring the training frame reproduces the historical
+    # per-batch quintiles byte-for-byte. Collapsed (constant-prob) → None, so
+    # predict() falls back to the relative path and the degenerate handling.
+    band_edges = _reference_band_edges(pipeline, X)
+
     return {
         "pipeline": pipeline,
         "feature_columns": list(FEATURE_COLUMNS),
         "leakage_excluded": list(LEAKAGE_EXCLUDED),
         "split": split,
         "metrics": metrics,
+        "band_edges": band_edges,
         "trained_at": dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z"),
     }
+
+
+def _reference_band_edges(pipeline: Pipeline, X: pd.DataFrame) -> Optional[List[float]]:
+    """The four absolute PD cutoffs to band future batches against (WA-051).
+
+    The reference distribution is the whole training book's scores; its
+    ``[20,40,60,80]`` percentiles become the frozen cutoffs. Matches predict()'s
+    clip so ``predict(model, same_frame)`` is byte-identical to the old
+    per-batch quintile output. Returns ``None`` when the cutoffs collapse
+    (constant probabilities) so predict() degrades to the relative path.
+    """
+    probs = pipeline.predict_proba(X)[:, 1].astype(float)
+    probs = np.clip(np.nan_to_num(probs, nan=0.0), 0.0, 1.0)
+    qs = np.percentile(probs, [20, 40, 60, 80])
+    if len(set(qs.tolist())) == 1:
+        return None
+    return [float(q) for q in qs]
 
 
 def _try_outstanding_principal(features: pa.Table):
@@ -264,31 +292,46 @@ def _try_outstanding_principal(features: pa.Table):
 # --------------------------------------------------------------------------- #
 # predict — ScoredAccounts-shaped output with p_default + risk-level band.
 # --------------------------------------------------------------------------- #
-def _risk_level_bands(probs: np.ndarray) -> List[str]:
-    """Assign "Very Low" (lowest risk) .. "Very High" (highest) by p_default quintile.
+def _risk_level_bands(
+    probs: np.ndarray, edges: Optional[Sequence[float]] = None,
+) -> List[str]:
+    """Assign "Very Low" (lowest risk) .. "Very High" (highest) from ``probs``.
 
-    The labels come from :data:`waspada.schema.RISK_LEVELS` (the frozen
-    vocabulary). Per-batch relative banding (the work-list ranks within the
-    scored population). Degenerate cases (constant probs, tiny N) collapse to
-    the middle level so banding never throws.
+    Two modes (WA-051):
+
+    * ``edges=None`` (default) — **per-batch relative** banding: the four
+      cutpoints are this batch's ``[20,40,60,80]`` percentiles, so ~20% land in
+      each level. This is the historical behaviour, preserved byte-for-byte.
+    * ``edges`` supplied — **absolute** banding against four fixed PD cutoffs
+      ``[e1,e2,e3,e4]``. "Very High" then means ``PD > e4`` for real, not "top
+      20% of whatever batch this happens to be." This is what makes the dispute
+      gate calibrated: the Skeptic's absolute view and the band are finally on
+      the same scale.
+
+    The labels come from :data:`waspada.schema.RISK_LEVELS`. Degenerate relative
+    cases (constant probs) collapse to the middle level so banding never throws.
     """
     lo, low, mid, high, hi = RISK_LEVELS
     n = len(probs)
     if n == 0:
         return []
-    qs = np.percentile(probs, [20, 40, 60, 80])
-    # If all cutpoints collapse (constant probs), everyone is mid ("Medium").
-    if len(set(qs.tolist())) == 1:
-        return [mid] * n
+    if edges is not None:
+        cuts = [float(e) for e in edges]
+    else:
+        qs = np.percentile(probs, [20, 40, 60, 80])
+        # If all cutpoints collapse (constant probs), everyone is mid ("Medium").
+        if len(set(qs.tolist())) == 1:
+            return [mid] * n
+        cuts = qs.tolist()
     bands: List[str] = []
     for p in probs:
-        if p <= qs[0]:
+        if p <= cuts[0]:
             bands.append(lo)
-        elif p <= qs[1]:
+        elif p <= cuts[1]:
             bands.append(low)
-        elif p <= qs[2]:
+        elif p <= cuts[2]:
             bands.append(mid)
-        elif p <= qs[3]:
+        elif p <= cuts[3]:
             bands.append(high)
         else:
             bands.append(hi)
@@ -316,7 +359,10 @@ def predict(model: Dict, features: pa.Table) -> pa.Table:
     # Guard: probabilities must be finite and in [0,1] (clip tiny float drift).
     probs = np.clip(np.nan_to_num(probs, nan=0.0), 0.0, 1.0)
 
-    bands = _risk_level_bands(probs)
+    # WA-051: band on the frozen absolute edges when the artifact carries them
+    # (new models); fall back to per-batch quintiles for edge-less artifacts
+    # (back-compat). On the training frame the two are identical by construction.
+    bands = _risk_level_bands(probs, edges=model.get("band_edges"))
 
     # Segment struct per the frozen ScoredAccounts contract.
     seg_type = schema_from_dataclass(ScoredAccounts).field("segment").type
@@ -353,6 +399,111 @@ def predict(model: Dict, features: pa.Table) -> pa.Table:
         scored = scored.append_column("outstanding_principal", op)
     validate_table(scored, ScoredAccounts, name="predict(scored)")
     return scored
+
+
+# --------------------------------------------------------------------------- #
+# explain — per-account feature attribution (WA-050).
+#
+# The debate's Actuary was defending a score it could not introspect: the
+# rebuttal prompt saw only raw feature *values*, never *why the model* produced
+# the band — so its defense was a plausible-sounding rationalization, not an
+# explanation. For a linear model the "why" is exact and free: the logit is
+# ``intercept + Σ coef_i · x_i`` over the transformed features, so each term is
+# that feature's signed contribution to the score. Feeding the top terms into
+# the debate turns "a number can't argue for itself" from a slogan into a
+# grounded argument, and gives the dashboard a real "why is this account High?".
+# --------------------------------------------------------------------------- #
+def _driver_label(name: str, raw_row: pd.Series) -> str:
+    """Turn a transformed feature name into a human-readable, value-bearing label.
+
+    ``get_feature_names_out`` yields ``num__rate`` / ``cat__grade_E``. We strip
+    the transformer prefix and, for numerics, attach the account's raw value
+    (``rate=24.00``); for one-hots, render the active category (``grade=E``).
+    """
+    if name.startswith("num__"):
+        feat = name[len("num__"):]
+        val = raw_row.get(feat)
+        try:
+            return f"{feat}={float(val):.2f}"
+        except (TypeError, ValueError):
+            return feat
+    if name.startswith("cat__"):
+        body = name[len("cat__"):]
+        # OneHotEncoder names are ``{feature}_{category}``; match the known
+        # categorical so a category containing '_' (e.g. debt_consolidation)
+        # isn't split in the wrong place.
+        for feat in CATEGORICAL_FEATURES:
+            if body.startswith(f"{feat}_"):
+                return f"{feat}={body[len(feat) + 1:]}"
+        return body
+    return name
+
+
+def explain(
+    model: Dict, features: pa.Table, loan_id: str, *, top_n: int = 5,
+) -> List[Tuple[str, float]]:
+    """Top-``top_n`` signed logit contributions behind one account's score.
+
+    Returns ``[(label, contribution), ...]`` ranked by ``|contribution|``
+    descending, where ``contribution = coef_i · x_i`` on the *transformed*
+    feature (StandardScaler'd numeric or one-hot categorical). Because the model
+    is linear, ``intercept + Σ (all contributions) == logit(p_default)`` — the
+    account's own number is fully decomposed, not approximated.
+
+    Returns ``[]`` (never raises) when the model is not a fitted pipeline or the
+    ``loan_id`` is not in ``features`` — the caller degrades to the prior
+    value-only prompt.
+    """
+    pipeline = model.get("pipeline") if isinstance(model, dict) else None
+    if pipeline is None:
+        return []
+    try:
+        pre = pipeline.named_steps["pre"]
+        clf = pipeline.named_steps["clf"]
+    except (AttributeError, KeyError):
+        return []
+
+    # Locate the account's raw feature row.
+    ids = features.column("loan_id").to_pylist()
+    try:
+        pos = ids.index(str(loan_id))
+    except ValueError:
+        return []
+    raw_row = pd.Series(
+        {c: features.column(c)[pos].as_py() for c in FEATURE_COLUMNS}
+    )
+    X_row = pd.DataFrame([raw_row], columns=FEATURE_COLUMNS)
+
+    try:
+        xt = np.asarray(pre.transform(X_row), dtype=float)[0]
+        names = list(pre.get_feature_names_out())
+        coefs = np.asarray(clf.coef_, dtype=float).ravel()
+    except Exception:  # pragma: no cover - defensive; unfitted / shape drift
+        return []
+    if len(coefs) != len(xt) or len(names) != len(xt):
+        return []
+
+    contributions = coefs * xt
+    order = sorted(range(len(contributions)), key=lambda i: -abs(contributions[i]))
+    out: List[Tuple[str, float]] = []
+    for i in order:
+        c = float(contributions[i])
+        if c == 0.0:  # inactive one-hot / zeroed-out term carries no signal
+            continue
+        out.append((_driver_label(names[i], raw_row), c))
+        if len(out) >= max(1, int(top_n)):
+            break
+    return out
+
+
+def format_drivers(drivers: List[Tuple[str, float]]) -> str:
+    """Render :func:`explain` output as a compact evidence line for a prompt.
+
+    ``[("rate=24.00", 0.81), ("dti=30.00", 0.44)]`` →
+    ``"rate=24.00 (+0.81), dti=30.00 (-0.44)"``. A positive term pushes the
+    account toward default (higher risk); negative pulls it toward safe.
+    """
+    return ", ".join(f"{label} ({c:+.2f})" for label, c in drivers)
 
 
 # --------------------------------------------------------------------------- #

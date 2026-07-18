@@ -326,11 +326,13 @@ table format, no versioning, no snapshot isolation). WA-047 closes the gap.
   so DuckDB never queries OSS directly. `httpfs` / `read_parquet('s3://…')` —
   WA-047.
 - 🟡 · **dlt pipeline** (schema contracts, incremental cursors, `merge` dedup on
-  `loan_id`, `load_info` audit metadata): **not implemented.**
-  `waspada/data/lakehouse.py`'s dlt path is dead code with two defects
-  (`dlt.readers.filesystem` does not exist; the loaded data never lands in the
-  returned connection) and is never called. WA-047 either fixes it or replaces
-  it with `httpfs`. The schema contract that *does* exist is the Python
+  `loan_id`, `load_info` audit metadata): **not implemented — and no longer
+  pretended.** The earlier `waspada/data/lakehouse.py` dlt path was dead code
+  with two defects (`dlt.readers.filesystem` does not exist; the loaded data
+  never landed in the returned connection) and was never called; it was
+  **removed** (WA-047). Today `load_to_duckdb` honestly registers the
+  Arrow table that `oss.py` bulk-reads. Genuine OSS pushdown via `httpfs` is
+  future work. The schema contract that *does* exist is the Python
   `validate_table(raw, RawLoans)` gate inside the Data Engineer.
 - ✅ · **RDS PostgreSQL — auth only** (WA-028). *Not* a lakehouse component.
   **Dispute memory lives in OSS**, not RDS (`memory/disputes/loan_id={id}.json`
