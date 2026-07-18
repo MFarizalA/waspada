@@ -5,12 +5,21 @@ scikit-learn>=1.5
 pyarrow>=17
 pandas>=2.2
 numpy>=1.26
+# DuckDB is the in-process SQL engine the data agents run over (data_engineer /
+# data_analyst / lakehouse). Lazy-imported, but a real runtime dep of the
+# pipeline the API serves — the deployed image needs it.
+duckdb>=1.0
 python-dotenv>=1.0
 oss2>=2.18
 openai>=1.0
 mcp>=1.0
 PyJWT>=2.8
+# passlib 1.7.4 (latest, unmaintained) predates bcrypt's 4.1 API change and
+# breaks on bcrypt>=4.1 ("module 'bcrypt' has no attribute '__about__'"), which
+# would fail EVERY password hash — in production, not just CI. Pin bcrypt to the
+# last compatible line until we migrate off passlib.
 passlib[bcrypt]>=1.7
+bcrypt>=4.0,<4.1
 email-validator>=2.0
 # ApsaraDB RDS MySQL driver (optional for local dev / tests, required when
 # DATABASE_URL points at mysql+pymysql:// — see api/db.py).
