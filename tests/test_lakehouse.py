@@ -1,12 +1,21 @@
-"""Tests for waspada.data.lakehouse — WA-060 DuckDB RDS analytics fallback."""
+"""Tests for waspada.data.lakehouse — the DuckDB read surface.
+
+Covers the WA-060 analytics-connection fallback and the WA-047 honest
+``load_to_duckdb`` (Arrow / local-Parquet register; OSS is read elsewhere).
+"""
 from __future__ import annotations
 
 import os
 from unittest.mock import patch
 
+import pyarrow as pa
 import pytest
 
-from waspada.data.lakehouse import get_analytics_connection
+from waspada.data.lakehouse import (
+    Lakehouse,
+    get_analytics_connection,
+    load_to_duckdb,
+)
 
 
 class TestGetAnalyticsConnection:
@@ -56,3 +65,42 @@ class TestGetAnalyticsConnection:
                 database="waspada",
             )
             assert con is mock_connect.return_value
+
+
+class TestLoadToDuckdb:
+    """WA-047: the honest read surface — Arrow / local Parquet, no dlt/OSS."""
+
+    def test_arrow_table_is_registered_and_queryable(self):
+        tbl = pa.table({"loan_id": ["L1", "L2"], "amount": [100.0, 250.0]})
+        lh = load_to_duckdb(arrow=tbl, table="raw_loans")
+        assert isinstance(lh, Lakehouse) and lh.table == "raw_loans"
+        assert lh.scalar("SELECT COUNT(*) FROM raw_loans") == 2
+        assert lh.scalar("SELECT SUM(amount) FROM raw_loans") == 350.0
+
+    def test_local_parquet_is_read(self, tmp_path):
+        import pyarrow.parquet as pq
+        p = tmp_path / "loans.parquet"
+        pq.write_table(pa.table({"loan_id": ["L1"], "amount": [42.0]}), p)
+        lh = load_to_duckdb(local_parquet=str(p), table="raw_loans")
+        assert lh.scalar("SELECT amount FROM raw_loans") == 42.0
+
+    def test_no_source_raises_a_clear_error_not_a_silent_empty_read(self):
+        with pytest.raises(RuntimeError, match="no source"):
+            load_to_duckdb()
+
+    def test_no_dlt_landmine_remains(self):
+        """The removed dead path imported dlt and called a nonexistent
+        ``dlt.readers.filesystem`` API. Guard the executable code (not the
+        docstring, which names the removed API) against it creeping back."""
+        import ast
+        import inspect
+        from waspada.data import lakehouse
+        tree = ast.parse(inspect.getsource(lakehouse))
+        imported = {
+            alias.name
+            for node in ast.walk(tree)
+            if isinstance(node, ast.Import)
+            for alias in node.names
+        }
+        assert "dlt" not in imported                       # no dlt import
+        assert not hasattr(lakehouse, "_oss_s3_endpoint")  # dead helper removed

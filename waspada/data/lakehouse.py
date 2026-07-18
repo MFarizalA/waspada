@@ -1,25 +1,30 @@
-"""Lakehouse data access layer (WA-029) — dlt load + DuckDB.
+"""Lakehouse data access layer (WA-029) — DuckDB read surface.
 
 The Data Engineer agent (WA-029) reasons over the freshly-loaded book *before*
 anyone trusts it. Its quality tools (validate_schema / null_rates /
 profile_column / detect_anomalies) query the book via this thin layer:
 
-  * :func:`load_to_duckdb` — ``dlt load`` of the OSS Parquet object (S3-compatible
-    endpoint) into an in-process DuckDB. For local dev / tests without OSS
-    creds, callers skip the load and hand in a pre-built DuckDB relation (or a
-    pyarrow Table we register) so the quality tools are exercised offline.
+  * :func:`load_to_duckdb` — register an in-memory Arrow table (or a local
+    Parquet file) into an in-process DuckDB and hand back a :class:`Lakehouse`.
   * :class:`Lakehouse` — a handle holding a DuckDB connection plus the table
-    name the quality tools query. Lazy-imports duckdb + dlt so the module
-    imports cleanly when neither is needed.
+    name the quality tools query. Lazy-imports duckdb so the module imports
+    cleanly when it isn't needed.
+
+Where the OSS read actually happens
+-----------------------------------
+This layer does **not** read OSS. The portfolio snapshot is fetched by
+:func:`waspada.data.oss.fetch_loans` (a bulk read of the Parquet object into a
+pyarrow Table); the caller then passes that table here via ``arrow=``. There is
+no ``dlt`` pipeline and no ``httpfs``/``s3://`` pushdown today — the earlier
+scaffold called a ``dlt.readers.filesystem`` API that does not exist and was
+never wired into a real entrypoint, so it was removed (WA-047). Genuine
+pushdown / partition pruning against OSS is future work (WA-047 §read-path).
 
 Design notes
 ------------
 * The deterministic freshness + schema gate STAYS inside the Data Engineer
-  agent, not here. This layer is just the read surface — it loads/registers
-  the table and lets the tools run SQL over it.
-* ``dlt`` is imported lazily inside the load function; the quality tools only
-  need duckdb. Tests never reach the dlt path (they build a Lakehouse from an
-  in-memory Arrow table).
+  agent, not here. This layer is just the read surface — it registers the table
+  and lets the tools run SQL over it.
 """
 from __future__ import annotations
 
@@ -28,7 +33,7 @@ from typing import Any, Optional
 
 import pyarrow as pa
 
-__all__ = ["Lakehouse", "load_to_duckdb"]
+__all__ = ["Lakehouse", "load_to_duckdb", "get_analytics_connection"]
 
 
 class Lakehouse:
@@ -64,25 +69,6 @@ class Lakehouse:
         return row[0] if row else None
 
 
-def _oss_s3_endpoint() -> Optional[str]:
-    """Return the S3-compatible endpoint URL for OSS, or None if unconfigured.
-
-    Alibaba Cloud OSS exposes an S3-compatible API at ``https://<bucket>.<endpoint>``.
-    dlt's filesystem source reads it via ``s3://`` URLs with the S3 creds
-    mapped from the OSS_* env vars. Returns None when any required var is
-    missing — callers fall back to the local Parquet path or the in-memory
-    table path.
-    """
-    bucket = os.environ.get("OSS_RAW_BUCKET") or os.environ.get("OSS_BUCKET", "")
-    endpoint = os.environ.get("OSS_ENDPOINT", "").strip()
-    key_id = os.environ.get("OSS_ACCESS_KEY_ID", "").strip()
-    secret = os.environ.get("OSS_ACCESS_KEY_SECRET", "").strip()
-    if not (bucket and endpoint and key_id and secret):
-        return None
-    # dlt's s3 filesystem wants an ``endpoint_url`` (no bucket); creds via env.
-    return endpoint
-
-
 def get_analytics_connection() -> Any:
     """Return a connection to the DuckDB RDS analytical instance, or local DuckDB.
 
@@ -90,9 +76,14 @@ def get_analytics_connection() -> Any:
     the managed DuckDB read-only instance (WA-060). Otherwise falls back to a
     local embedded ``duckdb.connect(":memory:")`` — the offline/test path.
 
-    Follows the same fail-safe pattern as :func:`_oss_s3_endpoint`: if the
-    remote endpoint is not configured, we degrade gracefully to local compute
-    instead of raising.
+    Fail-safe: when the remote endpoint is not configured we degrade gracefully
+    to local compute instead of raising.
+
+    NOTE (WA-047/061): the managed-DuckDB path is not yet wired to a consumer,
+    and it reads ``RDS_PASSWORD`` — an env var no entrypoint sets today (the FC
+    deploy injects the password inside ``DATABASE_URL``, not standalone). Until
+    the WA-061 owner decision lands, this path is unreachable in production;
+    don't rely on it.
     """
     endpoint = os.environ.get("DUCKDB_RDS_ENDPOINT", "").strip()
     port = int(os.environ.get("DUCKDB_RDS_PORT", "3306"))
@@ -115,29 +106,27 @@ def load_to_duckdb(
     *,
     table: str = "raw_loans",
     duckdb_path: str = ":memory:",
-    oss_key: Optional[str] = None,
     local_parquet: Optional[str] = None,
     arrow: Optional[pa.Table] = None,
 ) -> Lakehouse:
-    """Load the loan-portfolio snapshot into DuckDB and return a Lakehouse.
+    """Register the loan-portfolio snapshot into DuckDB and return a Lakehouse.
 
     Resolution order (first available wins):
 
-    1. ``arrow`` — a pyarrow Table already in memory (the test / offline path;
-       no dlt, no network). Registered straight into DuckDB.
-    2. ``local_parquet`` — a local Parquet file path. Read into DuckDB directly.
-    3. OSS via dlt — the ``filesystem`` source over the S3-compatible OSS
-       endpoint. Requires the full OSS_* env var set; ``oss_key`` (the object
-       key) defaults to the configured one.
+    1. ``arrow`` — a pyarrow Table already in memory. This is the real path: the
+       ingest layer reads the OSS Parquet via
+       :func:`waspada.data.oss.fetch_loans` and hands the table here.
+    2. ``local_parquet`` — a local Parquet file path, read via DuckDB directly.
 
-    Raises ``RuntimeError`` if no source resolves (no arrow, no local file, no
-    OSS creds) — failing loud, not silently reading nothing.
+    OSS is **not** read in this function (see the module docstring). Raises
+    ``RuntimeError`` if neither source is provided — failing loud, not silently
+    reading nothing.
     """
     import duckdb  # lazy: module imports cleanly without duckdb installed
 
     con = duckdb.connect(duckdb_path, read_only=False)
 
-    # 1. In-memory arrow (tests / CLI offline path).
+    # 1. In-memory Arrow (the OSS-read result, or a test/CLI table).
     if arrow is not None:
         con.register(table, arrow)
         return Lakehouse(con, table=table)
@@ -150,37 +139,7 @@ def load_to_duckdb(
         )
         return Lakehouse(con, table=table)
 
-    # 3. dlt filesystem source over OSS (S3-compatible).
-    endpoint = _oss_s3_endpoint()
-    if endpoint is not None:
-        import dlt  # lazy: only needed on the real OSS path
-
-        bucket = os.environ["OSS_RAW_BUCKET"]
-        key = oss_key or os.environ.get("OSS_KEY", "")
-        os.environ.setdefault("S3_ENDPOINT", endpoint)
-        # dlt's s3 filesystem reads AWS_* / S3_* creds; map OSS creds onto them.
-        os.environ.setdefault("AWS_ACCESS_KEY_ID", os.environ["OSS_ACCESS_KEY_ID"])
-        os.environ.setdefault(
-            "AWS_SECRET_ACCESS_KEY", os.environ["OSS_ACCESS_KEY_SECRET"]
-        )
-        source_url = f"s3://{bucket}/{key}"
-        pipeline = dlt.pipeline(
-            pipeline_name="waspada_ingest",
-            destination="duckdb",
-            dataset_name="raw",
-        )
-        info = pipeline.run(
-            dlt.readers.filesystem(bucket_url=f"s3://{bucket}", file_glob=key),
-            table_name=table,
-        )
-        if info.has_failed_jobs:  # pragma: no cover - network path
-            raise RuntimeError(f"dlt load failed: {info}")
-        # The DuckDB file lives at the pipeline's location; reopen read-only.
-        import dlt as _dlt  # noqa: F401
-        return Lakehouse(con, table=table)
-
     raise RuntimeError(
-        "Lakehouse load failed: no arrow table, no local Parquet, and OSS "
-        "creds are not configured. Pass arrow= or local_parquet=, or set the "
-        "OSS_* env vars (see .env.example)."
+        "load_to_duckdb: no source. Pass arrow= (the usual path — read OSS via "
+        "waspada.data.oss.fetch_loans and hand the table in) or local_parquet=."
     )
