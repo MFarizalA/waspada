@@ -75,7 +75,12 @@ output "rds_port" {
 }
 
 output "rds_database_url" {
-  description = "Full DATABASE_URL for the app (postgres://user:pass@host:port/db). Constructed from RDS outputs."
-  value       = "postgres://waspada:${var.rds_password}@${alicloud_db_instance.auth.connection_string}:${alicloud_db_instance.auth.port}/waspada"
+  description = "Full DATABASE_URL for the app (postgres://user:***@host:port/db). Constructed from RDS outputs."
+  value       = "postgres://waspada:***@${alicloud_db_instance.auth.connection_string}:${alicloud_db_instance.auth.port}/waspada"
   sensitive   = true
+}
+
+output "duckdb_endpoint" {
+  description = "DuckDB analytical read-only instance connection endpoint (WA-060)."
+  value       = alicloud_db_instance.analytics.connection_string
 }

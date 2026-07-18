@@ -43,12 +43,13 @@ variable "fc_image_tag" {
 }
 
 variable "rds_instance_type" {
-  description = "RDS MySQL instance type for ap-southeast-1 (Singapore)."
+  description = "RDS MySQL instance type for ap-southeast-1 (Singapore). WA-060: upgraded from Basic (.1 suffix) to High-availability Series (.2 suffix) — DuckDB read-only instances require HA primary."
   type        = string
   # Queried live API (alicloud_db_instance_classes) for ap-southeast-1b.
   # Instance types use .xc suffix. myduck.* types include the DuckDB analytical
   # engine (Alibaba Cloud native integration). myduck.x4.large.xc = 4 vCPU, 8 GB.
-  default = "mysql.n2.medium.1"
+  # WA-060: mysql.n2.medium.2 = 2 vCPU, 4 GB, High-availability Series.
+  default = "mysql.n2.medium.2"
 }
 
 variable "rds_password" {
@@ -56,6 +57,12 @@ variable "rds_password" {
   type        = string
   sensitive   = true
   default     = ""
+}
+
+variable "duckdb_instance_type" {
+  description = "RDS DuckDB analytical read-only instance type (WA-060). myduckro.x4.large.2 = 4 vCPU, 8 GB — matches the Alibaba Cloud free tier (4C8G, 30 days free)."
+  type        = string
+  default     = "myduckro.x4.large.2"
 }
 
 variable "rds_security_ips" {

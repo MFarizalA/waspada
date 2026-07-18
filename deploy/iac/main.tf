@@ -313,7 +313,10 @@ resource "alicloud_db_instance" "auth" {
   # DuckDB analytical engine integration (rubric bonus for Alibaba Cloud usage).
   # cloud_essd = PL1 ESSD (valid for MySQL in ap-southeast-1).
   db_instance_storage_type = "cloud_essd"
-  category                 = "Basic"
+  # WA-060: Upgraded from Basic to High-availability Series. DuckDB read-only
+  # instances require the primary to be HA Series. The .2 suffix in
+  # mysql.n2.medium.2 denotes HA (Basic = .1, HA = .2).
+  category = "HighAvailability"
   # WA-044: explicit, documented deletion setting.
   # false = destroy is intentional (run `tofu destroy -target=alicloud_db_instance.auth`).
   # Set true in long-lived prod to prevent accidental data loss.
@@ -339,6 +342,37 @@ resource "alicloud_rds_account" "auth" {
   account_name     = "waspada"
   account_password = var.rds_password
   account_type     = "Normal"
+}
+
+# --------------------------------------------------------------------------- #
+# WA-060: DuckDB analytical read-only instance — MySQL_DuckDB engine
+# Attached to the primary RDS MySQL instance via binlog replication.
+# NOTE: The Terraform alicloud provider may not yet support MySQL_DuckDB as an
+# engine value (provider lags behind the API). If `tofu apply` fails on this
+# resource, fall back to console/API creation:
+#   Console → RDS → primary instance → Basic Information → Instance
+#   Distribution → Add DuckDB Analytic Instance
+# Or API: CreateReadOnlyDBInstance with Engine=MySQL_DuckDB
+# Document the manual step in deploy/README.md as a post-terraform step.
+# --------------------------------------------------------------------------- #
+resource "alicloud_db_instance" "analytics" {
+  engine               = "MySQL_DuckDB"
+  engine_version       = "8.0"
+  instance_type        = var.duckdb_instance_type
+  instance_storage     = 10
+  instance_name        = "${local.name_prefix}-duckdb-analytics"
+  instance_charge_type = "Postpaid"
+  vswitch_id           = alicloud_vswitch.main.id
+  security_ips         = var.rds_security_ips
+
+  db_instance_storage_type = "cloud_essd"
+
+  tags = {
+    Project     = var.namespace
+    Environment = var.environment
+    ManagedBy   = "opentofu"
+    Component   = "rds-duckdb-analytics"
+  }
 }
 
 # ---------------------------------------------------------------------------
