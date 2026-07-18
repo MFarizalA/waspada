@@ -43,6 +43,8 @@ class Config:
     oss_mart_bucket: str
     oss_endpoint: str
     oss_key: str
+    duckdb_rds_endpoint: str
+    duckdb_rds_port: int
 
     def require_oss(self) -> "Config":
         """Return self if OSS Raw is fully configured, else raise RuntimeError."""
@@ -77,6 +79,8 @@ def load_config() -> Config:
         oss_mart_bucket=os.environ.get("OSS_MART_BUCKET", ""),
         oss_endpoint=os.environ.get("OSS_ENDPOINT", ""),
         oss_key=os.environ.get("OSS_KEY", ""),
+        duckdb_rds_endpoint=os.environ.get("DUCKDB_RDS_ENDPOINT", ""),
+        duckdb_rds_port=int(os.environ.get("DUCKDB_RDS_PORT", "3306")),
     )
 
 

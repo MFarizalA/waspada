@@ -31,7 +31,6 @@ python-dotenv>=1.0
 PyJWT>=2.8
 passlib[bcrypt]>=1.7
 email-validator>=2.0
-# ApsaraDB RDS PostgreSQL driver. Only needed when DATABASE_URL points at a
-# postgres:// URL; the local-dev / test path uses stdlib sqlite3. Installed in
-# the deployed image (RDS) but optional for local dev.
-psycopg2-binary>=2.9
+# ApsaraDB RDS MySQL driver. Only needed when DATABASE_URL points at a
+# mysql:// / mysql+pymysql:// URL; the local-dev / test path uses stdlib sqlite3.
+pymysql>=1.1

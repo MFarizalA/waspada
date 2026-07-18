@@ -110,9 +110,10 @@ class Orchestrator(Agent):
         self._resolution_counts: Dict[str, int] = {}
         # WA-026: cross-run dispute memory. Accept either a fully-built
         # :class:`DisputeMemory` (tests inject an InMemory one) or a bare
-        # backend (the API wires a LocalFileMemory). ``None`` defaults to an
-        # in-process memory so an unconfigured orchestrator still runs — the
-        # memory just never persists across processes. NOTE: use ``is not
+        # backend (the API and CLI wire a LocalFileMemory via
+        # ``get_memory_backend()``). ``None`` defaults to an in-process
+        # memory so an unconfigured orchestrator still runs — the memory
+        # just never persists across processes. NOTE: use ``is not
         # None`` (not truthiness) — DisputeMemory defines __len__, so an empty
         # memory is falsy and ``memory or ...`` would discard it.
         self.memory: DisputeMemory = (

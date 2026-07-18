@@ -2,8 +2,10 @@
 # Local values
 # ---------------------------------------------------------------------------
 locals {
-  name_prefix   = "${var.namespace}-${var.environment}"
-  acr_namespace = replace(local.name_prefix, "-", "")
+  name_prefix = "${var.namespace}-${var.environment}"
+  # WA-018: ACR namespace was manually created in the Alibaba console as
+  # "small-company". Hardcode it instead of deriving from name_prefix.
+  acr_namespace = "waspada"
   # Personal Edition ACR default internet domain. Override via var.acr_registry_domain
   # if using Enterprise Edition or a different endpoint.
   fc_image = "${var.acr_registry_domain}/${local.acr_namespace}/api:${var.fc_image_tag}"
@@ -82,24 +84,12 @@ resource "alicloud_oss_bucket_acl" "mart" {
 
 # ---------------------------------------------------------------------------
 # ACR Container Registry (Personal Edition, free tier) — hosts the FC image.
-# Personal Edition uses namespace + repo directly (no instance resource).
-# NOTE: alicloud_cr_namespace/repo carry deprecation warnings in favor of the
-# Enterprise Edition (alicloud_cr_ee_*) resources; Personal remains free and
-# functional for the hackathon. Switch to EE if you need VPC-only endpoints.
+# WA-018: The namespace "waspada" and repo "api" were created manually in
+# the Alibaba console (Personal Edition ACR). Tofu cannot manage either because
+# the provider returns a "jurisdiction error" on read and NAMESPACE_NOT_EXIST
+# on create (known ACR Personal Edition cross-region quirk). Both are treated
+# as externally managed — the image is pushed via `docker push` directly.
 # ---------------------------------------------------------------------------
-resource "alicloud_cr_namespace" "waspada" {
-  name               = local.acr_namespace
-  auto_create        = false
-  default_visibility = "PRIVATE"
-}
-
-resource "alicloud_cr_repo" "api" {
-  namespace = alicloud_cr_namespace.waspada.name
-  name      = "api"
-  summary   = "WASPADA FastAPI image for Function Compute (CAPort 8080)"
-  repo_type = "PRIVATE"
-  detail    = "Custom-container image consumed by the FC function."
-}
 
 # ---------------------------------------------------------------------------
 # RAM role for Function Compute — trust FC, permit OSS read + SLS write
@@ -220,6 +210,29 @@ resource "alicloud_ram_role_policy_attachment" "fc_sls_write" {
   policy_type = "Custom"
 }
 
+# FC execution role needs VPC + ECS permissions for VPC-configured functions.
+# Standard Alibaba pattern: grant the ENI management policy set which covers
+# CreateNetworkInterface, DeleteNetworkInterface, DescribeNetworkInterfaces, etc.
+# Using the built-in ENI role policy that Alibaba recommends for FC VPC access.
+resource "alicloud_ram_role_policy_attachment" "fc_eni" {
+  role_name   = alicloud_ram_role.fc_execution.role_name
+  policy_name = "AliyunECSNetworkInterfaceManagementAccess"
+  policy_type = "System"
+}
+
+resource "alicloud_ram_role_policy_attachment" "fc_vpc_read" {
+  role_name   = alicloud_ram_role.fc_execution.role_name
+  policy_name = "AliyunVPCReadOnlyAccess"
+  policy_type = "System"
+}
+
+# FC needs ACR read access to pull the custom-container image
+resource "alicloud_ram_role_policy_attachment" "fc_acr_read" {
+  role_name   = alicloud_ram_role.fc_execution.role_name
+  policy_name = "AliyunContainerRegistryReadOnlyAccess"
+  policy_type = "System"
+}
+
 # ---------------------------------------------------------------------------
 # Simple Log Service — audit stream (WA-023)
 # Uses the non-deprecated field names (project_name / logstore_name).
@@ -245,16 +258,62 @@ resource "alicloud_log_store" "audit" {
 }
 
 # --------------------------------------------------------------------------- #
-# ApsaraDB RDS PostgreSQL — user store for auth (WA-028)
-# 5th Alibaba Cloud service. Cheapest instance type for the demo.
-# ---------------------------------------------------------------------------
+# VPC networking (WA-018: RDS + FC must live in a VPC — classic network is
+# no longer supported in ap-southeast-1). This replaces the previous approach
+# of supplying rds_vswitch_id via a variable.
+# --------------------------------------------------------------------------- #
+resource "alicloud_vpc" "main" {
+  vpc_name   = "${local.name_prefix}-vpc"
+  cidr_block = "172.16.0.0/12"
+}
+
+resource "alicloud_vswitch" "main" {
+  vpc_id     = alicloud_vpc.main.id
+  cidr_block = "172.16.1.0/24"
+  zone_id    = "${var.region}b"
+}
+
+# Second VSwitch in zone A — required for HA instance types (.xc suffix)
+# which need multi-zone deployment (primary in one zone, standby in another).
+resource "alicloud_vswitch" "secondary" {
+  vpc_id     = alicloud_vpc.main.id
+  cidr_block = "172.16.2.0/24"
+  zone_id    = "${var.region}a"
+}
+
+# Security group for Function Compute — attached to the FC function's
+# vpc_config so it can reach RDS inside the VPC. No ingress rules are needed
+# (FC uses the group for outbound/NAT); leaving it default = allow all egress.
+resource "alicloud_security_group" "fc" {
+  security_group_name = "${local.name_prefix}-fc-sg"
+  vpc_id              = alicloud_vpc.main.id
+}
+
+# --------------------------------------------------------------------------- #
+# ApsaraDB RDS MySQL — user store for auth (WA-028)
+# 5th Alibaba Cloud service. MySQL 8.0 with the DuckDB analytical engine
+# integration. WA-018: RDS requires a VPC network type — classic network
+# creation is unsupported. The instance uses the managed VSwitch above.
+# --------------------------------------------------------------------------- #
 resource "alicloud_db_instance" "auth" {
-  engine               = "PostgreSQL"
-  engine_version       = "15.0"
+  engine               = "MySQL"
+  engine_version       = "8.0"
   instance_type        = var.rds_instance_type
   instance_storage     = "20"
   instance_name        = "${local.name_prefix}-auth-db"
   instance_charge_type = "Postpaid"
+  # WA-018: VPC network type (classic network is no longer supported)
+  vswitch_id = alicloud_vswitch.main.id
+  zone_id    = "ap-southeast-1b"
+  # WA-018: Commodity.InvalidComponent ("module you purchased is not legal")
+  # fires when the instance_type + category + storage_type combination is not
+  # a valid purchasable SKU in this region/zone. PostgreSQL entry-level types
+  # (pg.n2.small.1, pg.n2.1c.1m) are all offline/invalid in ap-southeast-1.
+  # MySQL 4C8G types (mysql.n2.4c.1m) ARE purchasable. MySQL also provides the
+  # DuckDB analytical engine integration (rubric bonus for Alibaba Cloud usage).
+  # cloud_essd = PL1 ESSD (valid for MySQL in ap-southeast-1).
+  db_instance_storage_type = "cloud_essd"
+  category                 = "Basic"
   # WA-044: explicit, documented deletion setting.
   # false = destroy is intentional (run `tofu destroy -target=alicloud_db_instance.auth`).
   # Set true in long-lived prod to prevent accidental data loss.
@@ -282,6 +341,9 @@ resource "alicloud_rds_account" "auth" {
   account_type     = "Normal"
 }
 
+# --------------------------------------------------------------------------- #
+# --------------------------------------------------------------------------- #
+
 # ---------------------------------------------------------------------------
 # Function Compute 3.0 — custom-container, CAPort 8080, serves api/main.py
 # ---------------------------------------------------------------------------
@@ -292,7 +354,7 @@ resource "alicloud_fcv3_function" "api" {
   memory_size          = 2048
   timeout              = 180 # WA-044: live Qwen debate ~70s; 60s killed it mid-debate
   cpu                  = 1.0
-  disk_size            = 1024 # WA-044: 512MB was tight for container image + DuckDB + parquet
+  disk_size            = 10240 # WA-044: FC disk must be 512 or multiple of 10240
   instance_concurrency = 10
 
   custom_container_config {
@@ -313,6 +375,14 @@ resource "alicloud_fcv3_function" "api" {
     enable_instance_metrics = false
   }
 
+  # WA-018: Place the function inside the VPC so it can reach the RDS instance
+  # over the private network. Requires a security group + at least one vswitch.
+  vpc_config {
+    vpc_id            = alicloud_vpc.main.id
+    vswitch_ids       = [alicloud_vswitch.main.id]
+    security_group_id = alicloud_security_group.fc.id
+  }
+
   environment_variables = {
     CAPort           = "8080"
     PYTHONPATH       = "/app"
@@ -328,7 +398,10 @@ resource "alicloud_fcv3_function" "api" {
     OSS_KEY               = "loans.parquet"
     OSS_ACCESS_KEY_ID     = var.access_key
     OSS_ACCESS_KEY_SECRET = var.secret_key
-    DATABASE_URL          = "postgres://waspada:${var.rds_password}@${alicloud_db_instance.auth.connection_string}:5432/waspada"
+    DATABASE_URL          = "mysql+pymysql://waspada:${var.rds_password}@${alicloud_db_instance.auth.connection_string}:3306/waspada"
+    # WA-060: DuckDB RDS analytical endpoint (created via console)
+    DUCKDB_RDS_ENDPOINT = var.duckdb_rds_endpoint
+    DUCKDB_RDS_PORT     = "3306"
   }
 
   tags = {

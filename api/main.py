@@ -40,7 +40,7 @@ from waspada.agents.protocol import AgentContext
 
 # Auth (WA-028): JWT gate on protected routes + auth router.
 # ``init_db()`` is idempotent — it ensures the users / reset_tokens tables
-# exist on the configured store (ApsaraDB RDS PostgreSQL via DATABASE_URL,
+# exist on the configured store (ApsaraDB RDS MySQL via DATABASE_URL,
 # or the SQLite local-dev fallback) before we try to seed.
 from api import db as db_mod
 from api.auth import (
@@ -117,12 +117,14 @@ def _build_demo_orchestrator(
     """
     from waspada.agents.__main__ import _sample_raw_table
     from waspada.agents.data_engineer import DataEngineerAgent
+    from waspada.agents.dispute_memory import get_memory_backend
 
     llm = get_llm(brain) if brain and brain != "mock" else MockLLM()
     orch = Orchestrator(
         llm,
         as_of=dt.date(2024, 12, 1),
         top_n=20,
+        memory_backend=get_memory_backend(),
         on_round_complete=on_round_complete,
         on_dispute_resolved=on_dispute_resolved,
     )

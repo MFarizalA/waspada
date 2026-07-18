@@ -83,6 +83,34 @@ def _oss_s3_endpoint() -> Optional[str]:
     return endpoint
 
 
+def get_analytics_connection() -> Any:
+    """Return a connection to the DuckDB RDS analytical instance, or local DuckDB.
+
+    When ``DUCKDB_RDS_ENDPOINT`` is set, returns a ``pymysql`` connection to
+    the managed DuckDB read-only instance (WA-060). Otherwise falls back to a
+    local embedded ``duckdb.connect(":memory:")`` — the offline/test path.
+
+    Follows the same fail-safe pattern as :func:`_oss_s3_endpoint`: if the
+    remote endpoint is not configured, we degrade gracefully to local compute
+    instead of raising.
+    """
+    endpoint = os.environ.get("DUCKDB_RDS_ENDPOINT", "").strip()
+    port = int(os.environ.get("DUCKDB_RDS_PORT", "3306"))
+    if endpoint:
+        import pymysql  # lazy: only needed on the remote-RDS path
+
+        return pymysql.connect(
+            host=endpoint,
+            port=port,
+            user="waspada",
+            password=os.environ.get("RDS_PASSWORD", ""),
+            database="waspada",
+        )
+    import duckdb  # lazy: module imports cleanly without duckdb installed
+
+    return duckdb.connect(":memory:")
+
+
 def load_to_duckdb(
     *,
     table: str = "raw_loans",

@@ -40,8 +40,8 @@ output "acr_registry_domain" {
 }
 
 output "acr_repo" {
-  description = "Full ACR repository path (image push target)."
-  value       = "${var.acr_registry_domain}/${alicloud_cr_namespace.waspada.name}/${alicloud_cr_repo.api.name}"
+  description = "Full ACR repository path (image push target). Namespace/repo are managed manually in the console."
+  value       = "${var.acr_registry_domain}/${local.acr_namespace}/api"
 }
 
 output "sls_project" {
@@ -64,13 +64,23 @@ output "rds_connection_string" {
   value       = alicloud_db_instance.auth.connection_string
 }
 
+output "vpc_id" {
+  description = "ID of the managed VPC (RDS + FC live inside it)."
+  value       = alicloud_vpc.main.id
+}
+
 output "rds_port" {
   description = "RDS PostgreSQL port."
   value       = alicloud_db_instance.auth.port
 }
 
 output "rds_database_url" {
-  description = "Full DATABASE_URL for the app (postgres://user:pass@host:port/db). Constructed from RDS outputs."
-  value       = "postgres://waspada:${var.rds_password}@${alicloud_db_instance.auth.connection_string}:${alicloud_db_instance.auth.port}/waspada"
+  description = "Full DATABASE_URL for the app (postgres://user:***@host:port/db). Constructed from RDS outputs."
+  value       = "postgres://waspada:***@${alicloud_db_instance.auth.connection_string}:${alicloud_db_instance.auth.port}/waspada"
   sensitive   = true
+}
+
+output "duckdb_endpoint" {
+  description = "DuckDB analytical read-only instance connection endpoint (WA-060, created via console)."
+  value       = var.duckdb_rds_endpoint
 }
