@@ -28,17 +28,17 @@ from waspada.agents.risk_auditor import RiskAuditorAgent
 from waspada.model.risk import _risk_level_bands, predict, train
 from waspada.schema import RISK_LEVELS
 
-from tests.test_wa016_debate import _raw_rows, _raw_table, _stub_fetch
-
-
-def _frame(rows):
-    raw = _raw_table(rows)
-    ctx = AgentContext(lane="collections", data_handles={})
-    ing = IngestAgent(MockLLM())
-    ing.register_tool("fetch", _stub_fetch(raw))
-    ctx = ctx.with_result(ing.run(ctx))
-    ctx = ctx.with_result(AnalyticsAgent(MockLLM(), as_of=dt.date(2024, 12, 1)).run(ctx))
-    return ctx.data_handles[ctx.prior_results[-1].artifact_ref]
+@pytest.fixture
+def _frame(_raw_table, _stub_fetch):
+    def _make(rows):
+        raw = _raw_table(rows)
+        ctx = AgentContext(lane="collections", data_handles={})
+        ing = IngestAgent(MockLLM())
+        ing.register_tool("fetch", _stub_fetch(raw))
+        ctx = ctx.with_result(ing.run(ctx))
+        ctx = ctx.with_result(AnalyticsAgent(MockLLM(), as_of=dt.date(2024, 12, 1)).run(ctx))
+        return ctx.data_handles[ctx.prior_results[-1].artifact_ref]
+    return _make
 
 
 def _healthy_rows(n=40, seed=3):
@@ -75,7 +75,7 @@ def test_absolute_edges_band_by_fixed_pd_thresholds():
 # --------------------------------------------------------------------------- #
 # train persists edges; predict on the SAME frame stays byte-identical
 # --------------------------------------------------------------------------- #
-def test_train_persists_band_edges_and_same_frame_predict_is_unchanged():
+def test_train_persists_band_edges_and_same_frame_predict_is_unchanged(_frame, _raw_rows):
     frame = _frame(_raw_rows())
     model = train(frame)
     assert model["band_edges"] is not None and len(model["band_edges"]) == 4
@@ -89,7 +89,7 @@ def test_train_persists_band_edges_and_same_frame_predict_is_unchanged():
     assert new_bands == old_bands  # byte-for-byte on the training frame
 
 
-def test_edgeless_artifact_falls_back_to_relative_banding():
+def test_edgeless_artifact_falls_back_to_relative_banding(_frame, _raw_rows):
     frame = _frame(_raw_rows())
     model = train(frame)
     model["band_edges"] = None  # simulate a pre-WA-051 artifact
@@ -114,7 +114,7 @@ def _audit(scored, frame, model):
     return ctx.data_handles.get("risk_disputes") or []
 
 
-def test_healthy_batch_under_absolute_edges_opens_no_spurious_disputes():
+def test_healthy_batch_under_absolute_edges_opens_no_spurious_disputes(_frame, _raw_rows):
     reference = _frame(_raw_rows())          # mixed risky/safe → sensible edges
     model = train(reference)
     healthy = _frame(_healthy_rows())
@@ -125,7 +125,7 @@ def test_healthy_batch_under_absolute_edges_opens_no_spurious_disputes():
     assert _audit(scored, healthy, model) == [], "absolute edges must not manufacture disputes"
 
 
-def test_relative_banding_would_have_disputed_the_same_healthy_batch():
+def test_relative_banding_would_have_disputed_the_same_healthy_batch(_frame, _raw_rows):
     """The contrast that proves the fix bites: with per-batch quintiles the SAME
     benign book forces ~20% into Very High and the Skeptic's 'Low' view opens
     spurious disputes."""
@@ -142,7 +142,7 @@ def test_relative_banding_would_have_disputed_the_same_healthy_batch():
 # --------------------------------------------------------------------------- #
 # The Skeptic's prompt states the absolute thresholds
 # --------------------------------------------------------------------------- #
-def test_auditor_prompt_states_absolute_thresholds_when_edges_present():
+def test_auditor_prompt_states_absolute_thresholds_when_edges_present(_frame, _raw_rows):
     frame = _frame(_raw_rows())
     model = train(frame)
     scored = predict(model, frame)

@@ -145,11 +145,50 @@ jobs:
       - name: Verify :v2 is a clean single linux/amd64 image
         run: |
           IMG="${{ secrets.ACR_REGISTRY }}/${{ secrets.ACR_NAMESPACE }}/api:v2"
-          INSPECT=$(docker buildx imagetools inspect "$IMG")
-          echo "$INSPECT"
-          echo "$INSPECT" | grep -q "linux/amd64" \
-            || { echo "::error::$IMG is missing a linux/amd64 manifest entry"; exit 1; }
-          if echo "$INSPECT" | grep -q "unknown/unknown"; then
-            echo "::error::$IMG carries an unknown/unknown entry (attestation leaked into the manifest) — FC will fail to pull it"; exit 1
-          fi
-          echo "OK: $IMG is linux/amd64 with no unknown/unknown entry"
+          python3 - "$IMG" <<'PY'
+          import json, subprocess, sys
+
+          def verify(img):
+              proc = subprocess.run(
+                  ["docker", "buildx", "imagetools", "inspect", "--format", "{{json .}}", img],
+                  capture_output=True, text=True, check=True,
+              )
+              data = json.loads(proc.stdout)
+              manifest = data["Manifest"]
+
+              if "manifests" in manifest:
+                  # Manifest list / OCI index: require linux/amd64 and reject unknown/unknown.
+                  has_amd64 = False
+                  for entry in manifest["manifests"]:
+                      p = entry.get("platform", {})
+                      os = p.get("os", "")
+                      arch = p.get("architecture", "")
+                      if os == "unknown" and arch == "unknown":
+                          print(
+                              f"::error::{img} carries an unknown/unknown entry (provenance attestation leaked into the manifest) -- FC will fail to pull it"
+                          )
+                          return 1
+                      if os == "linux" and arch == "amd64":
+                          has_amd64 = True
+                  if not has_amd64:
+                      print(f"::error::{img} is missing a linux/amd64 manifest entry")
+                      return 1
+                  print(f"OK: {img} is a manifest list with linux/amd64 and no unknown/unknown entry")
+                  return 0
+
+              # Single manifest: the image config holds the platform.
+              image = data.get("Image") or {}
+              os = image.get("os")
+              arch = image.get("architecture")
+              if os != "linux" or arch != "amd64":
+                  print(f"::error::{img} single manifest is not linux/amd64 (os={os}, architecture={arch})")
+                  return 1
+              print(f"OK: {img} is a single linux/amd64 manifest (os={os}, architecture={arch})")
+              return 0
+
+          if __name__ == "__main__":
+              if len(sys.argv) != 2:
+                  print(f"Usage: python3 verify_image.py IMAGE", file=sys.stderr)
+                  sys.exit(2)
+              sys.exit(verify(sys.argv[1]))
+          PY

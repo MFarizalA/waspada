@@ -6,10 +6,15 @@ tests a deterministic snapshot date so feature/label tests are reproducible.
 
 from __future__ import annotations
 
+import dataclasses
+import datetime as dt
 import os
 from datetime import date
 
+import pyarrow as pa
 import pytest
+
+from waspada.schema import RawLoans, schema_from_dataclass
 
 
 @pytest.fixture(autouse=True)
@@ -84,3 +89,60 @@ def sample_featureframe(as_of):
         label_default=True,
         as_of_date=dt.date.fromisoformat(as_of),
     )
+
+# --------------------------------------------------------------------------- #
+# Shared synthetic data helpers (moved from test_wa016_debate to avoid cross- #
+# module imports that break on Windows hosts).                                #
+# --------------------------------------------------------------------------- #
+@pytest.fixture
+def _raw_rows():
+    def _make(n: int = 60, seed: int = 11) -> list[dict]:
+        import numpy as np
+        rng = np.random.default_rng(seed)
+        issue_years = [2019, 2020, 2021, 2022, 2023]
+        rows: list[dict] = []
+        for i in range(n):
+            iy = int(issue_years[i % len(issue_years)])
+            im = int(rng.integers(1, 13))
+            risky = rng.random() < 0.5
+            if risky:
+                rate = float(rng.uniform(18, 28)); dti_ = float(rng.uniform(22, 35))
+                grade = "E"; op = float(rng.uniform(0.5, 0.9)); tp = float(rng.uniform(0.0, 0.3))
+                status = "Charged Off"
+            else:
+                rate = float(rng.uniform(4, 10)); dti_ = float(rng.uniform(2, 12))
+                grade = "A"; op = float(rng.uniform(0.0, 0.3)); tp = float(rng.uniform(0.6, 1.0))
+                status = "Current"
+            rows.append(dict(
+                loan_id=f"R{i:04d}", amount=float(rng.uniform(2000, 25000)),
+                term=int(rng.choice([36, 60])), rate=rate, grade=grade,
+                annual_income=float(rng.uniform(30000, 120000)), dti=dti_,
+                issue_date=dt.date(iy, im, 1),
+                purpose=str(rng.choice(["credit_card", "debt_consolidation", "car", "medical"])),
+                region=str(rng.choice(["West", "South", "Midwest", "Northeast"])),
+                outstanding_principal=float(rng.uniform(100, 5000)) * op,
+                total_paid=float(rng.uniform(100, 5000)) * tp,
+                current_status=status,
+            ))
+        return rows
+    return _make
+
+
+@pytest.fixture
+def _raw_table():
+    def _make(rows: list[dict]) -> pa.Table:
+        cols = {f.name: [] for f in dataclasses.fields(RawLoans)}
+        for r in rows:
+            for name in cols:
+                cols[name].append(r[name])
+        return pa.table(cols, schema=schema_from_dataclass(RawLoans))
+    return _make
+
+
+@pytest.fixture
+def _stub_fetch():
+    def _make(table: pa.Table):
+        def _fetch(*, lane="collections", limit=None):
+            return table
+        return _fetch
+    return _make

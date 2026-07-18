@@ -24,7 +24,7 @@ from pathlib import Path
 from typing import Any, Callable, Dict, Optional
 
 from fastapi import Depends, FastAPI
-from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 import uvicorn
 
@@ -88,17 +88,18 @@ if _FIXTURES_DIR.exists():
 
 @app.get("/")
 async def dashboard():
-    """Serve the dashboard index page.
+    """Serve the dashboard index page so the browser RENDERS it.
 
-    ``content_disposition_type="inline"`` is load-bearing: Starlette's
-    FileResponse defaults to ``attachment``, which makes the browser *download*
-    index.html instead of rendering it (the live URL appeared to "download a
-    file"). Inline tells the browser to render the SPA.
+    Uses HTMLResponse, not FileResponse: the deployed Starlette's FileResponse
+    emits ``Content-Disposition: attachment``, which made the live URL *download*
+    index.html instead of showing the dashboard. HTMLResponse never sets a
+    Content-Disposition header, so the SPA always renders. (Supersedes the
+    earlier ``content_disposition_type="inline"`` attempt, which depends on the
+    Starlette version behaving; this doesn't.)
     """
     index = _DASHBOARD_DIST / "index.html"
     if index.exists():
-        return FileResponse(str(index), media_type="text/html",
-                            content_disposition_type="inline")
+        return HTMLResponse(index.read_text(encoding="utf-8"))
     return JSONResponse({"error": "Dashboard not built. Run: cd dashboard && npx vite build"}, status_code=404)
 
 
