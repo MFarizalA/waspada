@@ -51,7 +51,10 @@ jobs:
           cache-dependency-path: api/requirements.txt
 
       - name: Install dependencies
-        run: pip install -r api/requirements.txt
+        # pytest is a test-only dep (not in api/requirements.txt, which is the
+        # production image's deps). httpx comes in transitively for the FastAPI
+        # TestClient. Mirrors ci.yml.
+        run: pip install -r api/requirements.txt pytest
 
       - name: Run pytest
         # Tests are offline by design — conftest strips API keys and forces
