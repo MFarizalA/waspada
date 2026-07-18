@@ -44,6 +44,7 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 import pyarrow as pa
 
+from ..model.risk import explain as _explain, format_drivers as _format_drivers
 from .base import Agent
 from .llm import ChatResponse, LLM, MockLLM, ToolCall
 from .protocol import AgentContext, AgentResult, Dispute, DisputeRound, Status
@@ -148,6 +149,11 @@ class RiskAuditorAgent(Agent):
         # The MCP client, once attached (WA-015). ``None`` keeps the local
         # stubs active. Set by :meth:`attach_mcp`; cleared on :meth:`detach_mcp`.
         self._mcp_client: Optional[Any] = None
+        # WA-050: the fitted model published by the risk-model agent this run,
+        # so the Skeptic's challenge can cite the model's OWN drivers rather than
+        # guessing from raw values. Read from the ``risk_model`` handle in run();
+        # ``None`` (standalone auditor / no handle) just yields a thinner prompt.
+        self._run_model: Optional[dict] = None
 
     # ---------------------------------------------------- MCP wiring (WA-015)
     def attach_mcp(self, client: Any) -> "RiskAuditorAgent":
@@ -195,6 +201,9 @@ class RiskAuditorAgent(Agent):
         # Feature context (for cited evidence) is optional but enriches the
         # challenge; absent features just yield a thinner prompt.
         features: Optional[pa.Table] = self._feature_table(context)
+        # WA-050: the model published its fitted artifact so the challenge can be
+        # grounded in the model's own drivers (no-op when absent).
+        self._run_model = context.data_handles.get("risk_model")
 
         # Record which evidence path is active this run — the MCP client
         # (WA-015) when attached, else the local in-memory stubs.
@@ -460,6 +469,13 @@ class RiskAuditorAgent(Agent):
         if not isinstance(stats, dict):
             stats = {}
 
+        # WA-050: the model's own signed logit contributions behind this band, so
+        # the Skeptic challenges the model's actual reasoning, not a guess from
+        # raw values. Empty string when no model handle is present this run.
+        drivers = ""
+        if self._run_model is not None and features is not None:
+            drivers = _format_drivers(_explain(self._run_model, features, loan_id, top_n=5))
+
         return {
             "loan_id": loan_id,
             "p_default": p_default,
@@ -468,6 +484,7 @@ class RiskAuditorAgent(Agent):
             "feature_facts": feature_facts,
             "feature_row": feat_row or {},
             "portfolio_stats": stats,
+            "drivers": drivers,
             # WA-041: stash the raw tables for native tool-call execution.
             # The native loop's _execute_tool_call reads these when Qwen
             # emits a tool_calls response.
@@ -488,6 +505,13 @@ class RiskAuditorAgent(Agent):
         if stats:
             stats_line = "; ".join(f"{k}={v}" for k, v in stats.items())
             lines.append(f"Portfolio context: {stats_line}.")
+        # WA-050: show the model's own drivers so the Skeptic contests the actual
+        # reasoning behind the band (positive = pushed toward default).
+        if ctx.get("drivers"):
+            lines.append(
+                f"The model's own drivers for this score (feature=value "
+                f"(signed logit contribution)): {ctx['drivers']}."
+            )
         lines.append(
             "Give your INDEPENDENT view of this account's risk. Reply with ONLY a "
             "JSON object, no prose, exactly this shape:"

@@ -58,6 +58,8 @@ __all__ = [
     "LEAKAGE_EXCLUDED",
     "train",
     "predict",
+    "explain",
+    "format_drivers",
     "save_model",
     "load_model",
     "issue_year_from_frame",
@@ -353,6 +355,111 @@ def predict(model: Dict, features: pa.Table) -> pa.Table:
         scored = scored.append_column("outstanding_principal", op)
     validate_table(scored, ScoredAccounts, name="predict(scored)")
     return scored
+
+
+# --------------------------------------------------------------------------- #
+# explain — per-account feature attribution (WA-050).
+#
+# The debate's Actuary was defending a score it could not introspect: the
+# rebuttal prompt saw only raw feature *values*, never *why the model* produced
+# the band — so its defense was a plausible-sounding rationalization, not an
+# explanation. For a linear model the "why" is exact and free: the logit is
+# ``intercept + Σ coef_i · x_i`` over the transformed features, so each term is
+# that feature's signed contribution to the score. Feeding the top terms into
+# the debate turns "a number can't argue for itself" from a slogan into a
+# grounded argument, and gives the dashboard a real "why is this account High?".
+# --------------------------------------------------------------------------- #
+def _driver_label(name: str, raw_row: pd.Series) -> str:
+    """Turn a transformed feature name into a human-readable, value-bearing label.
+
+    ``get_feature_names_out`` yields ``num__rate`` / ``cat__grade_E``. We strip
+    the transformer prefix and, for numerics, attach the account's raw value
+    (``rate=24.00``); for one-hots, render the active category (``grade=E``).
+    """
+    if name.startswith("num__"):
+        feat = name[len("num__"):]
+        val = raw_row.get(feat)
+        try:
+            return f"{feat}={float(val):.2f}"
+        except (TypeError, ValueError):
+            return feat
+    if name.startswith("cat__"):
+        body = name[len("cat__"):]
+        # OneHotEncoder names are ``{feature}_{category}``; match the known
+        # categorical so a category containing '_' (e.g. debt_consolidation)
+        # isn't split in the wrong place.
+        for feat in CATEGORICAL_FEATURES:
+            if body.startswith(f"{feat}_"):
+                return f"{feat}={body[len(feat) + 1:]}"
+        return body
+    return name
+
+
+def explain(
+    model: Dict, features: pa.Table, loan_id: str, *, top_n: int = 5,
+) -> List[Tuple[str, float]]:
+    """Top-``top_n`` signed logit contributions behind one account's score.
+
+    Returns ``[(label, contribution), ...]`` ranked by ``|contribution|``
+    descending, where ``contribution = coef_i · x_i`` on the *transformed*
+    feature (StandardScaler'd numeric or one-hot categorical). Because the model
+    is linear, ``intercept + Σ (all contributions) == logit(p_default)`` — the
+    account's own number is fully decomposed, not approximated.
+
+    Returns ``[]`` (never raises) when the model is not a fitted pipeline or the
+    ``loan_id`` is not in ``features`` — the caller degrades to the prior
+    value-only prompt.
+    """
+    pipeline = model.get("pipeline") if isinstance(model, dict) else None
+    if pipeline is None:
+        return []
+    try:
+        pre = pipeline.named_steps["pre"]
+        clf = pipeline.named_steps["clf"]
+    except (AttributeError, KeyError):
+        return []
+
+    # Locate the account's raw feature row.
+    ids = features.column("loan_id").to_pylist()
+    try:
+        pos = ids.index(str(loan_id))
+    except ValueError:
+        return []
+    raw_row = pd.Series(
+        {c: features.column(c)[pos].as_py() for c in FEATURE_COLUMNS}
+    )
+    X_row = pd.DataFrame([raw_row], columns=FEATURE_COLUMNS)
+
+    try:
+        xt = np.asarray(pre.transform(X_row), dtype=float)[0]
+        names = list(pre.get_feature_names_out())
+        coefs = np.asarray(clf.coef_, dtype=float).ravel()
+    except Exception:  # pragma: no cover - defensive; unfitted / shape drift
+        return []
+    if len(coefs) != len(xt) or len(names) != len(xt):
+        return []
+
+    contributions = coefs * xt
+    order = sorted(range(len(contributions)), key=lambda i: -abs(contributions[i]))
+    out: List[Tuple[str, float]] = []
+    for i in order:
+        c = float(contributions[i])
+        if c == 0.0:  # inactive one-hot / zeroed-out term carries no signal
+            continue
+        out.append((_driver_label(names[i], raw_row), c))
+        if len(out) >= max(1, int(top_n)):
+            break
+    return out
+
+
+def format_drivers(drivers: List[Tuple[str, float]]) -> str:
+    """Render :func:`explain` output as a compact evidence line for a prompt.
+
+    ``[("rate=24.00", 0.81), ("dti=30.00", 0.44)]`` →
+    ``"rate=24.00 (+0.81), dti=30.00 (-0.44)"``. A positive term pushes the
+    account toward default (higher risk); negative pulls it toward safe.
+    """
+    return ", ".join(f"{label} ({c:+.2f})" for label, c in drivers)
 
 
 # --------------------------------------------------------------------------- #

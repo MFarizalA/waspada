@@ -23,7 +23,12 @@ from typing import Any, List, Optional, Tuple
 
 import pyarrow as pa
 
-from ..model.risk import predict as _predict, train as _train
+from ..model.risk import (
+    explain as _explain,
+    format_drivers as _format_drivers,
+    predict as _predict,
+    train as _train,
+)
 from ..schema import ScoredAccounts, validate_table
 from .base import Agent
 from .llm import LLM, MockLLM, qwen_tier
@@ -46,6 +51,10 @@ class RiskModelAgent(Agent):
 
     def __init__(self, llm: Optional[Any] = None) -> None:
         super().__init__(llm=llm if llm is not None else MockLLM())
+        # WA-050: the fitted model artifact from the last run(), kept so the
+        # Actuary's Round-2 defense can introspect its OWN coefficients (the
+        # score it defends is a number it can now decompose, not a black box).
+        self._model: Optional[dict] = None
 
     def run(self, context: AgentContext) -> AgentResult:
         if not context.prior_results:
@@ -87,6 +96,12 @@ class RiskModelAgent(Agent):
 
         handle = "scored_accounts"
         context.data_handles[handle] = scored
+        # WA-050: keep the model so defend_score() can cite its own drivers, and
+        # publish it as an in-process handle so the Skeptic can ground its
+        # challenge in the same attribution. In-process only — never serialized
+        # into the dashboard payload.
+        self._model = model
+        context.data_handles["risk_model"] = model
         return AgentResult(
             status=Status.OK, agent=self.name, artifact_ref=handle,
             notes=f"scored {scored.num_rows} accounts; Very High={n_highest}",
@@ -136,8 +151,15 @@ class RiskModelAgent(Agent):
         if scored is not None and dispute.loan_id != "":
             p_default = _p_default_for(scored, dispute.loan_id)
 
+        # WA-050: the model's OWN drivers — the signed logit contributions behind
+        # this band. This is what lets the Actuary defend the score it produced
+        # rather than reason from the same raw values the Skeptic already has.
+        drivers = ""
+        if self._model is not None and features is not None and dispute.loan_id != "":
+            drivers = _format_drivers(_explain(self._model, features, dispute.loan_id, top_n=5))
+
         prompt = self._rebuttal_prompt(
-            dispute, challenge, feat_facts, p_default,
+            dispute, challenge, feat_facts, p_default, drivers,
         )
         try:
             raw = brain.complete(prompt)
@@ -176,6 +198,7 @@ class RiskModelAgent(Agent):
     def _rebuttal_prompt(
         self, dispute: Dispute, challenge: str,
         feat_facts: List[str], p_default: Optional[float],
+        drivers: str = "",
     ) -> str:
         lines = [
             "You are the Actuary (classical risk model) in a bounded risk debate.",
@@ -190,6 +213,15 @@ class RiskModelAgent(Agent):
         )
         if feat_facts:
             lines.append("Account features: " + "; ".join(feat_facts) + ".")
+        # WA-050: the model's own reasoning — signed logit contributions summing
+        # (with the intercept) to this score. A positive term raised the risk, a
+        # negative lowered it. Defend from THESE, not just the raw values.
+        if drivers:
+            lines.append(
+                f"Your model's own drivers for this score (feature=value "
+                f"(signed logit contribution), largest first): {drivers}. "
+                "Positive pushed toward default, negative toward safe."
+            )
         lines.append(
             "Defend or concede your band. Reply with ONLY a JSON object, no prose, "
             "exactly this shape:"
