@@ -88,10 +88,17 @@ if _FIXTURES_DIR.exists():
 
 @app.get("/")
 async def dashboard():
-    """Serve the dashboard index page."""
+    """Serve the dashboard index page.
+
+    ``content_disposition_type="inline"`` is load-bearing: Starlette's
+    FileResponse defaults to ``attachment``, which makes the browser *download*
+    index.html instead of rendering it (the live URL appeared to "download a
+    file"). Inline tells the browser to render the SPA.
+    """
     index = _DASHBOARD_DIST / "index.html"
     if index.exists():
-        return FileResponse(str(index))
+        return FileResponse(str(index), media_type="text/html",
+                            content_disposition_type="inline")
     return JSONResponse({"error": "Dashboard not built. Run: cd dashboard && npx vite build"}, status_code=404)
 
 
