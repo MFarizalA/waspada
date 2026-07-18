@@ -281,6 +281,24 @@ The image is pushed with two tags — `latest` and the commit SHA
 
 ---
 
+## Deployment
+
+**Live:** `https://waspadaprod-api-vouqzqqkiu.ap-southeast-1.fcapp.run`
+(Alibaba Cloud Function Compute, custom container, ap-southeast-1). Verify with
+`curl https://waspadaprod-api-vouqzqqkiu.ap-southeast-1.fcapp.run/api/health`
+→ `{"status":"ok"}`.
+
+> **Known quirk — dashboard downloads instead of rendering.** The default
+> `*.fcapp.run` test domain injects `Content-Disposition: attachment` on
+> `text/html` responses (platform anti-abuse measure on the shared domain).
+> It only affects the `/` dashboard route; every `/api/*` endpoint serves
+> inline JSON normally. Demo path: run the dashboard locally (Quick start)
+> against the deployed API, and hit the API URL directly for live debate
+> evidence. The permanent fix is a custom domain bound to the FC function —
+> post-hackathon, ticket WA-067.
+
+---
+
 ## Status
 
 | Area | Deliverable | Status |
@@ -297,7 +315,7 @@ The image is pushed with two tags — `latest` and the commit SHA
 | Dashboard | EWS dashboard · Agent Society panel · SSE live debate (WA-011/019/022) · bilingual EN/中文 + China-style UI (WA-031) | ✅ |
 | Auth | JWT sessions + bcrypt, RDS/SQLite (WA-028) | ✅ |
 | Benchmark | Society vs single-agent efficiency harness (WA-017) | ✅ |
-| Deploy | OpenTofu IaC (OSS · ACR · Function Compute · SLS · RDS) | 🟡 provisioned; FC deploy pending creds |
+| Deploy | OpenTofu IaC (OSS · ACR · Function Compute · SLS · RDS) | ✅ live — `https://waspadaprod-api-vouqzqqkiu.ap-southeast-1.fcapp.run` ([quirk note](#deployment)) |
 | Origination lane | Second lane on the same engine | 🟡 requirements drafted (WA-033..039) |
 
 ---
