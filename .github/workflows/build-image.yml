@@ -115,6 +115,17 @@ jobs:
           context: .
           file: ./Dockerfile
           push: true
+          # Function Compute runs amd64 and pulls a single-platform image by tag.
+          # Two things here are load-bearing:
+          #   platforms: pin linux/amd64 so the manifest carries a real arch
+          #     (not the "unknown/unknown" stamp buildx emits without it).
+          #   provenance: false — build-push-action@v5 otherwise attaches a
+          #     provenance ATTESTATION as an extra manifest entry, turning the
+          #     push into a manifest LIST whose non-image entry FC resolves as
+          #     "unknown/unknown" → PullImageFailed / "accelerated image not
+          #     ready". Disabling it keeps the push a clean single amd64 image.
+          platforms: linux/amd64
+          provenance: false
           # `:v2` is the tag the Function Compute function pulls
           # (deploy/iac: fc_image_tag default = "v2" → local.fc_image). Without
           # it the pipeline builds an image FC never sees, and the function
@@ -126,3 +137,19 @@ jobs:
             ${{ secrets.ACR_REGISTRY }}/${{ secrets.ACR_NAMESPACE }}/api:${{ github.sha }}
           # Build from repo root so Dockerfile can COPY waspada/, api/, tests/,
           # and the freshly-built dashboard/dist/.
+
+      # Guard against the exact regression that kept FC down: a :v2 that isn't a
+      # clean single linux/amd64 image (missing arch, or an "unknown/unknown"
+      # attestation entry) makes Function Compute fail with PullImageFailed.
+      # Fail the build loudly here rather than discover it in the FC console.
+      - name: Verify :v2 is a clean single linux/amd64 image
+        run: |
+          IMG="${{ secrets.ACR_REGISTRY }}/${{ secrets.ACR_NAMESPACE }}/api:v2"
+          INSPECT=$(docker buildx imagetools inspect "$IMG")
+          echo "$INSPECT"
+          echo "$INSPECT" | grep -q "linux/amd64" \
+            || { echo "::error::$IMG is missing a linux/amd64 manifest entry"; exit 1; }
+          if echo "$INSPECT" | grep -q "unknown/unknown"; then
+            echo "::error::$IMG carries an unknown/unknown entry (attestation leaked into the manifest) — FC will fail to pull it"; exit 1
+          fi
+          echo "OK: $IMG is linux/amd64 with no unknown/unknown entry"
