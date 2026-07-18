@@ -313,10 +313,7 @@ resource "alicloud_db_instance" "auth" {
   # DuckDB analytical engine integration (rubric bonus for Alibaba Cloud usage).
   # cloud_essd = PL1 ESSD (valid for MySQL in ap-southeast-1).
   db_instance_storage_type = "cloud_essd"
-  # WA-060: Upgraded from Basic to High-availability Series. DuckDB read-only
-  # instances require the primary to be HA Series. The .2 suffix in
-  # mysql.n2.medium.2 denotes HA (Basic = .1, HA = .2).
-  category = "Basic"
+  category                 = "Basic"
   # WA-044: explicit, documented deletion setting.
   # false = destroy is intentional (run `tofu destroy -target=alicloud_db_instance.auth`).
   # Set true in long-lived prod to prevent accidental data loss.
