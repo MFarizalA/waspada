@@ -34,6 +34,7 @@ from ..insight.ranking import (
     summarize_alerts,
     to_dashboard_payload,
 )
+from ..policy import RiskPolicy
 from .base import Agent, ApprovalGate, Approved
 from .protocol import AgentContext, AgentResult, Dispute, Status
 
@@ -52,10 +53,15 @@ class InsightAgent(Agent):
         *,
         gate: Optional[ApprovalGate] = None,
         top_n: int = 50,
+        policy: Optional["RiskPolicy"] = None,
     ) -> None:
         super().__init__(llm=llm)
         self.gate = gate or ApprovalGate()
         self.top_n = top_n
+        # WA-032: the human-configurable decision matrix. ``None`` → the module
+        # constants (behaviour unchanged); a RiskPolicy overrides the band→action
+        # map, alert thresholds, and NPL buckets from a committed JSON file.
+        self.policy = policy
 
     def run(self, context: AgentContext) -> AgentResult:
         if not context.prior_results:
@@ -71,9 +77,18 @@ class InsightAgent(Agent):
             )
 
         # 1. Rank + 2. segment health + 3. alerts (pure-CPU insight layer).
-        work_list = _rank(scored, top_n=self.top_n)
-        health = _segment_health(scored)
-        alert_list = _alerts(health)
+        # WA-032: apply the RiskPolicy when one is wired; otherwise the calls use
+        # their module-constant defaults (byte-identical to the pre-policy path).
+        pol = self.policy
+        if pol is not None:
+            work_list = _rank(scored, top_n=self.top_n, action_by_band=pol.band_to_action)
+            health = _segment_health(scored, npl_buckets=pol.npl_buckets)
+            alert_list = _alerts(health, npl_threshold=pol.npl_threshold,
+                                 vintage_threshold=pol.vintage_threshold)
+        else:
+            work_list = _rank(scored, top_n=self.top_n)
+            health = _segment_health(scored)
+            alert_list = _alerts(health)
         self.step(
             "build_insight",
             notes=f"work_list={len(work_list)} alerts={len(alert_list)} npl={health['npl_ratio']:.3f}",

@@ -23,7 +23,7 @@ model features (the leakage guard lives in :mod:`waspada.model.risk`).
 """
 from __future__ import annotations
 
-from typing import Dict, List, Optional
+from typing import Dict, FrozenSet, List, Optional
 
 import pyarrow as pa
 import pyarrow.compute as pc
@@ -75,12 +75,21 @@ _NPL_BUCKETS = {"Default", "31-120", "16-30"}
 # --------------------------------------------------------------------------- #
 # rank — ordered work-list with recommended_action by band.
 # --------------------------------------------------------------------------- #
-def rank(scored: pa.Table, top_n: int = 50) -> List[Dict[str, object]]:
+def rank(
+    scored: pa.Table,
+    top_n: int = 50,
+    *,
+    action_by_band: Optional[Dict[str, str]] = None,
+) -> List[Dict[str, object]]:
     """Sort by ``p_default`` desc, attach ``recommended_action``, cap at ``top_n``.
 
     Returns a list of JSON-serializable dicts shaped like
     :class:`ScoredAccounts` rows (``loan_id``, ``p_default``, ``score_band``,
     ``segment``, ``recommended_action``). Deterministic on ties by ``loan_id``.
+
+    WA-032 — ``action_by_band`` overrides the module :data:`ACTION_BY_BAND`
+    matrix (a human-edited :class:`~waspada.policy.RiskPolicy`); ``None`` uses the
+    default constant, so the un-configured path is byte-identical.
 
     WA-048 — **the action follows the debate, not just the model.** When the
     orchestrator has adjudicated the book, the table carries an additive
@@ -98,6 +107,7 @@ def rank(scored: pa.Table, top_n: int = 50) -> List[Dict[str, object]]:
     disagreement.
     """
     validate_table(scored, ScoredAccounts, name="rank(scored)")
+    matrix = action_by_band if action_by_band is not None else ACTION_BY_BAND
 
     n = scored.num_rows
     probs = scored.column("p_default").to_pylist()
@@ -126,7 +136,7 @@ def rank(scored: pa.Table, top_n: int = 50) -> List[Dict[str, object]]:
         # The decisive band: the society's ruling when it made one, else the
         # model's. This single line is what closes the loop.
         decisive = (final_bands[i] or band) if final_bands is not None else band
-        action = ACTION_BY_BAND.get(decisive, actions_in[i] or "watch")
+        action = matrix.get(decisive, actions_in[i] or "watch")
         seg = segments[i]
         rec: Dict[str, object] = {
             "loan_id": loan_ids[i],
@@ -181,7 +191,9 @@ def _portfolio_expected_loss(scored: pa.Table) -> Dict[str, float]:
     return {"total_expected_loss": total}
 
 
-def segment_health(scored: pa.Table) -> PortfolioHealth:
+def segment_health(
+    scored: pa.Table, *, npl_buckets: Optional[FrozenSet[str]] = None,
+) -> PortfolioHealth:
     """Compute the cross-sectional :class:`PortfolioHealth` aggregates.
 
     * ``npl_ratio`` — fraction of accounts in a delinquent/default bucket
@@ -191,10 +203,15 @@ def segment_health(scored: pa.Table) -> PortfolioHealth:
     * ``status_mix`` — proportion of accounts per ``delinquency_status``
       bucket (empty dict if the column is absent).
 
+    WA-032 — ``npl_buckets`` overrides which ``delinquency_status`` values count
+    as non-performing (a :class:`~waspada.policy.RiskPolicy` field); ``None``
+    uses the default :data:`_NPL_BUCKETS`, so the un-configured path is unchanged.
+
     Pure Python counts over ``to_pylist()`` — the scored table is small here
     (the work-list scale), so a numpy/pandas dependency would be overkill.
     """
     validate_table(scored, ScoredAccounts, name="segment_health(scored)")
+    buckets_set = npl_buckets if npl_buckets is not None else _NPL_BUCKETS
     n = scored.num_rows
     if n == 0:
         return {"npl_ratio": 0.0, "vintage_default_rate": {}, "status_mix": {}}
@@ -206,7 +223,7 @@ def segment_health(scored: pa.Table) -> PortfolioHealth:
     # NPL ratio from delinquency buckets.
     if delinq is not None:
         buckets = delinq.to_pylist()
-        npl = sum(1 for b in buckets if b in _NPL_BUCKETS) / n
+        npl = sum(1 for b in buckets if b in buckets_set) / n
         status_counts: Dict[str, int] = {}
         for b in buckets:
             status_counts[b] = status_counts.get(b, 0) + 1
