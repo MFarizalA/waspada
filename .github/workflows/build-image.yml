@@ -112,8 +112,14 @@ jobs:
           context: .
           file: ./Dockerfile
           push: true
+          # `:v2` is the tag the Function Compute function pulls
+          # (deploy/iac: fc_image_tag default = "v2" → local.fc_image). Without
+          # it the pipeline builds an image FC never sees, and the function
+          # fails to start with PullImageFailed. Keep it in sync with
+          # deploy/iac/variables.tf:fc_image_tag.
           tags: |
             ${{ secrets.ACR_REGISTRY }}/${{ secrets.ACR_NAMESPACE }}/api:latest
+            ${{ secrets.ACR_REGISTRY }}/${{ secrets.ACR_NAMESPACE }}/api:v2
             ${{ secrets.ACR_REGISTRY }}/${{ secrets.ACR_NAMESPACE }}/api:${{ github.sha }}
           # Build from repo root so Dockerfile can COPY waspada/, api/, tests/,
           # and the freshly-built dashboard/dist/.
