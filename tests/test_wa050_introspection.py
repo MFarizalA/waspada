@@ -26,11 +26,8 @@ from waspada.agents.risk_auditor import RiskAuditorAgent
 from waspada.agents.risk_model import RiskModelAgent
 from waspada.model.risk import explain, format_drivers, predict, train
 
-from tests.test_wa016_debate import _raw_rows, _raw_table, _stub_fetch
-
-
 @pytest.fixture
-def scored_frame_model():
+def scored_frame_model(_raw_rows, _raw_table, _stub_fetch):
     """Run ingest→analytics→risk_model; return (scored, frame, model, agent)."""
     raw = _raw_table(_raw_rows())
     ctx = AgentContext(lane="collections", data_handles={})
