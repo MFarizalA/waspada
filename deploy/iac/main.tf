@@ -361,6 +361,13 @@ resource "alicloud_fcv3_function" "api" {
     image   = local.fc_image
     command = ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8080"]
     port    = 8080 # matches Dockerfile EXPOSE + CAPort env
+    # WA-018: pull the standard image directly instead of FC's "accelerated"
+    # (RAFS) image. Acceleration builds a separate snapshot per image digest and,
+    # when a mutable tag (:v2) is re-pushed, FC keeps serving the old snapshot and
+    # returns "PullImageFailed: accelerated image not ready" until redeployed.
+    # Disabling it trades a little cold-start latency for a deploy that just works
+    # on every image push. Flip back to "Default" only if cold starts matter.
+    acceleration_type = "None"
     health_check_config {
       http_get_url = "/api/health"
     }
