@@ -45,6 +45,7 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple
 import pyarrow as pa
 
 from ..model.risk import explain as _explain, format_drivers as _format_drivers
+from ..schema import RISK_LEVELS
 from .base import Agent
 from .llm import ChatResponse, LLM, MockLLM, ToolCall
 from .protocol import AgentContext, AgentResult, Dispute, DisputeRound, Status
@@ -473,8 +474,11 @@ class RiskAuditorAgent(Agent):
         # the Skeptic challenges the model's actual reasoning, not a guess from
         # raw values. Empty string when no model handle is present this run.
         drivers = ""
-        if self._run_model is not None and features is not None:
-            drivers = _format_drivers(_explain(self._run_model, features, loan_id, top_n=5))
+        band_edges = None
+        if self._run_model is not None:
+            band_edges = self._run_model.get("band_edges")
+            if features is not None:
+                drivers = _format_drivers(_explain(self._run_model, features, loan_id, top_n=5))
 
         return {
             "loan_id": loan_id,
@@ -485,6 +489,7 @@ class RiskAuditorAgent(Agent):
             "feature_row": feat_row or {},
             "portfolio_stats": stats,
             "drivers": drivers,
+            "band_edges": band_edges,
             # WA-041: stash the raw tables for native tool-call execution.
             # The native loop's _execute_tool_call reads these when Qwen
             # emits a tool_calls response.
@@ -511,6 +516,19 @@ class RiskAuditorAgent(Agent):
             lines.append(
                 f"The model's own drivers for this score (feature=value "
                 f"(signed logit contribution)): {ctx['drivers']}."
+            )
+        # WA-051: state what the band means in ABSOLUTE PD terms so "Very High"
+        # is a threshold, not a batch rank — this is what puts your view and the
+        # band on the same scale (avoid contesting a rank you'd actually agree
+        # with in absolute terms).
+        edges = ctx.get("band_edges")
+        if edges and len(edges) == 4:
+            lo, low, mid, high, hi = RISK_LEVELS
+            e = [f"{x:.2f}" for x in edges]
+            lines.append(
+                f"Absolute band thresholds (PD): {lo} ≤ {e[0]} < {low} ≤ {e[1]} < "
+                f"{mid} ≤ {e[2]} < {high} ≤ {e[3]} < {hi}. "
+                f"This account's PD={ctx['p_default']:.3f} places it in {ctx['score_band']}."
             )
         lines.append(
             "Give your INDEPENDENT view of this account's risk. Reply with ONLY a "
