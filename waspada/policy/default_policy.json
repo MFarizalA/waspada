@@ -1,0 +1,13 @@
+{
+  "_comment": "WASPADA risk decision matrix (WA-032). Edit this file to change collections policy WITHOUT touching code. Actions must be one of: call, watch, auto-cure. Bands must be one of: Very Low, Low, Medium, High, Very High. Thresholds are fractions in [0,1]. Point WASPADA_POLICY_FILE at a copy to override.",
+  "band_to_action": {
+    "Very High": "call",
+    "High": "watch",
+    "Medium": "watch",
+    "Low": "auto-cure",
+    "Very Low": "auto-cure"
+  },
+  "npl_threshold": 0.20,
+  "vintage_threshold": 0.15,
+  "npl_buckets": ["Default", "31-120", "16-30"]
+}

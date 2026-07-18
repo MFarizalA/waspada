@@ -115,9 +115,12 @@ def _build_demo_orchestrator(
     The streaming hooks are passed straight through to ``Orchestrator``; when
     None the orchestrator behaves exactly as before.
     """
+    import os
+
     from waspada.agents.__main__ import _sample_raw_table
     from waspada.agents.data_engineer import DataEngineerAgent
     from waspada.agents.dispute_memory import get_memory_backend
+    from waspada.policy import load_policy
 
     llm = get_llm(brain) if brain and brain != "mock" else MockLLM()
     orch = Orchestrator(
@@ -125,6 +128,7 @@ def _build_demo_orchestrator(
         as_of=dt.date(2024, 12, 1),
         top_n=20,
         memory_backend=get_memory_backend(),
+        policy=load_policy(os.environ.get("WASPADA_POLICY_FILE")),
         on_round_complete=on_round_complete,
         on_dispute_resolved=on_dispute_resolved,
     )

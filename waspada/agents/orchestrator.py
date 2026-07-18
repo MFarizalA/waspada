@@ -39,6 +39,7 @@ import pyarrow as pa
 
 from ..config import COLLECTIONS, LANES
 from ..insight.ranking import ACTION_BY_BAND
+from ..policy import RiskPolicy
 from ..schema import risk_level_ordinal, view_to_risk_level
 from .arbiter import ArbiterAgent
 from .data_analyst import DataAnalystAgent
@@ -83,6 +84,7 @@ class Orchestrator(Agent):
         enable_arbiter: bool = True,
         memory: Optional[DisputeMemory] = None,
         memory_backend: Optional[MemoryBackend] = None,
+        policy: Optional["RiskPolicy"] = None,
         on_round_complete: Optional[Callable[["Dispute", "DisputeRound"], None]] = None,
         on_dispute_resolved: Optional[Callable[["Dispute"], None]] = None,
     ) -> None:
@@ -90,6 +92,9 @@ class Orchestrator(Agent):
         self.gate = gate or ApprovalGate()
         self.as_of = as_of
         self.top_n = top_n
+        # WA-032: the decision matrix the insight agent applies. ``None`` keeps
+        # the module-constant defaults (behaviour unchanged).
+        self.policy = policy
         self.ingest_limit = ingest_limit
         self.audit_k = audit_k  # Skeptic audits top-K riskiest accounts
         # The Arbiter (Round 3). Defaults to an ArbiterAgent sharing this
@@ -205,7 +210,7 @@ class Orchestrator(Agent):
             DataAnalystAgent(da_brain, as_of=self.as_of),
             risk_model,
             RiskAuditorAgent(auditor_brain, k=self.audit_k),
-            InsightAgent(self.llm, gate=self.gate, top_n=self.top_n),
+            InsightAgent(self.llm, gate=self.gate, top_n=self.top_n, policy=self.policy),
         ]
 
     def run(self, context: AgentContext) -> AgentResult:
