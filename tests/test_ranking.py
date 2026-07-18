@@ -368,31 +368,33 @@ def test_rank_omits_expected_loss_when_op_absent(scored_mixed):
 
 
 def test_segment_health_includes_expected_loss(scored_with_el):
-    """WA-024: portfolio_health carries total expected_loss."""
+    """WA-024: portfolio_health carries total_expected_loss (the portfolio sum —
+    distinct from each row's expected_loss, and the key the frontend reads)."""
     health = segment_health(scored_with_el)
-    assert "expected_loss" in health
+    assert "total_expected_loss" in health
     expected = (
         0.90 * 0.45 * 10000.0 +
         0.50 * 0.45 * 4000.0 +
         0.10 * 0.45 * 2000.0
     )
-    assert health["expected_loss"] == pytest.approx(expected)
+    assert health["total_expected_loss"] == pytest.approx(expected)
 
 
 def test_segment_health_omits_expected_loss_without_op(scored_mixed):
-    """WA-024: no outstanding_principal → no expected_loss in health."""
+    """WA-024: no outstanding_principal → no total_expected_loss in health."""
     health = segment_health(scored_mixed)
-    assert "expected_loss" not in health
+    assert "total_expected_loss" not in health
 
 
 def test_dashboard_payload_includes_expected_loss(scored_with_el):
-    """WA-024: to_dashboard_payload forwards expected_loss in portfolio_health."""
+    """WA-024: to_dashboard_payload forwards total_expected_loss in
+    portfolio_health under the key the frontend + fixture use."""
     wl = rank(scored_with_el, top_n=3)
     health = segment_health(scored_with_el)
     al = alerts(health)
     payload = to_dashboard_payload(wl, health, al)
-    assert "expected_loss" in payload["portfolio_health"]
-    # Work-list rows also carry expected_loss.
+    assert "total_expected_loss" in payload["portfolio_health"]
+    # Work-list rows also carry the per-account expected_loss.
     assert all("expected_loss" in r for r in payload["work_list"])
 
 
@@ -401,7 +403,7 @@ def test_dashboard_payload_without_el_still_valid(scored_mixed):
     wl = rank(scored_mixed, top_n=5)
     health = segment_health(scored_mixed)
     payload = to_dashboard_payload(wl, health, alerts(health))
-    assert "expected_loss" not in payload["portfolio_health"]
+    assert "total_expected_loss" not in payload["portfolio_health"]
     assert all("expected_loss" not in r for r in payload["work_list"])
     # Still JSON-serializable.
     json.dumps(payload)
@@ -419,4 +421,4 @@ def test_expected_loss_zero_outstanding():
     wl = rank(scored, top_n=1)
     assert wl[0]["expected_loss"] == 0.0
     health = segment_health(scored)
-    assert health["expected_loss"] == 0.0
+    assert health["total_expected_loss"] == 0.0

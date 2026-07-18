@@ -188,6 +188,12 @@ class PortfolioHealth(TypedDict):
     * ``npl_ratio`` — fraction of accounts in delinquent/default status.
     * ``vintage_default_rate`` — default rate keyed by ``issue_date`` cohort.
     * ``status_mix`` — proportion of accounts per ``current_status`` value.
+
+    WA-024 adds an ADDITIVE optional key ``total_expected_loss`` (the portfolio
+    Σ of PD × LGD × EAD, in IDR) — present only when ``outstanding_principal``
+    is available; older payloads without it stay valid. Named ``total_``* to
+    distinguish it from each work-list row's per-account ``expected_loss`` and to
+    match the frontend (``dashboard/src/types.ts``).
     """
 
     npl_ratio: float

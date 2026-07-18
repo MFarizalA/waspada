@@ -164,9 +164,12 @@ def _safe_get(scored: pa.Table, name: str) -> Optional[pa.Array]:
 def _portfolio_expected_loss(scored: pa.Table) -> Dict[str, float]:
     """WA-024: portfolio total Expected Loss (PD × LGD × EAD).
 
-    Returns ``{"expected_loss": total}`` when ``outstanding_principal`` is
-    present, or ``{}`` (omits the key entirely) when absent — so older
-    payloads without it stay valid.
+    Returns ``{"total_expected_loss": total}`` when ``outstanding_principal`` is
+    present, or ``{}`` (omits the key entirely) when absent — so older payloads
+    without it stay valid. The key is ``total_expected_loss`` (not
+    ``expected_loss``) to distinguish the portfolio sum from the per-account
+    ``expected_loss`` on each work-list row, and to match the frontend contract
+    (``PortfolioHealth.total_expected_loss`` / ``sample-payload.json``).
     """
     op_col = _safe_get(scored, "outstanding_principal")
     if op_col is None:
@@ -175,7 +178,7 @@ def _portfolio_expected_loss(scored: pa.Table) -> Dict[str, float]:
     outstanding = op_col.to_pylist()
     total = sum(float(p) * EXPECTED_LOSS_LGD * float(op or 0.0)
                 for p, op in zip(probs, outstanding))
-    return {"expected_loss": total}
+    return {"total_expected_loss": total}
 
 
 def segment_health(scored: pa.Table) -> PortfolioHealth:
@@ -311,9 +314,11 @@ def to_dashboard_payload(
             "npl_ratio": float(health["npl_ratio"]),
             "vintage_default_rate": {str(k): float(v) for k, v in health["vintage_default_rate"].items()},
             "status_mix": {str(k): float(v) for k, v in health["status_mix"].items()},
-            # WA-024: forward expected_loss when present (additive optional).
-            **({"expected_loss": float(health["expected_loss"])}
-               if "expected_loss" in health else {}),
+            # WA-024: forward the portfolio total when present (additive
+            # optional). Keyed total_expected_loss to match the frontend +
+            # fixture and to not collide with the per-row expected_loss.
+            **({"total_expected_loss": float(health["total_expected_loss"])}
+               if "total_expected_loss" in health else {}),
         },
         "alerts": list(alert_list),
     }
