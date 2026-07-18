@@ -48,8 +48,8 @@ variable "rds_instance_type" {
   # Queried live API (alicloud_db_instance_classes) for ap-southeast-1b.
   # Instance types use .xc suffix. myduck.* types include the DuckDB analytical
   # engine (Alibaba Cloud native integration). myduck.x4.large.xc = 4 vCPU, 8 GB.
-  # WA-060: mysql.n2.medium.2 = 2 vCPU, 4 GB, High-availability Series.
-  default = "mysql.n2.medium.2"
+  # WA-060: mysql.n2.medium.1 = 2 vCPU, 4 GB, High-availability Series.
+  default = "mysql.n2.medium.1"
 }
 
 variable "rds_password" {
@@ -63,6 +63,12 @@ variable "duckdb_instance_type" {
   description = "RDS DuckDB analytical read-only instance type (WA-060). myduckro.x4.large.2 = 4 vCPU, 8 GB — matches the Alibaba Cloud free tier (4C8G, 30 days free)."
   type        = string
   default     = "myduckro.x4.large.2"
+}
+
+variable "duckdb_rds_endpoint" {
+  description = "DuckDB RDS analytical instance endpoint (created via console, WA-060). Pass via TF_VAR_duckdb_rds_endpoint or secrets.tfvars."
+  type        = string
+  default     = ""
 }
 
 variable "rds_security_ips" {

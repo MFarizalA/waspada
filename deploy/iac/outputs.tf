@@ -81,6 +81,6 @@ output "rds_database_url" {
 }
 
 output "duckdb_endpoint" {
-  description = "DuckDB analytical read-only instance connection endpoint (WA-060)."
-  value       = alicloud_db_instance.analytics.connection_string
+  description = "DuckDB analytical read-only instance connection endpoint (WA-060, created via console)."
+  value       = var.duckdb_rds_endpoint
 }

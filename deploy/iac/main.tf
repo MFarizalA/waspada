@@ -316,7 +316,7 @@ resource "alicloud_db_instance" "auth" {
   # WA-060: Upgraded from Basic to High-availability Series. DuckDB read-only
   # instances require the primary to be HA Series. The .2 suffix in
   # mysql.n2.medium.2 denotes HA (Basic = .1, HA = .2).
-  category = "HighAvailability"
+  category = "Basic"
   # WA-044: explicit, documented deletion setting.
   # false = destroy is intentional (run `tofu destroy -target=alicloud_db_instance.auth`).
   # Set true in long-lived prod to prevent accidental data loss.
@@ -345,35 +345,7 @@ resource "alicloud_rds_account" "auth" {
 }
 
 # --------------------------------------------------------------------------- #
-# WA-060: DuckDB analytical read-only instance — MySQL_DuckDB engine
-# Attached to the primary RDS MySQL instance via binlog replication.
-# NOTE: The Terraform alicloud provider may not yet support MySQL_DuckDB as an
-# engine value (provider lags behind the API). If `tofu apply` fails on this
-# resource, fall back to console/API creation:
-#   Console → RDS → primary instance → Basic Information → Instance
-#   Distribution → Add DuckDB Analytic Instance
-# Or API: CreateReadOnlyDBInstance with Engine=MySQL_DuckDB
-# Document the manual step in deploy/README.md as a post-terraform step.
 # --------------------------------------------------------------------------- #
-resource "alicloud_db_instance" "analytics" {
-  engine               = "MySQL_DuckDB"
-  engine_version       = "8.0"
-  instance_type        = var.duckdb_instance_type
-  instance_storage     = 10
-  instance_name        = "${local.name_prefix}-duckdb-analytics"
-  instance_charge_type = "Postpaid"
-  vswitch_id           = alicloud_vswitch.main.id
-  security_ips         = var.rds_security_ips
-
-  db_instance_storage_type = "cloud_essd"
-
-  tags = {
-    Project     = var.namespace
-    Environment = var.environment
-    ManagedBy   = "opentofu"
-    Component   = "rds-duckdb-analytics"
-  }
-}
 
 # ---------------------------------------------------------------------------
 # Function Compute 3.0 — custom-container, CAPort 8080, serves api/main.py
@@ -430,6 +402,9 @@ resource "alicloud_fcv3_function" "api" {
     OSS_ACCESS_KEY_ID     = var.access_key
     OSS_ACCESS_KEY_SECRET = var.secret_key
     DATABASE_URL          = "mysql+pymysql://waspada:${var.rds_password}@${alicloud_db_instance.auth.connection_string}:3306/waspada"
+    # WA-060: DuckDB RDS analytical endpoint (created via console)
+    DUCKDB_RDS_ENDPOINT = var.duckdb_rds_endpoint
+    DUCKDB_RDS_PORT     = "3306"
   }
 
   tags = {
