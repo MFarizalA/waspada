@@ -181,3 +181,37 @@ domain-specific MCP server" narrative. Do not add it to the runtime for optics.
 (dlthub.com/docs/hub/features/ai), assistants+MCP on Continue (dlthub.com/blog/deep-dive-assistants-mcp-continue),
 AI Workbench (dlthub.com/blog/ai-workbench). Tool surface also verified locally against the
 installed dlt 1.28.2 (`dlt._workspace.mcp`).
+
+---
+
+## 8. What each data agent GAINS from dlt (data + metadata, NOT dlt's MCP server)
+
+The key distinction (see §7): the agents utilize dlt's **data + lineage metadata** — dlt as the
+LOAD layer *under* WASPADA's own MCP — they do **not** consume dlt's MCP *server* (a dev-time
+accelerator, not a runtime component). "Utilize dlt's data + metadata" is the yes; "utilize dlt's
+MCP server at runtime" is the no.
+
+### Data Engineer — a real upgrade to "should we trust this book?"
+Today it profiles the raw book (schema, null rates, anomalies) via DuckDB SQL. With dlt as the
+load layer it can **also cite hard, lineage-backed data-trust evidence** — all plain queries on
+dlt's own tables (`_dlt_loads`, the managed schema), no dlt-MCP needed:
+- **load freshness** — last-load timestamp per table,
+- **rows loaded this run** (and the delta vs the prior load),
+- **schema-contract status** — pass/fail (freeze rejects unexpected columns/types),
+- **schema version / drift** — did the book's shape change since the last load.
+
+This turns the Engineer's freshness/quality gate from an in-memory check into **auditable,
+lineage-backed evidence it can bring to the debate** — a genuine, demoable enhancement:
+"the book loaded at T, the contract passed, N rows, no schema drift" is exactly the grounded
+data-trust claim the society exists to make.
+
+### Data Analyst — better inputs, same tools
+It queries the dlt-loaded dataset — now **contract-validated, deduped (merge on `loan_id`), and
+lineage-tracked** — through the *existing* DuckDB/MCP path it already uses. dlt improves the
+**data it reads**, not the **tool it reads with**; it can additionally cite dlt's load/schema
+metadata as evidence.
+
+### Runtime pattern (unchanged)
+dlt loads + validates → **WASPADA's own MCP tools query the dlt-loaded DuckDB**. dlt sits *under*
+the existing MCP, never as a second MCP beside it. Neither data agent connects to dlt's MCP
+server at runtime.
