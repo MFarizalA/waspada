@@ -133,3 +133,51 @@ solo-start. This IS the genuine "WA-047 dlt pipeline" the architecture always de
 - **Live-cred OSS smoke test** for Option B: one authenticated `read_parquet` from
   `oss://waspada-prod-raw` and one `put` to `oss://waspada-prod-staging`, with the real
   endpoint + AccessKey. Everything else is verified.
+
+---
+
+## 7. dlt + MCP — separate research (does dlt's own MCP server fit WASPADA?)
+
+**What it is (verified, dlt 1.28.2):** dlt ships an MCP server in core — `dlt._workspace.mcp`
+(three flavors: `PipelineMCP`, `WorkspaceMCP`, `DltMCP`, built on `FastMCP`, with a
+tools/prompts/skills discovery system) — gated behind `pip install dlt[workspace]` (pulls
+`fastmcp`). The `dlt ai` assistant features moved to the separate `dlthub` package. Per
+dltHub docs the tools include `list_pipelines`, `get_table_schema`, `execute_sql_query`,
+plus pipeline-trace / incident drill-down and data-contract-aware table previews.
+
+**Purpose:** agentic **data-engineering / dev-assistant** tooling — it connects an AI *coding
+assistant* (Claude Desktop, Cursor, Continue, Cline) to a dlt project so the assistant can
+inspect pipelines, read schemas/metadata/traces, run SQL over the loaded dataset, and
+build/debug/deploy pipelines. It is **not** a runtime data-serving component for an app.
+
+### Fit for WASPADA — two clearly-separated angles
+
+**A. Dev-time — recommended, zero product footprint.** Use dlt's MCP to *accelerate building*
+the WA-047 integration: point Claude Code / an IDE assistant at the WASPADA dlt project so it
+can read the pipeline schema, `execute_sql_query` over the loaded DuckDB, and drill into load
+traces while authoring/debugging the Option A/B pipelines. A genuine productivity aid, invisible
+in the product/demo.
+
+**B. Runtime (inside the agent society) — NOT recommended.** WASPADA already has its OWN
+purpose-built, byte-parity-verified MCP server (`waspada/mcp/server.py`: `portfolio_stats`,
+`lookup_account`) that the Risk Auditor consumes — a WA-070 *strength*. Bolting dlt's MCP into
+the runtime would:
+- be **redundant** with the existing MCP (two surfaces, muddled story);
+- expose a **generic `execute_sql_query` / pipeline-admin** surface to the loan-decision agents —
+  broader and less auditable than the tight tool contract the debate needs (governance concern:
+  arbitrary SQL in the decision path);
+- add **heavy deps** (`dlt[workspace]` + fastmcp + workspace) to the FC runtime for no debate benefit.
+
+Keep the pattern: **dlt is the LOAD layer (WA-047); WASPADA's own MCP tools query the dlt-loaded
+DuckDB** — dlt *under* the existing MCP, not a second MCP *beside* it.
+
+**Rubric note:** WASPADA's own MCP is already a real strength; dlt's MCP is dev tooling, not
+agent-society tool use, so it wouldn't strengthen (and could dilute) the "we built a real,
+domain-specific MCP server" narrative. Do not add it to the runtime for optics.
+
+**Verdict:** dlt MCP = a build accelerator for WA-047 (yes); a runtime component of the society (no).
+
+**Sources:** dltHub MCP docs (dlthub.com/docs/hub/features/mcp-server), AI workflows
+(dlthub.com/docs/hub/features/ai), assistants+MCP on Continue (dlthub.com/blog/deep-dive-assistants-mcp-continue),
+AI Workbench (dlthub.com/blog/ai-workbench). Tool surface also verified locally against the
+installed dlt 1.28.2 (`dlt._workspace.mcp`).
