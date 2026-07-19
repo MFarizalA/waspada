@@ -37,9 +37,15 @@ variable "acr_registry_domain" {
 }
 
 variable "fc_image_tag" {
-  description = "Tag of the ACR image to deploy (owner pushes this in the WA-018 deploy step)."
+  description = <<-EOT
+    ACR image tag the FC function runs. PINNED to an immutable git-sha tag (not
+    the mutable `:v2`) so terraform state == config == what's deployed — no
+    drift, and no surprise retag on `tofu apply`. build-image.yml pushes
+    `:latest`, `:v2`, and `:<git-sha>`; deploy by bumping this to the new sha and
+    applying. Currently: the HTMLResponse render-fix build (0ae6be8).
+  EOT
   type        = string
-  default     = "v2"
+  default     = "0ae6be8a6a7ffcd029cfab4185115dbf1332832d"
 }
 
 variable "rds_instance_type" {
