@@ -44,8 +44,9 @@ import pandas as pd
 import pyarrow as pa
 import pyarrow.compute as pc
 from sklearn.compose import ColumnTransformer
+from sklearn.isotonic import IsotonicRegression
 from sklearn.linear_model import LogisticRegression
-from sklearn.metrics import roc_auc_score
+from sklearn.metrics import brier_score_loss, roc_auc_score
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
 
@@ -175,6 +176,55 @@ def _vintage_split(frame: pa.Table, train_fraction: float) -> Tuple[np.ndarray, 
 # --------------------------------------------------------------------------- #
 # train — fit LogisticRegression on the leakage-safe feature subset.
 # --------------------------------------------------------------------------- #
+# WA-094: below this hold-out size, calibration is unreliable — keep the raw
+# probabilities (tiny/offline frames are then byte-identical to the pre-WA-094
+# path, so tests/CI don't move). Real books clear this easily.
+_CALIBRATION_MIN_SAMPLES = 30
+
+
+def _raw_proba(pipeline: Pipeline, X: pd.DataFrame) -> np.ndarray:
+    """The LR pipeline's raw P(default), finite and clipped to [0,1]."""
+    p = pipeline.predict_proba(X)[:, 1].astype(float)
+    return np.clip(np.nan_to_num(p, nan=0.0), 0.0, 1.0)
+
+
+def _fit_calibrator(raw_test: np.ndarray, y_test: np.ndarray):
+    """Fit an isotonic map raw_prob → calibrated_prob on the hold-out (WA-094).
+
+    ``class_weight="balanced"`` biases the LR probabilities toward 0.5; an
+    isotonic (monotone, non-parametric) fit on the held-out newer vintages
+    corrects them so ``p_default`` is a true PD. Monotone ⇒ the ranking (and
+    therefore AUC) is unchanged; only the probability *values* are corrected.
+
+    Returns the fitted :class:`IsotonicRegression` or ``None`` when the hold-out
+    is too small / single-class / degenerate (caller keeps the raw probs).
+    """
+    if len(raw_test) < _CALIBRATION_MIN_SAMPLES or len(np.unique(y_test)) < 2:
+        return None
+    try:
+        iso = IsotonicRegression(out_of_bounds="clip", y_min=0.0, y_max=1.0)
+        iso.fit(raw_test, y_test.astype(float))
+        return iso
+    except Exception:  # pragma: no cover - defensive; degrade to raw
+        return None
+
+
+def _calibrated_proba(model: Dict, X: pd.DataFrame) -> np.ndarray:
+    """Score ``X`` → calibrated P(default). Applies the model's calibrator when
+    present (WA-094), else the raw LR probability. The single scoring path both
+    ``predict`` and the band-edge computation go through, so bands are always on
+    the served probability."""
+    raw = _raw_proba(model["pipeline"], X)
+    cal = model.get("calibrator")
+    if cal is None:
+        return raw
+    try:
+        out = np.asarray(cal.predict(raw), dtype=float)
+        return np.clip(np.nan_to_num(out, nan=0.0), 0.0, 1.0)
+    except Exception:  # pragma: no cover - defensive; degrade to raw
+        return raw
+
+
 def _build_pipeline() -> Pipeline:
     """Standardized numerics + one-hot categorics + L2 logistic regression."""
     pre = ColumnTransformer(
@@ -234,9 +284,23 @@ def train(
 
     # Hold-out AUC on the newer-vintage test split (when both classes present).
     metrics: Dict[str, object] = {"n_train": int(len(train_idx)), "n_test": int(len(test_idx))}
+    # WA-094: post-hoc probability calibration. Fit an isotonic map on the
+    # hold-out so p_default is a true PD (expected_loss + the absolute bands
+    # depend on it). The LR pipeline is untouched — explain()'s coefficients and
+    # the honest linear-score decomposition are unchanged; calibration is a
+    # monotone remap of the final probability. Guarded: on too-small/single-class
+    # hold-outs the calibrator is None and scoring stays raw (offline unchanged).
+    calibrator = None
     if len(test_idx) > 0 and len(np.unique(y[test_idx])) == 2:
-        probs = pipeline.predict_proba(X.iloc[test_idx])[:, 1]
-        metrics["auc"] = float(roc_auc_score(y[test_idx], probs))
+        raw_test = _raw_proba(pipeline, X.iloc[test_idx])
+        metrics["auc"] = float(roc_auc_score(y[test_idx], raw_test))  # rank metric: raw == calibrated
+        calibrator = _fit_calibrator(raw_test, y[test_idx])
+        metrics["calibrated"] = calibrator is not None
+        # Brier before/after, so the calibration win is auditable (WA-093 reads it).
+        metrics["brier_raw"] = float(brier_score_loss(y[test_idx], raw_test))
+        if calibrator is not None:
+            cal_test = _calibrated_proba({"pipeline": pipeline, "calibrator": calibrator}, X.iloc[test_idx])
+            metrics["brier_calibrated"] = float(brier_score_loss(y[test_idx], cal_test))
 
     # WA-051: freeze the reference band edges — the [20,40,60,80] percentiles of
     # THIS book's scores — so future batches are banded on absolute PD cutoffs
@@ -244,10 +308,15 @@ def train(
     # clip as predict() so scoring the training frame reproduces the historical
     # per-batch quintiles byte-for-byte. Collapsed (constant-prob) → None, so
     # predict() falls back to the relative path and the degenerate handling.
-    band_edges = _reference_band_edges(pipeline, X)
+    # Band on the CALIBRATED score distribution (the served probability), so the
+    # frozen edges and predict() stay consistent post-calibration.
+    band_edges = _reference_band_edges(
+        _calibrated_proba({"pipeline": pipeline, "calibrator": calibrator}, X)
+    )
 
-    return {
+    artifact = {
         "pipeline": pipeline,
+        "calibrator": calibrator,  # WA-094: None when calibration was skipped
         "feature_columns": list(FEATURE_COLUMNS),
         "leakage_excluded": list(LEAKAGE_EXCLUDED),
         "split": split,
@@ -255,19 +324,26 @@ def train(
         "band_edges": band_edges,
         "trained_at": dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z"),
     }
+    # WA-082: stamp a deterministic version id so every run can cite the exact
+    # model that scored it (the registry recomputes the same id on publish/load).
+    try:
+        from .registry import model_id as _model_id
+        artifact["model_id"] = _model_id(artifact)
+    except Exception:  # pragma: no cover - defensive; id is audit metadata
+        pass
+    return artifact
 
 
-def _reference_band_edges(pipeline: Pipeline, X: pd.DataFrame) -> Optional[List[float]]:
+def _reference_band_edges(probs: np.ndarray) -> Optional[List[float]]:
     """The four absolute PD cutoffs to band future batches against (WA-051).
 
-    The reference distribution is the whole training book's scores; its
-    ``[20,40,60,80]`` percentiles become the frozen cutoffs. Matches predict()'s
-    clip so ``predict(model, same_frame)`` is byte-identical to the old
-    per-batch quintile output. Returns ``None`` when the cutoffs collapse
-    (constant probabilities) so predict() degrades to the relative path.
+    The reference distribution is the whole training book's (WA-094: calibrated)
+    scores; its ``[20,40,60,80]`` percentiles become the frozen cutoffs. Because
+    predict() scores through the same calibrated path, ``predict(model,
+    same_frame)`` reproduces these quintiles. Returns ``None`` when the cutoffs
+    collapse (constant probabilities) so predict() degrades to the relative path.
     """
-    probs = pipeline.predict_proba(X)[:, 1].astype(float)
-    probs = np.clip(np.nan_to_num(probs, nan=0.0), 0.0, 1.0)
+    probs = np.clip(np.nan_to_num(np.asarray(probs, dtype=float), nan=0.0), 0.0, 1.0)
     qs = np.percentile(probs, [20, 40, 60, 80])
     if len(set(qs.tolist())) == 1:
         return None
@@ -354,7 +430,9 @@ def predict(model: Dict, features: pa.Table) -> pa.Table:
     """
     validate_table(features, FeatureFrame, name="predict(features)")
     X, _ = _X_y(features)
-    probs = model["pipeline"].predict_proba(X)[:, 1].astype(float)
+    # WA-094: score through the calibrated path (raw LR probability remapped by
+    # the isotonic calibrator when the artifact carries one; raw otherwise).
+    probs = _calibrated_proba(model, X)
 
     # Guard: probabilities must be finite and in [0,1] (clip tiny float drift).
     probs = np.clip(np.nan_to_num(probs, nan=0.0), 0.0, 1.0)

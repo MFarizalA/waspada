@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import json
 import re
-from typing import Any, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import pyarrow as pa
 
@@ -69,18 +69,22 @@ class RiskModelAgent(Agent):
                 notes=f"FeatureFrame handle {frame_handle!r} not found",
             )
 
-        self.step("train", notes=f"rows={frame.num_rows} (vintage split)")
-        try:
-            model = _train(frame)
-        except Exception as exc:
-            self.step("train", status=Status.ERROR, notes=str(exc))
-            return AgentResult(status=Status.ERROR, agent=self.name, notes=f"train failed: {exc}")
+        # WA-082: serve a frozen, versioned model from OSS when opted in; else
+        # train per-run (the offline / test / demo default).
+        model = self._load_published_model()
+        if model is None:
+            self.step("train", notes=f"rows={frame.num_rows} (vintage split)")
+            try:
+                model = _train(frame)
+            except Exception as exc:
+                self.step("train", status=Status.ERROR, notes=str(exc))
+                return AgentResult(status=Status.ERROR, agent=self.name, notes=f"train failed: {exc}")
 
-        auc = model.get("metrics", {}).get("auc")
-        self.step(
-            "train_done",
-            notes=f"split={model['split']['method']} auc={auc}" if auc else f"split={model['split']['method']}",
-        )
+            auc = model.get("metrics", {}).get("auc")
+            self.step(
+                "train_done",
+                notes=f"split={model['split']['method']} auc={auc}" if auc else f"split={model['split']['method']}",
+            )
 
         try:
             scored = _predict(model, frame)
@@ -114,6 +118,36 @@ class RiskModelAgent(Agent):
             status=Status.OK, agent=self.name, artifact_ref=handle,
             notes=f"scored {scored.num_rows} accounts; Very High={n_highest}",
         )
+
+    # ------------------------------------------------- WA-082 frozen serve
+    def _load_published_model(self) -> Optional[Dict[str, Any]]:
+        """Serve a frozen, versioned PD model from OSS when opted in.
+
+        Opt-in via ``WASPADA_PD_MODEL_SOURCE=oss`` (pin a version with
+        ``WASPADA_PD_MODEL_ID``; bucket via ``OSS_STAGING_BUCKET``). Returns the
+        loaded artifact — reproducible, auditable scoring that cites a
+        ``model_id`` — or ``None`` to fall back to per-run training. Never raises:
+        a load failure logs and degrades to training, so offline/tests/demo (no
+        env, no OSS) are unchanged.
+        """
+        import os
+
+        if os.environ.get("WASPADA_PD_MODEL_SOURCE", "").strip().lower() != "oss":
+            return None
+        try:
+            from ..data.oss import OSSClient
+            from ..model.registry import load_published_model
+
+            pinned = os.environ.get("WASPADA_PD_MODEL_ID") or None
+            bucket = os.environ.get("OSS_STAGING_BUCKET") or None
+            model = load_published_model(OSSClient(), model_id=pinned, bucket=bucket)
+            self.step("model_loaded",
+                      notes=f"served frozen model {model.get('model_id')} from OSS (no per-run fit)")
+            return model
+        except Exception as exc:
+            self.step("model_load", status=Status.ERROR,
+                      notes=f"OSS model load failed, training per-run: {exc}")
+            return None
 
     # ---------------------------------------------------- Round 2 (WA-016)
     def defend_score(

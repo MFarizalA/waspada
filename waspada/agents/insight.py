@@ -143,6 +143,23 @@ class InsightAgent(Agent):
         payload = to_dashboard_payload(work_list, health, alert_list)
         if dialogue:
             payload["agent_dialogue"] = dialogue
+        # WA-093: attach the per-run model-monitoring card (AUC, Brier, observed
+        # default rate, band distribution, + PSI vs a reference when configured).
+        # Additive/guarded — any failure leaves the payload untouched. A stored
+        # reference cohort (OSS baseline) can be wired later; absent it, drift is
+        # simply not measured this run.
+        if model is not None:
+            try:
+                from ..model.monitoring import build_monitor_record
+                card = build_monitor_record(model, scored, features)
+                payload["model_card"] = card
+                self.step(
+                    "model_card",
+                    notes=(f"auc={card.get('auc')} default_rate={card.get('observed_default_rate')} "
+                           f"calibrated={card.get('calibrated')} bands={card.get('band_distribution')}"),
+                )
+            except Exception as exc:  # pragma: no cover - defensive; monitoring is enrichment
+                self.step("model_card", status=Status.ERROR, notes=f"monitor record failed: {exc}")
         summary = summarize_alerts(alert_list)
         self.step("payload_assembled", notes=f"alerts_summary='{summary[:60]}' disputes={len(disputes)}")
 
