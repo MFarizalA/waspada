@@ -247,3 +247,47 @@ def test_lakehouse_exposed_after_run(raw_table):
     assert agent.lakehouse.table == "raw_loans"
     # The Lakehouse reads the same row count as the source table.
     assert agent.lakehouse.scalar("SELECT COUNT(*) FROM raw_loans") == raw_table.num_rows
+
+
+# --------------------------------------------------------------------------- #
+# WA-084: NATIVE function-calling path (real tool_calls, not prompt-parsed JSON).
+# --------------------------------------------------------------------------- #
+def test_native_function_calling_loop(raw_table):
+    """With a native-tool brain, the Data Engineer drives the loop via real
+    OpenAI tool_calls (chat/tools) — the SAME surface as the Risk Auditor —
+    not the legacy prompt-embedded {"tool":...} JSON."""
+    from waspada.agents.llm import ChatResponse, ToolCall
+
+    script = [
+        ChatResponse(tool_calls=[ToolCall(id="c1", name="validate_schema", arguments="{}")]),
+        ChatResponse(tool_calls=[ToolCall(id="c2", name="null_rates", arguments="{}")]),
+        ChatResponse(tool_calls=[ToolCall(id="c3", name="profile_column",
+                                          arguments='{"column": "dti"}')]),
+        ChatResponse(tool_calls=[ToolCall(id="c4", name="detect_anomalies", arguments="{}")]),
+        ChatResponse(content="done — book looks clean"),  # no tool_calls -> loop ends
+    ]
+    agent = DataEngineerAgent(MockLLM(script=script, native_tools=True))
+    agent.register_tool("fetch", _stub_fetch(raw_table))
+    res = agent.run(AgentContext(lane="collections", data_handles={}))
+
+    assert res.ok
+    checks = [s.action.split(":", 1)[1]
+              for s in agent.steps if s.action.startswith("de_tool:")]
+    assert checks == ["validate_schema", "null_rates", "profile_column", "detect_anomalies"]
+    # It took the NATIVE path, not the legacy prompt-parsed one.
+    assert any(s.action == "de_native_done" for s in agent.steps)
+    assert not any(s.action == "de_done" for s in agent.steps)
+
+
+def test_native_falls_back_to_legacy_for_mock_brain(raw_table):
+    """A non-native brain (default MockLLM) transparently uses the legacy loop —
+    supports_native_tools defaults False, so no scripted reply is consumed by a probe."""
+    script = [json.dumps({"tool": "null_rates"}), json.dumps({"tool": "done"})]
+    brain = MockLLM(script=script)
+    assert brain.supports_native_tools is False
+    agent = DataEngineerAgent(brain)
+    agent.register_tool("fetch", _stub_fetch(raw_table))
+    res = agent.run(AgentContext(lane="collections", data_handles={}))
+    assert res.ok
+    assert any(s.action == "de_done" for s in agent.steps)          # legacy path
+    assert not any(s.action == "de_native_done" for s in agent.steps)

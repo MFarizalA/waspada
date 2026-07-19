@@ -311,3 +311,36 @@ def test_correlation_can_target_raw_loans_via_table_key(raw_table, as_of):
     )
     assert "error" not in reply, reply
     assert reply["table"] == "raw_loans"
+
+
+def test_native_function_calling_loop_da(raw_table, as_of):
+    """WA-084: with a native-tool brain, the Data Analyst drives the loop via real
+    OpenAI tool_calls (chat/tools), not the legacy prompt-parsed {"tool":...} JSON."""
+    from waspada.agents.llm import ChatResponse, ToolCall
+    from waspada.agents.protocol import AgentResult
+
+    script = [
+        ChatResponse(tool_calls=[ToolCall(id="c1", name="query",
+            arguments='{"sql": "SELECT grade, COUNT(*) FROM raw_loans GROUP BY grade LIMIT 10"}')]),
+        ChatResponse(tool_calls=[ToolCall(id="c2", name="correlation",
+            arguments='{"a": "dti", "b": "rate"}')]),
+        ChatResponse(tool_calls=[ToolCall(id="c3", name="distribution",
+            arguments='{"column": "dti"}')]),
+        ChatResponse(content="done - enough exploration"),  # no tool_calls -> loop ends
+    ]
+    agent = DataAnalystAgent(MockLLM(script=script, native_tools=True), as_of=as_of)
+    ctx = AgentContext(
+        lane="collections",
+        data_handles={"raw_loans": raw_table},
+        prior_results=[AgentResult(status=Status.OK, artifact_ref="raw_loans")],
+    )
+    res = agent.run(ctx)
+
+    assert res.ok
+    tools = [s.action.split(":", 1)[1]
+             for s in agent.steps if s.action.startswith("da_tool:")]
+    assert tools == ["query", "correlation", "distribution"]
+    assert any(s.action == "da_native_done" for s in agent.steps)
+    assert not any(s.action == "da_done" for s in agent.steps)
+    # aggregates captured for the debate evidence base
+    assert len(ctx.data_handles["analyst_aggregates"]["queries_run"]) == 3
