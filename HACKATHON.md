@@ -307,7 +307,7 @@ flowchart TB
 ## Lakehouse data layer (WA-029/030 · re-scoped by WA-047)
 
 **Architecture decision (2026-07-14): the lakehouse is OSS + DuckDB. Nothing
-else.** RDS PostgreSQL is the operational **auth** store (WA-028) and is *not*
+else.** RDS MySQL is the operational **auth** store (WA-028) and is *not*
 part of the lakehouse; DuckDB↔RDS federation is **descoped, not deferred**.
 
 Honest status — today this is a **data lake read**, not yet a lakehouse (no
@@ -334,7 +334,7 @@ table format, no versioning, no snapshot isolation). WA-047 closes the gap.
   Arrow table that `oss.py` bulk-reads. Genuine OSS pushdown via `httpfs` is
   future work. The schema contract that *does* exist is the Python
   `validate_table(raw, RawLoans)` gate inside the Data Engineer.
-- ✅ · **RDS PostgreSQL — auth only** (WA-028). *Not* a lakehouse component.
+- ✅ · **RDS MySQL — auth only** (WA-028). *Not* a lakehouse component.
   **Dispute memory lives in OSS**, not RDS (`memory/disputes/loan_id={id}.json`
   — see WA-046, which also fixes the bug that no entrypoint currently wires a
   persistent memory backend at all). The audit trail goes to **SLS** (WA-023),

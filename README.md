@@ -19,7 +19,7 @@ debate transcript attached. Two decisions on one shared risk engine:
 **Stack:** Alibaba Cloud OSS (data lake) · DuckDB (in-process query engine) ·
 Qwen models via Alibaba Cloud Model Studio/DashScope (the Agent Society brain,
 opt-in) · a multi-agent layer over a mockable LLM (**mock by default, offline**)
-· Alibaba Simple Log Service (audit stream) · ApsaraDB RDS PostgreSQL (auth) ·
+· Alibaba Simple Log Service (audit stream) · ApsaraDB RDS MySQL (auth) ·
 React/TypeScript dashboard · optional cuDF-on-GPU (WSL2) feature path.
 
 > Built by an autonomous AI software company — Stefanie (PM) · Bimo (backend) ·
