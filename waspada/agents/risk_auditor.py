@@ -137,9 +137,14 @@ class RiskAuditorAgent(Agent):
     name = "risk_auditor"
     role = "audit top-K scores and open disputes"
 
-    def __init__(self, llm: Optional[LLM] = None, *, k: int = 8, max_workers: int = 1) -> None:
+    def __init__(self, llm: Optional[LLM] = None, *, k: int = 8, max_workers: int = 1,
+                 dispute_gap: int = DISPUTE_GAP) -> None:
         super().__init__(llm=llm if llm is not None else MockLLM())
         self.k = k
+        # WA-095: admissibility gap the human sets in the parameter matrix. Tighter
+        # (1) opens more disputes; looser (3-4) opens fewer. Defaults to the module
+        # constant so an un-configured auditor is unchanged.
+        self.dispute_gap = int(dispute_gap)
         # WA-080: audit the K accounts concurrently when max_workers > 1. Each
         # account's audit is an independent LLM tool-loop (the dominant cost of a
         # live-Qwen run: up to K x _MAX_TOOL_TURNS sequential calls). Running them
@@ -635,15 +640,15 @@ class RiskAuditorAgent(Agent):
             auditor_view=view,
         )
 
-    @staticmethod
-    def _should_dispute(model_band: str, auditor_view: str) -> bool:
-        """Admissibility: dispute iff the band/view ordinals differ by ≥ DISPUTE_GAP."""
+    def _should_dispute(self, model_band: str, auditor_view: str) -> bool:
+        """Admissibility: dispute iff the band/view ordinals differ by ≥ dispute_gap
+        (WA-095: the matrix-configurable gap; defaults to the module DISPUTE_GAP)."""
         # .title() normalizes case for multi-word levels ("very high" → "Very High").
         b = _BAND_ORDINAL.get(str(model_band).strip().title())
         v = _VIEW_ORDINAL.get(str(auditor_view).strip().lower())
         if b is None or v is None:
             return False
-        return abs(b - v) >= DISPUTE_GAP
+        return abs(b - v) >= self.dispute_gap
 
 
 # --------------------------------------------------------------------------- #

@@ -151,7 +151,7 @@ def test_run_emits_dashboard_payload(raw_table):
     # Required contract keys always present; additive optional keys
     # (agent_dialogue, model_card — WA-093) may accompany them.
     assert {"work_list", "portfolio_health", "alerts"} <= set(payload.keys())
-    assert set(payload.keys()) <= {"work_list", "portfolio_health", "alerts", "agent_dialogue", "model_card"}
+    assert set(payload.keys()) <= {"work_list", "portfolio_health", "alerts", "agent_dialogue", "model_card", "policy_card"}
 
 
 # --------------------------------------------------------------------------- #
@@ -226,7 +226,7 @@ def test_cli_writes_dashboard_payload(tmp_path, monkeypatch):
     # Required contract keys always present; additive optional keys
     # (agent_dialogue, model_card — WA-093) may accompany them.
     assert {"work_list", "portfolio_health", "alerts"} <= set(payload.keys())
-    assert set(payload.keys()) <= {"work_list", "portfolio_health", "alerts", "agent_dialogue", "model_card"}
+    assert set(payload.keys()) <= {"work_list", "portfolio_health", "alerts", "agent_dialogue", "model_card", "policy_card"}
     assert len(payload["work_list"]) <= 10
 
 

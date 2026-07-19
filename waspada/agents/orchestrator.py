@@ -78,9 +78,9 @@ class Orchestrator(Agent):
         *,
         gate: Optional[ApprovalGate] = None,
         as_of=None,
-        top_n: int = 50,
+        top_n: Optional[int] = None,
         ingest_limit: Optional[int] = None,
-        audit_k: int = 8,
+        audit_k: Optional[int] = None,
         audit_workers: Optional[int] = None,
         arbiter: Optional[ArbiterAgent] = None,
         enable_arbiter: bool = True,
@@ -93,12 +93,29 @@ class Orchestrator(Agent):
         super().__init__(llm=llm)
         self.gate = gate or ApprovalGate()
         self.as_of = as_of
-        self.top_n = top_n
-        # WA-032: the decision matrix the insight agent applies. ``None`` keeps
-        # the module-constant defaults (behaviour unchanged).
+        # WA-032/WA-095: the parameter matrix the run applies. ``None`` keeps the
+        # module-constant defaults (behaviour unchanged).
         self.policy = policy
         self.ingest_limit = ingest_limit
-        self.audit_k = audit_k  # Skeptic audits top-K riskiest accounts
+        # WA-095: precedence for the governance knobs is EXPLICIT ARG > POLICY >
+        # DEFAULT — an explicit top_n/audit_k (CLI --top-n, a test) is the most
+        # specific intent and wins; otherwise a submitted matrix drives the run;
+        # otherwise the module default. dispute_gap / arbiter_confidence have no
+        # explicit arg, so they're POLICY > DEFAULT.
+        from .arbiter import ARBITER_CONFIDENCE_THRESHOLD as _DEF_ARB
+        from .risk_auditor import DISPUTE_GAP as _DEF_GAP
+        self.top_n = (
+            int(top_n) if top_n is not None
+            else int(policy.top_n) if policy is not None else 50
+        )
+        self.audit_k = (
+            int(audit_k) if audit_k is not None
+            else int(policy.audit_k) if policy is not None else 8
+        )
+        self.dispute_gap = int(policy.dispute_gap) if policy is not None else int(_DEF_GAP)
+        self.arbiter_confidence = (
+            float(policy.arbiter_confidence) if policy is not None else float(_DEF_ARB)
+        )
         # WA-080: how many accounts the Skeptic audits concurrently. The audit is
         # the dominant cost of a live-Qwen run; parallelising it is what lets the
         # debate finish inside the FC invocation timeout. Resolution order:
@@ -220,14 +237,15 @@ class Orchestrator(Agent):
         if self.arbiter is not None:
             self._arbiter_agent = self.arbiter
         elif self.enable_arbiter:
-            self._arbiter_agent = ArbiterAgent(self.llm)
+            self._arbiter_agent = ArbiterAgent(self.llm, threshold=self.arbiter_confidence)
         else:
             self._arbiter_agent = None
         return [
             DataEngineerAgent(de_brain, limit=self.ingest_limit),
             DataAnalystAgent(da_brain, as_of=self.as_of),
             risk_model,
-            RiskAuditorAgent(auditor_brain, k=self.audit_k, max_workers=self.audit_workers),
+            RiskAuditorAgent(auditor_brain, k=self.audit_k, max_workers=self.audit_workers,
+                             dispute_gap=self.dispute_gap),
             InsightAgent(self.llm, gate=self.gate, top_n=self.top_n, policy=self.policy),
         ]
 

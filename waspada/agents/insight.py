@@ -160,6 +160,17 @@ class InsightAgent(Agent):
                 )
             except Exception as exc:  # pragma: no cover - defensive; monitoring is enrichment
                 self.step("model_card", status=Status.ERROR, notes=f"monitor record failed: {exc}")
+        # WA-095: stamp the governing parameter matrix + its id, so every decision
+        # is traceable to the exact policy that produced it. Additive/guarded.
+        if pol is not None:
+            try:
+                payload["policy_card"] = {"policy_id": pol.policy_id(), **pol.to_dict()}
+                self.step("policy_card",
+                          notes=(f"policy={pol.policy_id()} audit_k={pol.audit_k} "
+                                 f"top_n={pol.top_n} gap={pol.dispute_gap} "
+                                 f"arbiter_conf={pol.arbiter_confidence}"))
+            except Exception as exc:  # pragma: no cover - defensive
+                self.step("policy_card", status=Status.ERROR, notes=f"policy card failed: {exc}")
         summary = summarize_alerts(alert_list)
         self.step("payload_assembled", notes=f"alerts_summary='{summary[:60]}' disputes={len(disputes)}")
 
