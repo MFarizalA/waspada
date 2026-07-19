@@ -61,6 +61,45 @@ DEFAULT_EXPLORE_BUDGET = 8
 # its ``{"tool": "<name>", "arg": "..."}`` reply.
 _TOOL_NAMES = ("query", "correlation", "distribution", "build_feature")
 
+# WA-084: native Qwen function-calling schemas (OpenAI ``tools`` shape). Same
+# native surface as the Risk Auditor / Data Engineer. A brain that returns no
+# native tool_calls (scripted MockLLM) transparently falls back to the legacy
+# prompt-parsed loop, so offline/tests are unchanged.
+_ANALYST_TOOLS: List[Dict[str, Any]] = [
+    {"type": "function", "function": {
+        "name": "query",
+        "description": "Run a read-only DuckDB SQL query over raw_loans / feature_frame.",
+        "parameters": {"type": "object", "properties": {
+            "sql": {"type": "string", "description": "The SELECT statement to run."}},
+            "required": ["sql"]}}},
+    {"type": "function", "function": {
+        "name": "correlation",
+        "description": "Pearson correlation between two numeric columns.",
+        "parameters": {"type": "object", "properties": {
+            "a": {"type": "string", "description": "First column."},
+            "b": {"type": "string", "description": "Second column."}},
+            "required": ["a", "b"]}}},
+    {"type": "function", "function": {
+        "name": "distribution",
+        "description": "Quantiles + histogram buckets for one numeric column.",
+        "parameters": {"type": "object", "properties": {
+            "column": {"type": "string", "description": "The column to summarise."}},
+            "required": ["column"]}}},
+    {"type": "function", "function": {
+        "name": "build_feature",
+        "description": "Run a SQL exploration over feature_frame to inform the debate's evidence base.",
+        "parameters": {"type": "object", "properties": {
+            "sql": {"type": "string", "description": "The SELECT statement over feature_frame."}},
+            "required": ["sql"]}}},
+]
+
+
+def _native_arg(name, args):
+    """Map native tool_call arguments to the single ``arg`` string _invoke_tool expects."""
+    if name == "correlation":
+        return json.dumps({"a": str(args.get("a", "")), "b": str(args.get("b", ""))})
+    return str(args.get("sql") or args.get("column") or args.get("arg") or "")
+
 
 class DataAnalystAgent(Agent):
     """Analytics promoted to a Tier-2 reasoning agent.
@@ -141,6 +180,68 @@ class DataAnalystAgent(Agent):
 
     # ---------------------------------------------------------- reasoning loop
     def _reasoning_loop(self, raw: pa.Table, frame: pa.Table) -> Dict[str, Any]:
+        """Dispatch: native Qwen function-calling when the brain supports it,
+        else the legacy prompt-parsed loop.
+
+        WA-084: the Data Analyst now uses the SAME native function-calling surface
+        as the Risk Auditor (``chat(tools=_ANALYST_TOOLS)`` + ``tool_calls``) when
+        the brain emits native tool calls. A brain returning no native tool_calls
+        (scripted MockLLM) transparently falls through to
+        :meth:`_legacy_reasoning_loop`, so existing behaviour is unchanged.
+        """
+        if getattr(self.llm, "supports_native_tools", False):
+            try:
+                aggregates = self._native_reasoning_loop(raw, frame)
+            except Exception as exc:  # native failed before engaging -> legacy
+                self.step("da_native_error", status=Status.ERROR,
+                          notes=f"native loop error, falling back: {exc}")
+                aggregates = None
+            if aggregates is not None:
+                return aggregates
+        return self._legacy_reasoning_loop(raw, frame)
+
+    def _native_reasoning_loop(self, raw: pa.Table, frame: pa.Table) -> Optional[Dict[str, Any]]:
+        """Native Qwen function-calling loop (WA-084).
+
+        Returns the aggregates dict, or ``None`` if the brain emitted no native
+        ``tool_calls`` on the first turn (signal to the dispatcher: use legacy).
+        """
+        aggregates: Dict[str, Any] = {"queries_run": []}
+        seed = self._loop_prompt(raw, frame, [], None)
+        messages: List[Dict[str, Any]] = [{"role": "user", "content": seed}]
+        engaged = False
+        for hop in range(self.explore_budget):
+            resp = self.llm.chat(seed, tools=_ANALYST_TOOLS, messages=messages)
+            if not resp.has_tool_calls:
+                if not engaged:
+                    return None  # not a native-tool brain -> legacy loop
+                self.step("da_native_done",
+                          notes=f"brain signalled done after {hop} native hop(s)")
+                break
+            engaged = True
+            messages.append({
+                "role": "assistant", "content": resp.content or "",
+                "tool_calls": [
+                    {"id": tc.id or f"call_{i}", "type": "function",
+                     "function": {"name": tc.name, "arguments": tc.arguments}}
+                    for i, tc in enumerate(resp.tool_calls)],
+            })
+            for tc in resp.tool_calls:
+                if tc.name not in _TOOL_NAMES:
+                    messages.append({"role": "tool", "tool_call_id": tc.id or "call_0",
+                                     "content": json.dumps({"error": f"unknown tool {tc.name!r}"})})
+                    continue
+                arg = _native_arg(tc.name, tc.parsed_arguments())
+                reply = self._invoke_tool(tc.name, arg)
+                self.step(f"da_tool:{tc.name}", notes=f"native arg={arg!r} -> {reply[:160]}")
+                aggregates["queries_run"].append({"tool": tc.name, "arg": arg, "reply": reply})
+                messages.append({"role": "tool", "tool_call_id": tc.id or "call_0", "content": reply})
+        else:
+            self.step("da_native_budget",
+                      notes=f"hit explore_budget={self.explore_budget} without done (native)")
+        return aggregates
+
+    def _legacy_reasoning_loop(self, raw: pa.Table, frame: pa.Table) -> Dict[str, Any]:
         """Run the qwen3.7-plus function-calling loop over the book.
 
         Each hop: the brain is shown the table shapes + the last tool reply and

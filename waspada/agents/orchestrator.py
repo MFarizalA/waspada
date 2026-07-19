@@ -331,6 +331,9 @@ class Orchestrator(Agent):
         else:
             self.step("memory_persisted",
                       notes=f"dispute memory now holds {self.memory.size} account(s)")
+        # WA-090: land the Silver/Gold medallion tiers (guarded, best-effort -- no-op
+        # offline / when OSS or the target bucket isn't configured).
+        self._write_medallion(ctx)
         # Terminal status mirrors the last agent's: DISPUTED if disputes were
         # opened, OK otherwise. Both are completions (a payload exists).
         terminal = last.status if last is not None else Status.OK
@@ -739,6 +742,28 @@ class Orchestrator(Agent):
     def _table(ctx: AgentContext, handle: str) -> Optional[pa.Table]:
         tbl = ctx.data_handles.get(handle)
         return tbl if isinstance(tbl, pa.Table) else None
+
+    def _write_medallion(self, ctx: AgentContext) -> None:
+        """WA-090: land the Silver (features) + Gold (payload) OSS tiers. Guarded +
+        best-effort -- no-op offline / when OSS or the target bucket isn't configured, and
+        never fails the run (a failed cache write is not a correctness dependency)."""
+        try:
+            from ..data.medallion import MedallionWriter
+            as_of = self.as_of.strftime("%Y%m%d") if hasattr(self.as_of, "strftime") else None
+            writer = MedallionWriter(as_of=as_of)
+            ff = self._table(ctx, "feature_frame")
+            if ff is not None:
+                key = writer.write_silver(ff, ctx.data_handles.get("analyst_aggregates"))
+                if key:
+                    self.step("medallion_silver", notes=f"features -> oss staging {key}")
+            payload = ctx.data_handles.get("dashboard_payload")
+            if payload is not None:
+                key = writer.write_gold(payload)
+                if key:
+                    self.step("medallion_gold", notes=f"payload -> oss mart {key}")
+        except Exception as exc:  # best-effort: never fail the run for a cache write
+            self.step("medallion_write", status=Status.ERROR,
+                      notes=f"medallion write skipped: {exc}")
 
     # --------------------------------------------------------------- report
     def report(self, payload: Dict[str, Any]) -> str:

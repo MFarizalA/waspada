@@ -89,18 +89,20 @@ class TestLoadToDuckdb:
             load_to_duckdb()
 
     def test_no_dlt_landmine_remains(self):
-        """The removed dead path imported dlt and called a nonexistent
-        ``dlt.readers.filesystem`` API. Guard the executable code (not the
-        docstring, which names the removed API) against it creeping back."""
+        """The REMOVED dead path used a nonexistent ``dlt.readers.filesystem`` API and never
+        landed data. WA-083 adds a REAL, tested dlt load (``load_via_dlt`` — merge + contract +
+        _dlt_loads lineage), so guard against the *specific broken pattern*, not dlt itself."""
         import ast
         import inspect
         from waspada.data import lakehouse
         tree = ast.parse(inspect.getsource(lakehouse))
-        imported = {
-            alias.name
-            for node in ast.walk(tree)
-            if isinstance(node, ast.Import)
-            for alias in node.names
-        }
-        assert "dlt" not in imported                       # no dlt import
-        assert not hasattr(lakehouse, "_oss_s3_endpoint")  # dead helper removed
+        # the specific broken API `dlt.readers.filesystem` must not be CALLED in executable code
+        # (AST attribute access, so the docstring naming the removed API is ignored).
+        bad = [
+            n for n in ast.walk(tree)
+            if isinstance(n, ast.Attribute) and n.attr == "filesystem"
+            and isinstance(n.value, ast.Attribute) and n.value.attr == "readers"
+        ]
+        assert not bad                                     # `readers.filesystem` never called
+        assert not hasattr(lakehouse, "_oss_s3_endpoint")  # dead helper stays removed
+        assert hasattr(lakehouse, "load_via_dlt")          # the REAL dlt load path exists (WA-083)
