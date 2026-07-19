@@ -137,7 +137,7 @@ the scores).
 
 | Participant | Role | Brain | Capability | On failure |
 |---|---|---|---|---|
-| `data_engineer` | ✅ · **The Data Engineer** — validates, profiles, and quality-checks the freshly-loaded book before anyone trusts it | **LLM** (`qwen3.6-flash`) + **function-calling loop** over a deterministic dlt/DuckDB check core | tools: `validate_schema`, `null_rates`, `profile_column`, `detect_anomalies` | dirty data → `blocked`; unparsable tool step → run the default check set (validation never skipped) |
+| `data_engineer` | ✅ · **The Data Engineer** — validates, profiles, and quality-checks the freshly-loaded book before anyone trusts it | **LLM** (`qwen3.6-flash`) + **function-calling loop** over a deterministic DuckDB check core | tools: `validate_schema`, `null_rates`, `profile_column`, `detect_anomalies` | dirty data → `blocked`; unparsable tool step → run the default check set (validation never skipped) |
 | `data_analyst` | 🟡 (planned, WA-030 — analytics is deterministic today) · **The Data Analyst** — builds features and explores the book for the aggregates the debate later cites | **LLM** (`qwen3.7-plus`) + **function-calling loop** over DuckDB SQL | tools: `query`, `correlation`, `distribution`, `build_feature`; backs the MCP evidence base | tool/parse failure → fall back to the fixed, deterministic feature recipe |
 | `risk_model` (score) | ✅ · **The Defendant + Counsel** — a classical-ML score, defended by an LLM when challenged | **classical ML** (sklearn LogisticRegression) as the score; `qwen3.7-plus` as its defense voice (`defend_score()`) | vintage-split training, leakage guard; uphold-or-concede rebuttal | unparsable rebuttal → auto-escalate |
 | `risk_auditor` | ✅ (note: single-shot JSON, not a loop) · **The Prosecutor (Skeptic)** — audits the top-K riskiest scores, challenges where the story doesn't match the number | **LLM** (`qwen3.6-flash`) + **native function-calling loop** | **MCP client**: `portfolio_stats`, `lookup_account`; opens `Dispute`s with cited evidence | unparsable challenge → no dispute (logged), pipeline continues |
@@ -462,7 +462,7 @@ removed · README/HACKATHON rewritten · AgentDialogue panel + types + fixture.
   labeled in the UI.
 
 **Data agents (the lakehouse upgrade — § Lakehouse data layer):**
-- **WA-029** (Bimo · P1) — **Data Engineer agent**: dlt load + a frozen schema
+- **WA-029** (Bimo · P1) — **Data Engineer agent**: OSS-Parquet load into in-process DuckDB + a frozen schema
   contract on the OSS Parquet, wrapped by a `qwen3.6-flash` function-calling loop
   over quality tools (`validate_schema`/`null_rates`/`profile_column`/
   `detect_anomalies`). Keeps the existing deterministic freshness/schema gate as

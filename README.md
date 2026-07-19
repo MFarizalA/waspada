@@ -65,6 +65,12 @@ audit trail" answer for a regulated lender.
 
 ## Architecture — two tiers, one engine
 
+**Cloud topology** — Qwen Cloud (DashScope tiers) · the 6-agent society on FastAPI in Function Compute · OSS medallion · RDS MySQL (auth) · SLS (audit) · ACR → FC deploy:
+
+![WASPADA architecture](docs/architecture.svg)
+
+*(The Mermaid flow below shows the agent hand-offs; the diagram above shows the Alibaba Cloud topology.)*
+
 A deliberate distinction most "multi-agent" projects blur: **the deterministic
 harness is not the society.** The reproducible plumbing that fetches, sequences,
 computes, and packages is a deterministic runtime — it *hosts* the agents, it
@@ -149,7 +155,7 @@ waspada/
 ├── wsl.py                  # run_gpu() helper for the optional WSL/cuDF path
 ├── data/
 │   ├── oss.py              # Alibaba Cloud OSS client → RawLoans-shaped Arrow
-│   └── lakehouse.py        # dlt + DuckDB query layer the data agents run SQL over
+│   └── lakehouse.py        # DuckDB query layer the data agents run SQL over (OSS parquet → in-process DuckDB)
 ├── features/collections.py # deterministic cross-sectional FeatureFrame + label
 ├── model/risk.py           # sklearn model — vintage split, no-leakage guard (CPU)
 ├── insight/ranking.py      # rank + portfolio health + alerts + payload
@@ -303,7 +309,7 @@ The image is pushed with two tags — `latest` and the commit SHA
 
 | Area | Deliverable | Status |
 |---|---|---|
-| Contract & data | Frozen schema · OSS ingest · lakehouse (dlt + DuckDB) | ✅ (dlt ingestion path is a stub; DuckDB query layer live) |
+| Contract & data | Frozen schema · OSS ingest · lakehouse (DuckDB) | ✅ (Data Engineer reads OSS parquet directly via in-process DuckDB; the schema contract is the `validate_table(RawLoans)` gate) |
 | Features & model | Deterministic FeatureFrame · sklearn model (leakage guard, vintage split) | ✅ |
 | Insight | Ranking · portfolio health · cohort alerts · payload | ✅ |
 | Agent framework | Agent base · ApprovalGate · orchestrator · CLI | ✅ |
