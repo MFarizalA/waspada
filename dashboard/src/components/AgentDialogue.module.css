@@ -155,7 +155,7 @@
   align-items: center;
   gap: 5px;
   padding: 2px var(--sp-3);
-  border-radius: 999px;
+  border-radius: var(--radius-sm);
   font-size: 0.72rem;
   font-weight: 650;
   background: var(--surface-muted);
@@ -230,7 +230,7 @@
 .countBadge {
   flex-shrink: 0;
   padding: 2px var(--sp-3);
-  border-radius: 999px;
+  border-radius: var(--radius-sm);
   font-size: 0.75rem;
   font-weight: 650;
   background: var(--pasar-teal-100);
@@ -345,7 +345,7 @@
   font-size: 0.68rem;
   padding: 1px var(--sp-2);
   border: 1px solid var(--border);
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   color: var(--text-muted);
   background: var(--surface-muted);
 }
@@ -364,7 +364,7 @@
   display: inline-block;
   width: 48px;
   height: 4px;
-  border-radius: 999px;
+  border-radius: var(--radius-sm);
   background: var(--chart-track);
   overflow: hidden;
 }
@@ -372,7 +372,7 @@
 .confidenceFill {
   display: block;
   height: 100%;
-  border-radius: 999px;
+  border-radius: var(--radius-sm);
 }
 
 .claim {
@@ -395,7 +395,7 @@
   font-family: var(--font-mono);
   font-size: 0.7rem;
   padding: 2px var(--sp-2);
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   background: var(--surface-muted);
   border: 1px solid var(--border);
   color: var(--text-muted);

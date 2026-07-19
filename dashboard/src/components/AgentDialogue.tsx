@@ -5,6 +5,7 @@ import { useLiveRun } from "@/lib/useLiveRun";
 import { useLiveDebateStream } from "@/lib/useLiveDebateStream";
 import { useI18n, type TFunc } from "@/lib/i18n";
 import { riskLevelColor, riskLevelLabel, riskLevelDisplay } from "@/lib/riskLevel";
+import { DebateFlow } from "./DebateFlow";
 import styles from "./AgentDialogue.module.css";
 
 interface AgentDialogueProps {
@@ -313,7 +314,12 @@ export function AgentDialogue({ dialogue, accounts = [] }: AgentDialogueProps) {
               : t("ad.empty.fixture")}
         </p>
       ) : (
-        <ul className={styles.disputeList} role="list">
+        <>
+          {/* WA-091: node-graph view of the society + the selected dispute's
+              debate branch, above the transcript. Same `effective` data, so it
+              animates live as SSE rounds arrive. */}
+          <DebateFlow disputes={effective} />
+          <ul className={styles.disputeList} role="list">
           {effective.map((dispute) => (
             <DisputeCard
               key={dispute.loan_id}
@@ -329,7 +335,8 @@ export function AgentDialogue({ dialogue, accounts = [] }: AgentDialogueProps) {
               {t("ad.streamingMore")}
             </li>
           )}
-        </ul>
+          </ul>
+        </>
       )}
     </section>
   );

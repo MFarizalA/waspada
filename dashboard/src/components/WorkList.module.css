@@ -180,7 +180,7 @@
   justify-content: center;
   min-width: 2.5rem;
   padding: 2px var(--sp-2);
-  border-radius: 999px;
+  border-radius: var(--radius-sm);
   font-size: 0.72rem;
   font-weight: 650;
   letter-spacing: 0.02em;
@@ -197,7 +197,7 @@
   display: inline-block;
   padding: 2px 8px;
   border: 1px solid var(--sev-moderate);
-  border-radius: 999px;
+  border-radius: var(--radius-sm);
   background: color-mix(in srgb, var(--sev-moderate) 10%, transparent);
   color: var(--text);
   font-size: 0.7rem;

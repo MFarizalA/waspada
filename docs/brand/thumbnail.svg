@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" role="img" aria-label="WASPADA social thumbnail">
+  <!-- Square avatar. Mark held inside the circle-crop safe zone; wordmark below. -->
+  <defs>
+    <linearGradient id="tile" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#006eff"/>
+      <stop offset="0.55" stop-color="#0052d9"/>
+      <stop offset="1" stop-color="#003cb3"/>
+    </linearGradient>
+  </defs>
+  <rect width="1024" height="1024" fill="url(#tile)"/>
+  <!-- faint dotted grid, the product's canvas texture -->
+  <g fill="#ffffff" fill-opacity="0.06">
+    <circle cx="128" cy="128" r="6"/><circle cx="336" cy="96" r="6"/><circle cx="896" cy="160" r="6"/>
+    <circle cx="704" cy="80" r="6"/><circle cx="96" cy="512" r="6"/><circle cx="928" cy="480" r="6"/>
+    <circle cx="128" cy="896" r="6"/><circle cx="880" cy="880" r="6"/><circle cx="512" cy="944" r="6"/>
+  </g>
+  <!-- beacon mark, centered high -->
+  <g transform="translate(512 430)">
+    <path d="M-186 -46 L0 -166 L186 -46" fill="none" stroke="#ffffff" stroke-opacity="0.32"
+          stroke-width="58" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M-204 128 L0 -2 L204 128" fill="none" stroke="#ffffff"
+          stroke-width="80" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M-186 292 L0 172 L186 292" fill="none" stroke="#ffffff" stroke-opacity="0.32"
+          stroke-width="58" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+  <!-- wordmark -->
+  <text x="512" y="868" text-anchor="middle" fill="#ffffff"
+        font-family="Segoe UI, Arial, Helvetica, sans-serif" font-weight="700"
+        font-size="104" letter-spacing="14">WASPADA</text>
+</svg>
