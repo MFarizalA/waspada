@@ -148,7 +148,10 @@ def test_run_emits_dashboard_payload(raw_table):
     ctx = AgentContext(lane="collections", data_handles={})
     res = orch.run(ctx)
     payload = getattr(orch, "_final_ctx", ctx).data_handles[res.artifact_ref]
-    assert set(payload.keys()) == {"work_list", "portfolio_health", "alerts"}
+    # Required contract keys always present; additive optional keys
+    # (agent_dialogue, model_card — WA-093) may accompany them.
+    assert {"work_list", "portfolio_health", "alerts"} <= set(payload.keys())
+    assert set(payload.keys()) <= {"work_list", "portfolio_health", "alerts", "agent_dialogue", "model_card"}
 
 
 # --------------------------------------------------------------------------- #
@@ -220,7 +223,10 @@ def test_cli_writes_dashboard_payload(tmp_path, monkeypatch):
     assert out.exists()
     import json
     payload = json.loads(out.read_text())
-    assert set(payload.keys()) == {"work_list", "portfolio_health", "alerts"}
+    # Required contract keys always present; additive optional keys
+    # (agent_dialogue, model_card — WA-093) may accompany them.
+    assert {"work_list", "portfolio_health", "alerts"} <= set(payload.keys())
+    assert set(payload.keys()) <= {"work_list", "portfolio_health", "alerts", "agent_dialogue", "model_card"}
     assert len(payload["work_list"]) <= 10
 
 

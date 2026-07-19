@@ -116,11 +116,34 @@ export interface DisputeRecord {
  * `agent_dialogue` is an ADDITIVE optional key (Qwen-pivot, HACKATHON.md):
  * absent on older payloads, so the guard below does not require it.
  */
+/**
+ * WA-093: per-run model-monitoring card (additive optional). Present only when
+ * the run scored with a fitted model; older payloads omit it.
+ */
+export interface ModelCard {
+  auc?: number | null;
+  brier_raw?: number | null;
+  brier_calibrated?: number | null;
+  calibrated?: boolean;
+  n_train?: number | null;
+  n_test?: number | null;
+  split_method?: string | null;
+  n_scored?: number;
+  observed_default_rate?: number | null;
+  band_distribution?: Record<string, number>;
+  trained_at?: string | null;
+  psi?: Record<string, number>;
+  drift_flags?: string[];
+  drift_significant?: string[];
+  max_psi?: number;
+}
+
 export interface DashboardPayload {
   work_list: ScoredAccount[];
   portfolio_health: PortfolioHealth;
   alerts: Alert[];
   agent_dialogue?: DisputeRecord[];
+  model_card?: ModelCard;
 }
 
 /** Narrowing guard so a malformed fixture fails loudly at load, not in render. */

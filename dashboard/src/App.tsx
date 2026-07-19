@@ -9,6 +9,7 @@ import { PortfolioHealth } from "@/components/PortfolioHealth";
 import { Alerts } from "@/components/Alerts";
 import { AgentDialogue } from "@/components/AgentDialogue";
 import { Escalations } from "@/components/Escalations";
+import { ModelCard } from "@/components/ModelCard";
 import { AccountDrawer } from "@/components/AccountDrawer";
 import { AuthScreen } from "@/components/AuthScreen";
 import styles from "./App.module.css";
@@ -171,6 +172,7 @@ function Dashboard() {
               </div>
               <div className={styles.colSide}>
                 <PortfolioHealth health={state.payload.portfolio_health} />
+                <ModelCard card={state.payload.model_card} />
                 <Alerts alerts={state.payload.alerts} />
               </div>
             </div>
