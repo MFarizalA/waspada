@@ -113,6 +113,10 @@
   color: var(--text-subtle);
 }
 
+.input:hover:not(:focus) {
+  border-color: color-mix(in srgb, var(--cn-red-600) 35%, var(--border-strong));
+}
+
 .input:focus {
   border-color: var(--cn-red-600);
   outline: none;
