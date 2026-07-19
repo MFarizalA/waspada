@@ -63,6 +63,33 @@ DEFAULT_CHECK_SET: Tuple[str, ...] = ("null_rates", "detect_anomalies")
 # ``{"tool": "<name>", "arg": "..."}`` reply.
 _TOOL_NAMES = ("validate_schema", "null_rates", "profile_column", "detect_anomalies")
 
+# WA-084: native Qwen function-calling schemas (OpenAI ``tools`` shape). When the
+# brain supports native tool calls (QwenLLM), the Data Engineer declares these and
+# Qwen emits real ``tool_calls`` -- the SAME native surface the Risk Auditor uses --
+# instead of the prompt-embedded {"tool":...} JSON the legacy loop parses. A brain
+# that returns no native tool_calls (the scripted MockLLM) transparently falls back
+# to the legacy loop, so offline/tests are byte-for-byte unchanged.
+_DE_TOOLS: List[Dict[str, Any]] = [
+    {"type": "function", "function": {
+        "name": "validate_schema",
+        "description": "Re-check the loaded table against the frozen RawLoans contract.",
+        "parameters": {"type": "object", "properties": {}, "required": []}}},
+    {"type": "function", "function": {
+        "name": "null_rates",
+        "description": "Per-column null rates across the loaded book.",
+        "parameters": {"type": "object", "properties": {}, "required": []}}},
+    {"type": "function", "function": {
+        "name": "profile_column",
+        "description": "Distribution + min/max/mean for one column.",
+        "parameters": {"type": "object", "properties": {
+            "column": {"type": "string", "description": "The column to profile."}},
+            "required": ["column"]}}},
+    {"type": "function", "function": {
+        "name": "detect_anomalies",
+        "description": "Flag outliers (dti>100, rate<0, negative amounts, etc).",
+        "parameters": {"type": "object", "properties": {}, "required": []}}},
+]
+
 
 class DataEngineerAgent(Agent):
     """Ingest promoted to a Tier-2 reasoning agent.
@@ -165,6 +192,72 @@ class DataEngineerAgent(Agent):
 
     # ---------------------------------------------------------- reasoning loop
     def _reasoning_loop(self, raw: pa.Table) -> Dict[str, Any]:
+        """Dispatch: native Qwen function-calling when the brain supports it,
+        else the legacy prompt-parsed loop.
+
+        WA-084: the Data Engineer now uses the SAME native function-calling surface
+        as the Risk Auditor (``chat(tools=_DE_TOOLS)`` + ``tool_calls``) when the
+        brain emits native tool calls. A brain returning no native tool_calls (the
+        scripted MockLLM offline/in tests) transparently falls through to
+        :meth:`_legacy_reasoning_loop`, so existing behaviour is unchanged.
+        """
+        if getattr(self.llm, "supports_native_tools", False):
+            try:
+                findings = self._native_reasoning_loop(raw)
+            except Exception as exc:  # native failed before engaging -> legacy
+                self.step("de_native_error", status=Status.ERROR,
+                          notes=f"native loop error, falling back: {exc}")
+                findings = None
+            if findings is not None:
+                return findings
+        return self._legacy_reasoning_loop(raw)
+
+    def _native_reasoning_loop(self, raw: pa.Table) -> Optional[Dict[str, Any]]:
+        """Native Qwen function-calling loop (WA-084).
+
+        Returns a findings dict, or ``None`` if the brain emitted no native
+        ``tool_calls`` on the first turn (signal to the dispatcher: use legacy).
+        """
+        findings: Dict[str, Any] = {"checks_run": [], "anomalies": [], "schema_drift": None}
+        seed = self._loop_prompt(raw, [], None)
+        messages: List[Dict[str, Any]] = [{"role": "user", "content": seed}]
+        engaged = False
+        for hop in range(self.check_budget):
+            resp = self.llm.chat(seed, tools=_DE_TOOLS, messages=messages)
+            if not resp.has_tool_calls:
+                if not engaged:
+                    return None  # not a native-tool brain -> legacy loop
+                self.step("de_native_done",
+                          notes=f"brain signalled done after {hop} native hop(s)")
+                break
+            engaged = True
+            messages.append({
+                "role": "assistant", "content": resp.content or "",
+                "tool_calls": [
+                    {"id": tc.id or f"call_{i}", "type": "function",
+                     "function": {"name": tc.name, "arguments": tc.arguments}}
+                    for i, tc in enumerate(resp.tool_calls)],
+            })
+            for tc in resp.tool_calls:
+                if tc.name not in _TOOL_NAMES:
+                    messages.append({"role": "tool", "tool_call_id": tc.id or "call_0",
+                                     "content": json.dumps({"error": f"unknown tool {tc.name!r}"})})
+                    continue
+                args = tc.parsed_arguments()
+                arg = args.get("column") or args.get("arg")
+                reply = self._invoke_tool(tc.name, arg)
+                self.step(f"de_tool:{tc.name}", notes=f"native arg={arg!r} -> {reply[:160]}")
+                findings["checks_run"].append(tc.name)
+                self._fold_findings(findings, tc.name, reply)
+                messages.append({"role": "tool", "tool_call_id": tc.id or "call_0", "content": reply})
+        else:
+            self.step("de_native_budget",
+                      notes=f"hit check_budget={self.check_budget} without done (native)")
+        if not findings["checks_run"]:
+            self._run_default_checks(findings)
+        return findings
+
+    def _legacy_reasoning_loop(self, raw: pa.Table) -> Dict[str, Any]:
         """Run the qwen3.6-flash function-calling loop over the loaded book.
 
         Each hop: the brain is shown the table shape + the last tool reply and

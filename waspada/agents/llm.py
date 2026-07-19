@@ -88,6 +88,10 @@ class LLM(ABC):
 
     name: str = "llm"
     model_name: str = "llm"  # specific model id for audit logging (e.g. "qwen3.6-flash")
+    # WA-084: does this brain emit NATIVE OpenAI tool_calls (vs prompt-parsed JSON)?
+    # Agents that dispatch native-vs-legacy read this to decide WITHOUT consuming a
+    # scripted reply. Default False; QwenLLM sets True; MockLLM opts in via native_tools=.
+    supports_native_tools: bool = False
 
     @abstractmethod
     def complete(self, prompt: str, *, history: Optional[Sequence[str]] = None) -> str:
@@ -162,11 +166,14 @@ class MockLLM(LLM):
     name = "mock"
     model_name = "mock"
 
-    def __init__(self, *, reply: str = "mock-llm-ok", script: Optional[Sequence[Any]] = None) -> None:
+    def __init__(self, *, reply: str = "mock-llm-ok", script: Optional[Sequence[Any]] = None,
+                 native_tools: bool = False) -> None:
         self._reply = reply
         self._script: List[Any] = list(script) if script else []
         self._i = 0
         self.calls: List[str] = []  # exposed for tests / audit
+        # WA-084: opt in to the native tool-calling dispatch (script ChatResponses).
+        self.supports_native_tools = native_tools
 
     def _next_scripted(self) -> Any:
         """Pop the next scripted reply (or exhaust to the last entry)."""
@@ -225,6 +232,7 @@ class QwenLLM(LLM):
     """
 
     name = "qwen"
+    supports_native_tools = True  # WA-084: real OpenAI tool_calls surface
     DEFAULT_MODEL = "qwen3.7-plus"
     DEFAULT_BASE_URL = "https://dashscope-intl.aliyuncs.com/compatible-mode/v1"
 
