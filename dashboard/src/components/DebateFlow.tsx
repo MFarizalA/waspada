@@ -19,25 +19,25 @@ import styles from "./DebateFlow.module.css";
  * fully token-themed so it re-themes with the palette.
  */
 
-// Per-speaker icon + accent tone (tokens, so it re-themes). Mirrors the
-// transcript's speaker colours.
-const SPEAKER_META: Record<string, { icon: string; tone: string }> = {
-  risk_model: { icon: "📊", tone: "var(--sev-info)" },
-  risk_auditor: { icon: "🔎", tone: "var(--sev-high)" },
-  arbiter: { icon: "⚖️", tone: "var(--pasar-teal-700)" },
-  human: { icon: "👤", tone: "var(--pasar-teal-500)" },
+// Per-speaker accent tone (tokens, so it re-themes). Mirrors the transcript's
+// speaker colours; shown as a small colour dot rather than an icon.
+const SPEAKER_TONE: Record<string, string> = {
+  risk_model: "var(--sev-info)",
+  risk_auditor: "var(--sev-high)",
+  arbiter: "var(--pasar-teal-700)",
+  human: "var(--pasar-teal-500)",
 };
 const KNOWN_SPEAKERS = new Set(["risk_model", "risk_auditor", "arbiter", "human"]);
 
 // The static society spine (the orchestrator's deterministic order). The three
 // debate roles are highlighted — they're where the argument happens.
-const SPINE: { key: string; icon: string; debate?: boolean }[] = [
-  { key: "data_engineer", icon: "🛠️" },
-  { key: "data_analyst", icon: "📈" },
-  { key: "risk_model", icon: "📊", debate: true },
-  { key: "risk_auditor", icon: "🔎", debate: true },
-  { key: "arbiter", icon: "⚖️", debate: true },
-  { key: "gate", icon: "🛡️" },
+const SPINE: { key: string; debate?: boolean }[] = [
+  { key: "data_engineer" },
+  { key: "data_analyst" },
+  { key: "risk_model", debate: true },
+  { key: "risk_auditor", debate: true },
+  { key: "arbiter", debate: true },
+  { key: "gate" },
 ];
 const SPINE_LABEL: Record<string, string> = {
   data_engineer: "Data Engineer",
@@ -52,11 +52,8 @@ const RES_TONE: Record<string, string> = {
   escalated_rejected: "var(--sev-critical)",
 };
 
-function speakerIcon(sp: string): string {
-  return SPEAKER_META[sp]?.icon ?? "•";
-}
 function speakerTone(sp: string): string {
-  return SPEAKER_META[sp]?.tone ?? "var(--text-subtle)";
+  return SPEAKER_TONE[sp] ?? "var(--text-subtle)";
 }
 function speakerLabel(t: TFunc, sp: string): string {
   if (KNOWN_SPEAKERS.has(sp)) return t(`speaker.${sp}`);
@@ -81,9 +78,8 @@ function toneStyle(tone: string) {
 }
 
 function FlowNode({
-  icon, tone, title, badge, body, conf, model,
+  tone, title, badge, body, conf, model,
 }: {
-  icon: string;
   tone: string;
   title: string;
   badge?: string;
@@ -94,7 +90,7 @@ function FlowNode({
   return (
     <div className={styles.node} style={toneStyle(tone)}>
       <div className={styles.nodeHead}>
-        <span className={styles.nodeIcon} aria-hidden="true">{icon}</span>
+        <span className={styles.dot} aria-hidden="true" />
         <span className={styles.nodeTitle}>{title}</span>
         {badge ? <span className={styles.nodeBadge}>{badge}</span> : null}
       </div>
@@ -138,7 +134,6 @@ export function DebateFlow({ disputes }: { disputes: DisputeRecord[] }) {
         {SPINE.map((n, i) => (
           <Fragment key={n.key}>
             <span className={styles.spineNode} data-debate={n.debate ? "1" : undefined}>
-              <span className={styles.spineIcon} aria-hidden="true">{n.icon}</span>
               {speakerLabel(t, n.key)}
             </span>
             {i < SPINE.length - 1 ? (
@@ -170,7 +165,6 @@ export function DebateFlow({ disputes }: { disputes: DisputeRecord[] }) {
       {/* Layer 2 — the selected dispute's debate branch. */}
       <div className={styles.branch}>
         <FlowNode
-          icon="📊"
           tone="var(--sev-info)"
           title={speakerLabel(t, "risk_model")}
           badge={d.model_band}
@@ -180,7 +174,6 @@ export function DebateFlow({ disputes }: { disputes: DisputeRecord[] }) {
         {d.rounds.map((r, i) => (
           <Fragment key={r.round_no}>
             <FlowNode
-              icon={speakerIcon(r.speaker)}
               tone={speakerTone(r.speaker)}
               title={speakerLabel(t, r.speaker)}
               badge={`R${r.round_no}`}
@@ -196,7 +189,7 @@ export function DebateFlow({ disputes }: { disputes: DisputeRecord[] }) {
           className={styles.resNode}
           style={toneStyle(RES_TONE[d.resolution] ?? "var(--text-subtle)")}
         >
-          <span className={styles.resIcon} aria-hidden="true">🏁</span>
+          <span className={styles.dot} aria-hidden="true" />
           <div>
             <div className={styles.resTitle}>{t(`res.${d.resolution}`)}</div>
             <div className={styles.resMeta}>

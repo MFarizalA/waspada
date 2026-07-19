@@ -44,10 +44,6 @@
   background: var(--surface-tint);
   border-color: color-mix(in srgb, var(--cn-red-600) 45%, transparent);
 }
-.spineIcon {
-  font-size: 0.9rem;
-  line-height: 1;
-}
 .spineArrow {
   color: var(--text-subtle);
   font-weight: 700;
@@ -106,9 +102,14 @@
   background: color-mix(in srgb, var(--tone, var(--text-subtle)) 12%, var(--surface));
   border-bottom: 1px solid var(--border);
 }
-.nodeIcon {
-  font-size: 1rem;
-  line-height: 1;
+/* small tone-coloured status dot (replaces per-speaker icons) */
+.dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: var(--tone, var(--text-subtle));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--tone, var(--text-subtle)) 18%, transparent);
 }
 .nodeTitle {
   font-size: 0.82rem;
@@ -185,10 +186,6 @@
   background: color-mix(in srgb, var(--tone, var(--text-subtle)) 14%, var(--surface));
   border: 1px solid var(--tone, var(--border-strong));
   border-radius: 999px;
-}
-.resIcon {
-  font-size: 1.05rem;
-  line-height: 1;
 }
 .resTitle {
   font-size: 0.85rem;
