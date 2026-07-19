@@ -33,7 +33,7 @@ from typing import Any, Optional
 
 import pyarrow as pa
 
-__all__ = ["Lakehouse", "load_to_duckdb", "get_analytics_connection"]
+__all__ = ["Lakehouse", "load_to_duckdb", "load_via_dlt", "get_analytics_connection"]
 
 
 class Lakehouse:
@@ -50,9 +50,13 @@ class Lakehouse:
     table : the name of the loaded/registered table the tools query.
     """
 
-    def __init__(self, con: Any, *, table: str) -> None:
+    def __init__(self, con: Any, *, table: str, lineage: Optional[dict] = None) -> None:
         self.con = con
         self.table = table
+        # WA-083: load provenance from the dlt path (_dlt_loads: load_id, rows, contract),
+        # or None for the in-memory registration. The Data Engineer cites this as data-trust
+        # evidence (freshness / rows-loaded / lineage) in the debate.
+        self.lineage = lineage
 
     # ----------------------------------------------------------- query surface
     def sql(self, sql: str) -> Any:
@@ -143,3 +147,77 @@ def load_to_duckdb(
         "load_to_duckdb: no source. Pass arrow= (the usual path — read OSS via "
         "waspada.data.oss.fetch_loans and hand the table in) or local_parquet=."
     )
+
+
+def load_via_dlt(
+    arrow: pa.Table,
+    *,
+    table: str = "raw_loans",
+    dataset: str = "lakehouse",
+    pipelines_dir: Optional[str] = None,
+    primary_key: str = "loan_id",
+) -> "Lakehouse":
+    """WA-083: load an Arrow table into DuckDB via a **dlt pipeline** and return a Lakehouse.
+
+    The real dlt load path the architecture always described (see
+    ``backlog/WA-047-dlt-research.md``):
+
+      * ``write_disposition="merge"`` + ``primary_key`` — idempotent re-loads (dedup on loan_id).
+      * ``schema_contract`` (data-type freeze) — a dlt-enforced contract atop ``validate_table``.
+      * ``_dlt_loads`` lineage — load_id + rows, surfaced on ``Lakehouse.lineage`` so the Data
+        Engineer can cite freshness/provenance as debate evidence.
+
+    The returned Lakehouse queries the dlt-loaded ``<dataset>.<table>`` (a clean RawLoans table —
+    Arrow loads carry no ``_dlt_*`` row columns). **Raises** if dlt/duckdb are unavailable, so
+    callers can fall back to the in-memory path. ``pipelines_dir`` defaults to
+    ``WASPADA_DLT_PIPELINES_DIR`` or a fresh temp dir — point it at FC's writable ``/tmp`` in prod.
+
+    Note: the returned Lakehouse holds a **read-only** DuckDB connection to the load file. A
+    *subsequent* load into the **same** ``pipelines_dir`` must have that connection closed first
+    (DuckDB forbids mixed read-only/read-write handles on one file). The default (a fresh temp dir
+    per call) sidesteps this; only a persistent ``WASPADA_DLT_PIPELINES_DIR`` with re-loads needs it.
+    """
+    import tempfile
+
+    import dlt  # lazy: heavy import, only on the opt-in path
+    import duckdb
+
+    pdir = (
+        pipelines_dir
+        or os.environ.get("WASPADA_DLT_PIPELINES_DIR")
+        or tempfile.mkdtemp(prefix="waspada_dlt_")
+    )
+    os.makedirs(pdir, exist_ok=True)
+    # The DuckDB catalog (db-file basename) MUST differ from the dataset name, or the binder
+    # raises "Ambiguous reference to catalog or schema".
+    db_path = os.path.join(pdir, "waspada_lakehouse.duckdb")
+    pipe = dlt.pipeline(
+        pipeline_name="waspada_lakehouse",
+        destination=dlt.destinations.duckdb(db_path),
+        dataset_name=dataset,
+        pipelines_dir=pdir,
+    )
+    info = pipe.run(
+        arrow,
+        table_name=table,
+        write_disposition="merge",
+        primary_key=primary_key,
+        schema_contract={"tables": "evolve", "columns": "evolve", "data_type": "freeze"},
+    )
+    con = duckdb.connect(db_path, read_only=True)
+    qualified = f"{dataset}.{table}"
+    rows = con.execute(f"SELECT count(*) FROM {qualified}").fetchone()[0]
+    try:
+        loads = con.execute(f"SELECT count(*) FROM {dataset}._dlt_loads").fetchone()[0]
+    except Exception:  # pragma: no cover - defensive
+        loads = None
+    lineage = {
+        "engine": "dlt",
+        "load_id": info.loads_ids[0] if info.loads_ids else None,
+        "rows_loaded": int(rows),
+        "loads_recorded": int(loads) if loads is not None else None,
+        "primary_key": primary_key,
+        "dataset": dataset,
+        "table": table,
+    }
+    return Lakehouse(con, table=qualified, lineage=lineage)

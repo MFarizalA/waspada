@@ -35,6 +35,7 @@ ran in step 2, and an unparsable hop falls back to the default check set
 from __future__ import annotations
 
 import json
+import os
 import re
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
@@ -130,10 +131,11 @@ class DataEngineerAgent(Agent):
             )
         self.step("freshness_check", notes=f"{n_rows} rows; schema OK")
 
-        # ---- 3. Build the Lakehouse the quality tools query (in-memory DuckDB
-        # over the Arrow table — the offline path; the dlt/OSS path lands in
-        # a follow-up once a real snapshot flows through load_to_duckdb). ----
-        self.lakehouse = _arrow_lakehouse(raw, "raw_loans")
+        # ---- 3. Build the Lakehouse the quality tools query. WA-083: when
+        # WASPADA_USE_DLT is set, the load runs through a dlt pipeline (merge dedup +
+        # schema-contract + _dlt_loads lineage); otherwise an in-memory DuckDB
+        # registration (the offline default). ----
+        self.lakehouse = self._build_lakehouse(raw)
 
         # ---- 4. Function-calling loop ----
         findings = self._reasoning_loop(raw)
@@ -162,6 +164,29 @@ class DataEngineerAgent(Agent):
             notes=f"data_engineer cleared {n_rows} RawLoans rows "
                   f"(lane={lane}, checks={len(checks_run or DEFAULT_CHECK_SET)})",
         )
+
+    def _build_lakehouse(self, raw: pa.Table) -> Lakehouse:
+        """Build the DuckDB Lakehouse the quality tools query.
+
+        WA-083: opt in to the **dlt load** (merge dedup on ``loan_id`` + schema contract +
+        ``_dlt_loads`` lineage) via ``WASPADA_USE_DLT``. On any dlt failure — or when the flag
+        is off — fall back to the in-memory Arrow registration (the offline default), so
+        tests/CI/offline runs are byte-for-byte unchanged. When dlt is used, the load lineage
+        (rows / load_id) is stepped so it can be cited as data-trust evidence.
+        """
+        if _use_dlt():
+            try:
+                from ..data.lakehouse import load_via_dlt
+                lh = load_via_dlt(raw, table="raw_loans")
+                lin = lh.lineage or {}
+                self.step("dlt_load",
+                          notes=f"dlt merge load: rows={lin.get('rows_loaded')} "
+                                f"load_id={lin.get('load_id')} loads={lin.get('loads_recorded')}")
+                return lh
+            except Exception as exc:
+                self.step("dlt_load", status=Status.ERROR,
+                          notes=f"dlt load failed, falling back to in-memory: {exc}")
+        return _arrow_lakehouse(raw, "raw_loans")
 
     # ---------------------------------------------------------- reasoning loop
     def _reasoning_loop(self, raw: pa.Table) -> Dict[str, Any]:
@@ -385,6 +410,11 @@ def _tool_detect_anomalies(lh: Lakehouse, *_a: Any) -> Dict[str, Any]:
         if n:
             anomalies.append(f"{label}={n}")
     return {"anomalies": anomalies}
+
+
+def _use_dlt() -> bool:
+    """WA-083: is the dlt load path opted in? (``WASPADA_USE_DLT`` truthy)."""
+    return os.environ.get("WASPADA_USE_DLT", "").strip().lower() in ("1", "true", "yes", "on")
 
 
 # --------------------------------------------------------------------------- #
