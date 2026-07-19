@@ -208,3 +208,22 @@
 .contestedPill:hover {
   background: color-mix(in srgb, var(--sev-moderate) 20%, transparent);
 }
+
+/* G1 — "why this row": the model's top driver, a compact muted chip under the
+   band cell. Tabular + mono-ish so the value reads as data. */
+.driver {
+  display: inline-block;
+  margin-top: 3px;
+  max-width: 100%;
+  font-family: var(--font-mono);
+  font-size: 0.66rem;
+  line-height: 1.2;
+  color: var(--text-subtle);
+  background: var(--surface-muted);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 1px 6px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}

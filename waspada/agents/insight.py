@@ -80,13 +80,19 @@ class InsightAgent(Agent):
         # WA-032: apply the RiskPolicy when one is wired; otherwise the calls use
         # their module-constant defaults (byte-identical to the pre-policy path).
         pol = self.policy
+        # G1: hand rank() the fitted model + features so it can attach the top
+        # driver per work-list row ("why this row"). Both are additive/optional —
+        # absent (standalone insight, pre-WA-050 run) → rank() just omits the key.
+        model = context.data_handles.get("risk_model")
+        features = context.data_handles.get("feature_frame")
         if pol is not None:
-            work_list = _rank(scored, top_n=self.top_n, action_by_band=pol.band_to_action)
+            work_list = _rank(scored, top_n=self.top_n, action_by_band=pol.band_to_action,
+                              model=model, features=features)
             health = _segment_health(scored, npl_buckets=pol.npl_buckets)
             alert_list = _alerts(health, npl_threshold=pol.npl_threshold,
                                  vintage_threshold=pol.vintage_threshold)
         else:
-            work_list = _rank(scored, top_n=self.top_n)
+            work_list = _rank(scored, top_n=self.top_n, model=model, features=features)
             health = _segment_health(scored)
             alert_list = _alerts(health)
         self.step(
