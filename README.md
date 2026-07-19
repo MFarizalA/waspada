@@ -19,7 +19,7 @@ debate transcript attached. Two decisions on one shared risk engine:
 **Stack:** Alibaba Cloud OSS (data lake) · DuckDB (in-process query engine) ·
 Qwen models via Alibaba Cloud Model Studio/DashScope (the Agent Society brain,
 opt-in) · a multi-agent layer over a mockable LLM (**mock by default, offline**)
-· Alibaba Simple Log Service (audit stream) · ApsaraDB RDS PostgreSQL (auth) ·
+· Alibaba Simple Log Service (audit stream) · ApsaraDB RDS MySQL (auth) ·
 React/TypeScript dashboard · optional cuDF-on-GPU (WSL2) feature path.
 
 > Built by an autonomous AI software company — Stefanie (PM) · Bimo (backend) ·
@@ -196,8 +196,8 @@ backlog/                     # ticket specs (WA-001..WA-030)
 ### Install
 ```bash
 python -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\activate
-pip install -r requirements.txt
-# GPU deps need the NVIDIA index (Linux/WSL only):
+pip install -r api/requirements.txt   # CPU-only, complete: runs the CLI, API, and tests
+# (optional) GPU feature path — RAPIDS, Linux/WSL + NVIDIA GPU only, via the NVIDIA index:
 # pip install --extra-index-url=https://pypi.nvidia.com -r requirements.txt
 ```
 
@@ -228,7 +228,8 @@ cd .. && uvicorn api.main:app --port 8080       # serves the dashboard + /api/ru
 
 ### Run the tests
 ```bash
-python -m pytest tests/ -q          # 300+ tests, green offline; live-only smoke tests skip without creds
+pip install pytest                  # test runner (not a runtime dep)
+python -m pytest tests/ -q          # 440+ tests, green offline; live-only smoke tests skip without creds
 ```
 
 ---
