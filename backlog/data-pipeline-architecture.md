@@ -78,6 +78,24 @@ Downstream (features → score → debate) is **source-agnostic** because it onl
   daily → a fresh partition. Fail-safe: a failed run leaves the last-good partition; alert via SLS.
 - **Secrets (WA-087):** the producer uses the FC **RAM role** for OSS (no static keys).
 
+## 4b. dlt across the pipeline (the load backbone)
+dlt is the **load engine end-to-end** — the merge / schema-contract / lineage / incremental backbone.
+Every place data moves *into* a store, dlt drives it:
+
+| Stage | dlt's role | Ticket |
+|---|---|---|
+| **Source → OSS Raw** (ingest) | dlt source (filesystem / SQL / API) → **dlt filesystem destination on OSS**; `merge` dedup on `loan_id`, schema-contract (freeze), `_dlt_loads` lineage, **incremental cursors** (only new/changed loans) | WA-083 |
+| **OSS → DuckDB** (read for the Data Engineer) | dlt **Option A** (oss2 read → Arrow → dlt → DuckDB) — the read carries a real contract + lineage, not a bare load | WA-083 |
+| **Features → Staging (Silver)** | dlt **filesystem destination** (Option B) → OSS Staging | WA-090 |
+| **Scheduled refresh** | the FC time-trigger runs **the dlt pipeline** each batch → a fresh `dt=` partition | WA-088 |
+| **Debate evidence** | the Data Engineer cites dlt `_dlt_loads` **freshness/lineage + contract-pass** as data-trust evidence in the society's argument | WA-084 (done) |
+
+**Design vs current (honesty):** the above is the **design**. In the **current code** dlt is still
+**declared-but-unused** — a dependency never imported (the WA-047 scaffold was removed for the exact
+`dlt.readers.filesystem` bug). **WA-083** is what makes it real, and it is **PoC-proven** in
+`backlog/WA-047-dlt-research.md` (merge-dedup + contract-reject + `_dlt_loads` audit rows, verified
+against dlt 1.28.2). So: dlt is the designed backbone and proven feasible; implementation lands in WA-083.
+
 ## 5. Read — OSS → WASPADA (consumer)
 - **Latest-partition resolver (WA-047):** `oss.py` resolves the newest `loans/dt=*/` partition instead
   of a fixed `OSS_KEY`. `as_of`/pinned-partition override for reproducible/backfill runs.
