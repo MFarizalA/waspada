@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import dataclasses
 import os
+import re
 from io import BytesIO
 from typing import Any, Optional
 
@@ -25,13 +26,49 @@ import pyarrow.parquet as pq
 from ..config import COLLECTIONS, ORIGINATION, Config, load_config
 from ..schema import RawLoans, validate_table
 
-__all__ = ["OSSClient", "fetch_loans"]
+__all__ = ["OSSClient", "fetch_loans", "latest_partition_key"]
 
 # Columns we keep for the RawLoans contract — the exact field names, in the
 # dataclass declaration order. Selecting explicitly (rather than trusting the
 # object's columns as-is) means a stray column added upstream never silently
 # reshapes the contract.
 _RAW_LOANS_COLUMNS: tuple[str, ...] = tuple(f.name for f in dataclasses.fields(RawLoans))
+
+# WA-047: the OSS layout is date-partitioned -- ``{prefix}/dt=<YYYYMMDD>/loans.parquet``
+# (owner convention). ``YYYYMMDD`` sorts lexicographically == chronologically, so the
+# newest partition is a plain ``max()`` over the date strings.
+_PARTITION_RE = re.compile(r"(?:^|/)dt=(\d{8})(?:/|$)")
+
+
+def latest_partition_key(
+    keys, *, prefix: str, filename: str = "loans.parquet", as_of: Optional[str] = None,
+) -> Optional[str]:
+    """Resolve the target partition's object key from a list of OSS keys (pure).
+
+    Matches keys shaped ``{prefix}/dt=<YYYYMMDD>/{filename}``. With ``as_of`` (a
+    ``YYYYMMDD`` string) returns that exact partition's key; otherwise the **latest**
+    (max ``YYYYMMDD``). Returns ``None`` when nothing matches -- so the caller can fail
+    loud or fall back. Kept pure (no OSS calls) so the resolution logic is unit-tested
+    without a live bucket.
+    """
+    pfx = prefix.strip("/")
+    cands = []  # (dt, key)
+    for k in keys:
+        if not k.endswith(filename):
+            continue
+        if pfx and not k.startswith(pfx + "/"):
+            continue
+        m = _PARTITION_RE.search(k)
+        if m:
+            cands.append((m.group(1), k))
+    if not cands:
+        return None
+    if as_of:
+        for dt, k in cands:
+            if dt == str(as_of):
+                return k
+        return None
+    return max(cands, key=lambda dk: dk[0])[1]
 
 
 def _creds_configured() -> bool:
@@ -94,6 +131,42 @@ class OSSClient:
             "freshness": last_modified,
         }
 
+    # ---------------------------------------------------- WA-047 partition resolver
+    def list_keys(self, prefix: str) -> list:
+        """List all object keys under ``prefix`` (paged), via ``oss2`` list_objects."""
+        keys: list = []
+        marker = ""
+        while True:
+            res = self._bucket.list_objects(prefix=prefix, marker=marker, max_keys=1000)
+            keys.extend(o.key for o in getattr(res, "object_list", []) or [])
+            if not getattr(res, "is_truncated", False):
+                break
+            marker = getattr(res, "next_marker", "") or ""
+        return keys
+
+    def resolve_key(self, *, prefix: Optional[str] = None, as_of: Optional[str] = None) -> str:
+        """Resolve the object key to read.
+
+        When a **prefix** is configured (arg, or ``OSS_PREFIX`` env) the layout is
+        date-partitioned: list ``{prefix}/`` and pick the latest ``dt=<YYYYMMDD>``
+        partition (or the pinned ``as_of`` / ``OSS_AS_OF``). Otherwise fall back to the
+        fixed flat ``oss_key`` -- the pre-WA-047 behaviour, byte-for-byte.
+        """
+        pfx = (prefix if prefix is not None else os.environ.get("OSS_PREFIX", "")).strip()
+        if not pfx:
+            return self._cfg.oss_key  # fallback: fixed flat object (back-compat)
+        filename = os.environ.get("OSS_PARTITION_FILE", "loans.parquet")
+        as_of = as_of or os.environ.get("OSS_AS_OF") or None
+        keys = self.list_keys(pfx.rstrip("/") + "/")
+        key = latest_partition_key(keys, prefix=pfx, filename=filename, as_of=as_of)
+        if key is None:
+            raise FileNotFoundError(
+                f"no dt=YYYYMMDD partition under OSS prefix {pfx!r}"
+                + (f" for as_of={as_of}" if as_of else "")
+                + f" (looking for {filename!r})"
+            )
+        return key
+
     def fetch_loans(self, lane: str = COLLECTIONS, *, limit: Optional[int] = None) -> pa.Table:
         """Return a ``RawLoans``-shaped Arrow table for ``lane``.
 
@@ -107,7 +180,8 @@ class OSSClient:
             raise ValueError(
                 f"lane={lane!r} is invalid; must be 'collections' or 'origination'"
             )
-        data = self._bucket.get_object(self._cfg.oss_key).read()
+        key = self.resolve_key()
+        data = self._bucket.get_object(key).read()
         table = pq.read_table(BytesIO(data))
         table = table.select(_RAW_LOANS_COLUMNS)
         if limit is not None:
