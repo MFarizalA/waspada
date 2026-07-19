@@ -4,13 +4,13 @@ Serves the pre-built dashboard statically + exposes live pipeline endpoints:
 
   GET  /              → dashboard (dashboard/dist/index.html)
   GET  /api/health    → {"status": "ok"}
-  POST /api/run       → runs the orchestrated agent pipeline on a synthetic
-                        snapshot (offline, no data source needed), returns DashboardPayload + report
+  POST /api/run       → runs the orchestrated agent pipeline on the real OSS
+                        RawLoans snapshot, returns DashboardPayload + report
   GET  /api/run/stream → SSE stream of the debate rounds / resolutions (WA-022)
 
-The pipeline runs on a small synthetic RawLoans snapshot so the demo is fast
-(~3-5s) and has no external dependencies. The dashboard fixture shows the
-real pre-computed payload (1M loans) for the static view.
+Data is always read from OSS (``waspada.data.oss.fetch_loans``). ``brain=mock``
+selects the offline LLM brain for the agent-society debate; it does NOT
+select the data source. There is no synthetic fallback in the API.
 """
 from __future__ import annotations
 
@@ -38,6 +38,9 @@ from waspada.agents.base import ApprovalGate
 from waspada.agents.llm import MockLLM, get_llm
 from waspada.agents.protocol import AgentContext
 
+from waspada.data import OSSClient
+from waspada.agents.dispute_memory import get_memory_backend
+
 # Auth (WA-028): JWT gate on protected routes + auth router.
 # ``init_db()`` is idempotent — it ensures the users / reset_tokens tables
 # exist on the configured store (ApsaraDB RDS MySQL via DATABASE_URL,
@@ -59,16 +62,36 @@ validate_jwt_secret()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Create tables if needed, then seed a demo analyst on startup.
+    """Create tables if needed, seed a demo analyst, and probe OSS reachability.
 
     Idempotent: safe to run on every cold start against the same RDS instance.
     The JWT-secret guard re-runs here so FC cold starts (which may import the
     module from a cached artifact) still catch a missing secret before serving.
+
+    OSS is probed at startup: if the bucket/object is unreachable we still boot
+    so health checks pass, but we mark the data source unavailable and ``/api/run``
+    returns a clear 503. NEVER silent synthetic fallback.
     """
     validate_jwt_secret()
     db_mod.init_db()
     seed_default_user()
+    app.state.oss_available, app.state.oss_detail = _probe_oss()
     yield
+
+
+def _probe_oss() -> tuple[bool, str]:
+    """Return (reachable, detail). Detail is empty when reachable."""
+    try:
+        client = OSSClient()
+        meta = client.object_meta()
+        return True, f"OK (size={meta.get('size_bytes', '?')} bytes)"
+    except Exception as exc:  # pragma: no cover - infra-dependent
+        return False, f"data source unavailable: {exc}"
+
+
+def _data_source_unavailable() -> JSONResponse:
+    detail = getattr(app.state, "oss_detail", "data source unavailable")
+    return JSONResponse({"detail": detail}, status_code=503)
 
 
 app = FastAPI(title="WASPADA API", version="1.0.0", lifespan=lifespan)
@@ -105,29 +128,30 @@ async def dashboard():
 
 @app.get("/api/health")
 async def health():
-    return {"status": "ok", "service": "waspada"}
+    detail = getattr(app.state, "oss_detail", "")
+    return {"status": "ok", "service": "waspada", "oss": detail}
 
 
 # --------------------------------------------------------------------------- #
-# Shared demo-orchestrator builder (used by /api/run and /api/run/stream).
+# Shared orchestrator builder (used by /api/run and /api/run/stream).
 # --------------------------------------------------------------------------- #
-def _build_demo_orchestrator(
+def _build_orchestrator(
     brain: str = "mock",
     *,
     on_round_complete: Optional[Callable[[Any, Any], None]] = None,
     on_dispute_resolved: Optional[Callable[[Any], None]] = None,
 ) -> Orchestrator:
-    """Build an offline demo orchestrator with a stubbed fetch and auto-approve gate.
+    """Build a real-data orchestrator with auto-approve gate.
 
     ``brain`` selects the reasoning LLM (``mock`` default; ``qwen`` opt-in).
     The streaming hooks are passed straight through to ``Orchestrator``; when
     None the orchestrator behaves exactly as before.
+
+    The data-engineer agent's default ``fetch`` tool already resolves to
+    ``waspada.data.oss.fetch_loans``; no tool injection is required.
     """
     import os
 
-    from waspada.agents.__main__ import _sample_raw_table
-    from waspada.agents.data_engineer import DataEngineerAgent
-    from waspada.agents.dispute_memory import get_memory_backend
     from waspada.policy import load_policy
 
     llm = get_llm(brain) if brain and brain != "mock" else MockLLM()
@@ -141,19 +165,6 @@ def _build_demo_orchestrator(
         on_dispute_resolved=on_dispute_resolved,
     )
     orch.gate = ApprovalGate(auto_approve=True)
-
-    sample = _sample_raw_table(n=200)
-    _stub = (lambda tbl: (lambda *, lane="collections", limit=None: tbl))(sample)
-
-    _orig_build = orch._build_agents
-    def _build_with_stub():
-        agents = _orig_build()
-        for a in agents:
-            if isinstance(a, DataEngineerAgent):
-                a.register_tool("fetch", _stub)
-        return agents
-    orch._build_agents = _build_with_stub  # type: ignore
-
     return orch
 
 
@@ -161,6 +172,7 @@ def _ship_audit(orch: Orchestrator, ctx: AgentContext) -> None:
     """Ship the run's step log to the audit stream (WA-023). Fail-safe:
     SLS when configured, else a local file; never raises into the request."""
     from waspada.audit.sls import get_audit_sink, ship_run_audit
+
     run_id = (getattr(ctx, "meta", None) or {}).get("run_id") or uuid.uuid4().hex[:12]
     ship_run_audit(orch, run_id, get_audit_sink(run_id))
 
@@ -219,27 +231,29 @@ def _brain_error(brain: str, exc: Exception) -> JSONResponse:
 
 @app.post("/api/run")
 async def run_pipeline(brain: str = "mock", _user: dict = Depends(current_user)):
-    """Run the full agent pipeline on a synthetic snapshot.
+    """Run the full agent pipeline on the real OSS RawLoans snapshot.
 
     Returns the DashboardPayload + the plain-language analyst report.
-    Runs offline (no data fetch, no GPU, no network) in ~3-5 seconds by default.
+    Data is always read from OSS; ``brain`` selects only the reasoning LLM
+    for the risk-auditor negotiation step (``mock`` default = fast/free/
+    deterministic; ``qwen`` = real Qwen calls via DashScope, opt-in only).
 
-    ``brain`` selects the reasoning LLM for the risk-auditor negotiation
-    step (``mock`` default = fast/free/deterministic; ``qwen`` = real Qwen
-    calls via DashScope, opt-in only — this adds real network latency and
-    should not be the default every visitor's first click triggers).
-
+    If OSS is unreachable at startup, the app boots but ``/api/run`` returns
+    **503 with a clear detail** rather than falling back to synthetic data.
     If ``brain=qwen`` is selected but Qwen can't be built/reached (no
     ``DASHSCOPE_API_KEY``, bad key, network down), we return a **503 with a
     clear message** rather than a bare 500.
     """
+    if not getattr(app.state, "oss_available", True) is True:
+        return _data_source_unavailable()
+
     ctx = AgentContext(
         lane="collections",
         data_handles={},
-        meta={"source": "cloud-run-demo", "run_id": uuid.uuid4().hex[:12]},
+        meta={"source": "oss-real", "run_id": uuid.uuid4().hex[:12]},
     )
     try:
-        orch = _build_demo_orchestrator(brain)
+        orch = _build_orchestrator(brain)
         orch.plan("collections")
         result = orch.run(ctx)
     except Exception as exc:  # brain unbuildable / unreachable → clean 503, not a 500
@@ -273,7 +287,13 @@ async def run_stream(brain: str = "mock", _user: dict = Depends(current_user_ws)
     With ``brain=mock`` the Risk Auditor uses the default canned brain, so
     disputes are unlikely and the stream typically ends with a single ``done``.
     A visible debate requires ``brain=qwen`` or a scripted mock in tests.
+
+    If OSS is unreachable at startup, the app boots but this endpoint returns
+    **503 with a clear detail** — never a silent synthetic fallback.
     """
+    if not getattr(app.state, "oss_available", True) is True:
+        return _data_source_unavailable()
+
     q: asyncio.Queue[Dict[str, Any]] = asyncio.Queue()
     loop = asyncio.get_running_loop()
 
@@ -314,7 +334,7 @@ async def run_stream(brain: str = "mock", _user: dict = Depends(current_user_ws)
         loop.call_soon_threadsafe(q.put_nowait, _resolution_event(d))
 
     try:
-        orch = _build_demo_orchestrator(
+        orch = _build_orchestrator(
             brain,
             on_round_complete=on_round_complete,
             on_dispute_resolved=on_dispute_resolved,
@@ -324,7 +344,7 @@ async def run_stream(brain: str = "mock", _user: dict = Depends(current_user_ws)
     ctx = AgentContext(
         lane="collections",
         data_handles={},
-        meta={"source": "sse-stream", "run_id": uuid.uuid4().hex[:12]},
+        meta={"source": "sse-stream-oss", "run_id": uuid.uuid4().hex[:12]},
     )
 
     async def runner() -> None:

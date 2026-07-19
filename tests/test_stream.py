@@ -23,6 +23,8 @@ from waspada.agents.data_analyst import DataAnalystAgent
 from waspada.agents.data_engineer import DataEngineerAgent
 from waspada.agents.orchestrator import Orchestrator
 
+from waspada.agents.__main__ import _sample_raw_table
+
 # Import the FastAPI app lazily so the test module imports cleanly even when
 # FastAPI is not installed.
 pytest.importorskip("fastapi")
@@ -32,12 +34,32 @@ import api.main as main_mod  # noqa: E402
 from api import auth as auth_mod  # noqa: E402
 
 
+@pytest.fixture(autouse=True)
+def _mock_oss_probe_for_stream_tests(monkeypatch):
+    """Tests have no OSS creds; force the startup probe to pass.
+
+    Each test that hits ``/api/run`` or ``/api/run/stream`` is responsible for
+    injecting its own data stub via the DataEngineerAgent tool registry. The
+    probe only ensures the endpoint returns 200 instead of 503 at the gate.
+    """
+    monkeypatch.setattr(main_mod, "_probe_oss", lambda: (True, "mock-probe-ok"))
+
+
 @pytest.fixture
 def client():
     """A TestClient with a freshly-seeded demo analyst."""
     auth_mod.reset_store()
     auth_mod.seed_default_user()
+    # WA-077: the lifespan probe runs at TestClient startup WITHOUT OSS creds,
+    # so app.state.oss_available lands False and the guard 503s. Tests inject
+    # their own data stubs, so force the probe state AFTER startup — patching
+    # _probe_oss itself is too late (lifespan already ran).
     with TestClient(main_mod.app) as c:
+        # WA-077: the lifespan OSS probe runs at TestClient startup (before any
+        # monkeypatch of _probe_oss could apply), so with no OSS creds
+        # oss_available lands False and the run-gate 503s. Tests inject their
+        # own data stubs, so force the probe state AFTER startup.
+        main_mod.app.state.oss_available = True
         yield c
 
 
@@ -69,55 +91,102 @@ def _parse_sse(body: str) -> List[Dict[str, Any]]:
 
 
 def _isolated_de_brain(orch: Orchestrator) -> Orchestrator:
-    """Give the Tier-2 data agents (Data Engineer + Data Analyst) fresh canned
-    brains so the scripted orchestrator brain is reserved for the debate agents.
+    """Inject a real-data-aware fetch stub and give the Tier-2 data agents
+    (Data Engineer + Data Analyst) fresh canned brains.
 
-    Both data agents run function-calling loops on ``self.llm``; without this,
-    they would consume the scripted debate script before the Risk Auditor speaks.
-    Mirrors the isolation WA-030 applied to the other debate tests.
-
-    WA-046: also reset the dispute memory to a fresh in-process one — the
-    endpoint now wires a LocalFileMemory by default, and a leftover
-    ``data/dispute_memory.json`` from a prior run would short-circuit these
-    scripted disputes (a recalled human ruling trumps the script).
+    Under WA-077 the product API reads real OSS data. Tests are not the
+    product, so we stub the data-engineer fetch with a small RawLoans table
+    so the scripted debate tests can run offline deterministically. The
+    orchestrator's own LLM is reserved for the scripted debate agents.
     """
     from waspada.agents.dispute_memory import DisputeMemory, InMemoryMemory
     orch.memory = DisputeMemory(InMemoryMemory())
-    orig = orch._build_agents
-    def _build():
-        agents = orig()
-        for a in agents:
-            if isinstance(a, (DataEngineerAgent, DataAnalystAgent)):
-                a.llm = MockLLM()
-        return agents
-    orch._build_agents = _build  # type: ignore[method-assign]
+
+    # Build a tiny RawLoans table for the offline test path.
+    import dataclasses
+    import datetime as dt
+    import numpy as np
+    import pyarrow as pa
+
+    from waspada.schema import RawLoans, schema_from_dataclass
+
+    rng = np.random.default_rng(11)
+    rows: list[dict] = []
+    issue_years = [2019, 2020, 2021, 2022, 2023]
+    for i in range(60):
+        iy = int(issue_years[i % len(issue_years)])
+        im = int(rng.integers(1, 13))
+        risky = rng.random() < 0.5
+        if risky:
+            rate = float(rng.uniform(18, 28)); dti_ = float(rng.uniform(22, 35))
+            grade = "E"; op = float(rng.uniform(0.5, 0.9)); tp = float(rng.uniform(0.0, 0.3))
+            status = "Charged Off"
+        else:
+            rate = float(rng.uniform(4, 10)); dti_ = float(rng.uniform(2, 12))
+            grade = "A"; op = float(rng.uniform(0.0, 0.3)); tp = float(rng.uniform(0.6, 1.0))
+            status = "Current"
+        rows.append(dict(
+            loan_id=f"R{i:04d}", amount=float(rng.uniform(2000, 25000)),
+            term=int(rng.choice([36, 60])), rate=rate, grade=grade,
+            annual_income=float(rng.uniform(30000, 120000)), dti=dti_,
+            issue_date=dt.date(iy, im, 1),
+            purpose=str(rng.choice(["credit_card", "debt_consolidation", "car", "medical"])),
+            region=str(rng.choice(["West", "South", "Midwest", "Northeast"])),
+            outstanding_principal=float(rng.uniform(100, 5000)) * op,
+            total_paid=float(rng.uniform(100, 5000)) * tp,
+            current_status=status,
+        ))
+    cols = {f.name: [] for f in dataclasses.fields(RawLoans)}
+    for r in rows:
+        for name in cols:
+            cols[name].append(r[name])
+    test_table = pa.table(cols, schema=schema_from_dataclass(RawLoans))
+
+    def _test_fetch(*, lane="collections", limit=None):
+        return test_table
+
+    # Data Analyst also gets a fresh mock brain so it doesn't accidentally reuse
+    # a scripted response meant for the Risk Auditor / Arbiter.
+    for a in orch._build_agents():
+        if isinstance(a, DataAnalystAgent):
+            a.llm = MockLLM()
+        if isinstance(a, DataEngineerAgent):
+            a.register_tool("fetch", _test_fetch)
     return orch
 
 
-def _debate_brain_script(n_disputes: int = 4) -> MockLLM:
-    """Return a scripted MockLLM that opens and resolves ``n_disputes``.
-
-    True call order (see test_wa016_debate): n challenges, then per dispute a
-    rebuttal + arbiter ruling interleaved.
-    """
-    challenge = json.dumps({
-        "auditor_view": "Low",
-        "confidence": 0.72,
-        "claim": "payment ratio is high relative to the band",
-        "evidence": ["payment_ratio=0.95"],
-    })
-    rebuttal = json.dumps({
-        "verdict": "uphold",
-        "confidence": 0.84,
-        "claim": "model stands; dti and rate support Very High",
-        "evidence": ["dti=35"],
-    })
-    ruling = json.dumps({
+def _debate_brain_script(n_disputes: int = 1) -> MockLLM:
+    """Return a MockLLM that opens ``n_disputes`` and resolves each one."""
+    challenge = MockLLM(script=[
+        {"role": "system", "content": ""},
+        {"role": "user", "content": "audit"},
+    ])
+    challenge.next = {
+        "challenge": True,
+        "rationale": "DTI exceeds 28%",
+        "confidence": 0.8,
+        "evidence": [{"field": "dti", "value": 31.2, "threshold": 28.0}],
+    }
+    rebuttal = MockLLM(script=[
+        {"role": "system", "content": ""},
+        {"role": "user", "content": "rebut"},
+    ])
+    rebuttal.next = {
+        "rebuttal": True,
+        "rationale": "model already used rate and grade",
+        "confidence": 0.6,
+        "evidence": [{"field": "grade", "value": "E", "weight": 0.4}],
+    }
+    ruling = MockLLM(script=[
+        {"role": "system", "content": ""},
+        {"role": "user", "content": "resolve"},
+    ])
+    ruling.next = {
         "ruling": "uphold",
         "confidence": 0.9,
         "rationale": "auditor did not prove mismatch",
         "evidence": [],
-    })
+    }
     return MockLLM(script=[challenge] * n_disputes + [rebuttal, ruling] * n_disputes)
 
 
@@ -149,7 +218,27 @@ def test_stream_accepts_bearer_header(client, token):
 # --------------------------------------------------------------------------- #
 # Mock no-dispute path
 # --------------------------------------------------------------------------- #
-def test_stream_mock_no_dispute_ends_with_done(client, token):
+def test_stream_mock_no_dispute_ends_with_done(client, token, monkeypatch):
+    """Without OSS creds, inject a stub fetch so the mock stream still runs."""
+    from waspada.agents.data_engineer import DataEngineerAgent
+
+    def _test_fetch(*, lane="collections", limit=None):
+        return _sample_raw_table(n=60)
+
+    orig_build = main_mod._build_orchestrator
+    def _build_with_test_fetch(brain: str = "mock", **kwargs):
+        orch = orig_build(brain, **kwargs)
+        orig = orch._build_agents
+        def _build():
+            agents = orig()
+            for a in agents:
+                if isinstance(a, DataEngineerAgent):
+                    a.register_tool("fetch", _test_fetch)
+            return agents
+        orch._build_agents = _build  # type: ignore[method-assign]
+        return orch
+    monkeypatch.setattr(main_mod, "_build_orchestrator", _build_with_test_fetch)
+
     r = client.get(f"/api/run/stream?token={token}&brain=mock")
     assert r.status_code == 200
     events = _parse_sse(r.text)
@@ -166,7 +255,7 @@ def test_stream_scripted_debate_emits_rounds_resolution_done(client, token, monk
     """A scripted brain opens one dispute and resolves it → round/resolution/done."""
     n = 1
     scripted = _debate_brain_script(n_disputes=n)
-    orig_build = main_mod._build_demo_orchestrator
+    orig_build = main_mod._build_orchestrator
 
     def _build_scripted(brain: str = "mock", **kwargs):
         # Force the orchestrator onto the scripted brain regardless of the
@@ -177,7 +266,7 @@ def test_stream_scripted_debate_emits_rounds_resolution_done(client, token, monk
         orch.audit_k = n
         return _isolated_de_brain(orch)
 
-    monkeypatch.setattr(main_mod, "_build_demo_orchestrator", _build_scripted)
+    monkeypatch.setattr(main_mod, "_build_orchestrator", _build_scripted)
 
     r = client.get(f"/api/run/stream?token={token}")
     assert r.status_code == 200
@@ -186,7 +275,7 @@ def test_stream_scripted_debate_emits_rounds_resolution_done(client, token, monk
     types = [e.get("type") for e in events]
     assert types.count("round") >= 1
     assert types.count("resolution") == 1
-    assert types[-1] == "done"
+    assert events[-1] == {"type": "done"}
 
     # Verify the resolution shape matches the frontend contract.
     resolution = next(e for e in events if e.get("type") == "resolution")
@@ -200,7 +289,7 @@ def test_stream_scripted_multiple_disputes_one_resolution_each(client, token, mo
     """Several disputes → each gets exactly one resolution, then done."""
     n = 4
     scripted = _debate_brain_script(n_disputes=n)
-    orig_build = main_mod._build_demo_orchestrator
+    orig_build = main_mod._build_orchestrator
 
     def _build_scripted(brain: str = "mock", **kwargs):
         orch = orig_build("mock", **kwargs)
@@ -208,7 +297,7 @@ def test_stream_scripted_multiple_disputes_one_resolution_each(client, token, mo
         orch.audit_k = n
         return _isolated_de_brain(orch)
 
-    monkeypatch.setattr(main_mod, "_build_demo_orchestrator", _build_scripted)
+    monkeypatch.setattr(main_mod, "_build_orchestrator", _build_scripted)
 
     r = client.get(f"/api/run/stream?token={token}")
     assert r.status_code == 200
@@ -239,9 +328,57 @@ def test_stream_scripted_multiple_disputes_one_resolution_each(client, token, mo
 # --------------------------------------------------------------------------- #
 # /api/run non-stream still works
 # --------------------------------------------------------------------------- #
-def test_non_stream_run_still_works(client, token):
-    # /api/run stays header-auth only (the stream route gets the query-param
-    # fallback for EventSource). Pass the Bearer token as a header.
+def test_non_stream_run_still_works(client, token, monkeypatch):
+    """The non-streaming run must also allow offline data injection in tests."""
+    # Under WA-077 the endpoint expects OSS data. Since tests have no OSS creds,
+    # inject a stub fetch into the orchestrator before the route builds it.
+    from waspada.agents.data_engineer import DataEngineerAgent
+    from waspada.agents.data_analyst import DataAnalystAgent
+    from waspada.agents import MockLLM
+    import dataclasses, datetime as dt, numpy as np, pyarrow as pa
+    from waspada.schema import RawLoans, schema_from_dataclass
+
+    rng = np.random.default_rng(11)
+    rows = []
+    for i in range(60):
+        risky = rng.random() < 0.5
+        rate = float(rng.uniform(18, 28)) if risky else float(rng.uniform(4, 10))
+        dti_ = float(rng.uniform(22, 35)) if risky else float(rng.uniform(2, 12))
+        grade = "E" if risky else "A"
+        status = "Charged Off" if risky else "Current"
+        rows.append(dict(
+            loan_id=f"R{i:04d}", amount=float(rng.uniform(2000, 25000)),
+            term=int(rng.choice([36, 60])), rate=rate, grade=grade,
+            annual_income=float(rng.uniform(30000, 120000)), dti=dti_,
+            issue_date=dt.date(2020, 1, 1),
+            purpose="debt_consolidation", region="West",
+            outstanding_principal=100.0, total_paid=100.0, current_status=status,
+        ))
+    cols = {f.name: [] for f in dataclasses.fields(RawLoans)}
+    for r in rows:
+        for name in cols:
+            cols[name].append(r[name])
+    test_table = pa.table(cols, schema=schema_from_dataclass(RawLoans))
+
+    def _test_fetch(*, lane="collections", limit=None):
+        return test_table
+
+    orig_build = main_mod._build_orchestrator
+    def _build_with_test_fetch(*args, **kwargs):
+        orch = orig_build(*args, **kwargs)
+        orig = orch._build_agents
+        def _build():
+            agents = orig()
+            for a in agents:
+                if isinstance(a, (DataEngineerAgent, DataAnalystAgent)):
+                    a.llm = MockLLM()
+                if isinstance(a, DataEngineerAgent):
+                    a.register_tool("fetch", _test_fetch)
+            return agents
+        orch._build_agents = _build  # type: ignore[method-assign]
+        return orch
+    monkeypatch.setattr(main_mod, "_build_orchestrator", _build_with_test_fetch)
+
     r = client.post("/api/run?brain=mock", headers={"Authorization": f"Bearer {token}"})
     assert r.status_code == 200
     body = r.json()
@@ -259,6 +396,25 @@ def _raise_brain(_brain):
 
 
 def test_run_qwen_unavailable_returns_503(client, token, monkeypatch):
+    """Stub the fetch so OSS is not required for this brain-error test."""
+    from waspada.agents.data_engineer import DataEngineerAgent
+
+    def _test_fetch(*, lane="collections", limit=None):
+        return _sample_raw_table(n=60)
+
+    def _build_with_test_fetch(brain: str = "mock", **kwargs):
+        orch = orig_build(brain, **kwargs)
+        orig = orch._build_agents
+        def _build():
+            agents = orig()
+            for a in agents:
+                if isinstance(a, DataEngineerAgent):
+                    a.register_tool("fetch", _test_fetch)
+            return agents
+        orch._build_agents = _build  # type: ignore[method-assign]
+        return orch
+    monkeypatch.setattr(main_mod, "_build_orchestrator", _build_with_test_fetch)
+
     monkeypatch.setattr(main_mod, "get_llm", _raise_brain)
     r = client.post("/api/run?brain=qwen", headers={"Authorization": f"Bearer {token}"})
     assert r.status_code == 503
@@ -268,13 +424,53 @@ def test_run_qwen_unavailable_returns_503(client, token, monkeypatch):
 
 
 def test_stream_qwen_unavailable_returns_503(client, token, monkeypatch):
+    """Also stub the fetch so OSS is not required for this brain-error test."""
+    from waspada.agents.data_engineer import DataEngineerAgent
+
+    def _test_fetch(*, lane="collections", limit=None):
+        return _sample_raw_table(n=60)
+
+    def _build_with_test_fetch(brain: str = "mock", **kwargs):
+        orch = orig_build(brain, **kwargs)
+        orig = orch._build_agents
+        def _build():
+            agents = orig()
+            for a in agents:
+                if isinstance(a, DataEngineerAgent):
+                    a.register_tool("fetch", _test_fetch)
+            return agents
+        orch._build_agents = _build  # type: ignore[method-assign]
+        return orch
+    monkeypatch.setattr(main_mod, "_build_orchestrator", _build_with_test_fetch)
+
     monkeypatch.setattr(main_mod, "get_llm", _raise_brain)
     r = client.get(f"/api/run/stream?token={token}&brain=qwen")
     assert r.status_code == 503
     assert "unavailable" in r.json()["error"].lower()
 
 
-def test_mock_run_unaffected_by_the_guard(client, token):
+def test_mock_run_unaffected_by_the_guard(client, token, monkeypatch):
+    """Mock run still needs a stub fetch in the no-OSS test environment."""
+    from waspada.agents.data_engineer import DataEngineerAgent
+
+    def _test_fetch(*, lane="collections", limit=None):
+        return _sample_raw_table(n=60)
+
+    orig_build = main_mod._build_orchestrator
+
+    def _build_with_test_fetch(brain: str = "mock", **kwargs):
+        orch = orig_build(brain, **kwargs)
+        orig = orch._build_agents
+        def _build():
+            agents = orig()
+            for a in agents:
+                if isinstance(a, DataEngineerAgent):
+                    a.register_tool("fetch", _test_fetch)
+            return agents
+        orch._build_agents = _build  # type: ignore[method-assign]
+        return orch
+    monkeypatch.setattr(main_mod, "_build_orchestrator", _build_with_test_fetch)
+
     # mock never calls get_llm's qwen path → still 200.
     r = client.post("/api/run?brain=mock", headers={"Authorization": f"Bearer {token}"})
     assert r.status_code == 200

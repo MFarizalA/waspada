@@ -398,7 +398,10 @@ resource "alicloud_fcv3_function" "api" {
     OSS_RAW_BUCKET        = "${local.name_prefix}-raw"
     OSS_STAGING_BUCKET    = "${local.name_prefix}-staging"
     OSS_MART_BUCKET       = "${local.name_prefix}-mart"
-    OSS_ENDPOINT          = "oss-ap-southeast-1.aliyuncs.com"
+    # OSS endpoint: prefer the internal VPC endpoint when set, otherwise fall
+    # back to the public endpoint. FC in a VPC should use the internal endpoint
+    # to avoid data-transfer charges and public egress.
+    OSS_ENDPOINT          = coalesce(var.oss_endpoint_internal, "oss-ap-southeast-1.aliyuncs.com")
     OSS_KEY               = "loans.parquet"
     OSS_ACCESS_KEY_ID     = var.access_key
     OSS_ACCESS_KEY_SECRET = var.secret_key
