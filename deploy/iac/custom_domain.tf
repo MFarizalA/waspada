@@ -76,6 +76,7 @@ resource "alicloud_fcv3_custom_domain" "app" {
     routes {
       path          = "/*"
       function_name = alicloud_fcv3_function.api.function_name
+      qualifier     = "LATEST"
       methods       = ["GET", "POST", "PUT", "DELETE", "HEAD", "OPTIONS"]
     }
   }
