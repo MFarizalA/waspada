@@ -33,6 +33,7 @@ NOT self-improvement.
 """
 from __future__ import annotations
 
+import os
 from typing import Any, Callable, Dict, List, Optional
 
 import pyarrow as pa
@@ -80,6 +81,7 @@ class Orchestrator(Agent):
         top_n: int = 50,
         ingest_limit: Optional[int] = None,
         audit_k: int = 8,
+        audit_workers: Optional[int] = None,
         arbiter: Optional[ArbiterAgent] = None,
         enable_arbiter: bool = True,
         memory: Optional[DisputeMemory] = None,
@@ -97,6 +99,22 @@ class Orchestrator(Agent):
         self.policy = policy
         self.ingest_limit = ingest_limit
         self.audit_k = audit_k  # Skeptic audits top-K riskiest accounts
+        # WA-080: how many accounts the Skeptic audits concurrently. The audit is
+        # the dominant cost of a live-Qwen run; parallelising it is what lets the
+        # debate finish inside the FC invocation timeout. Resolution order:
+        #   explicit arg  ->  WASPADA_AUDIT_WORKERS env  ->  brain auto-detect.
+        # Auto-detect keeps mock/scripted runs sequential (workers=1, so the
+        # non-thread-safe scripted MockLLM stays deterministic and every existing
+        # test is byte-for-byte unchanged) while the live Qwen brain -- a
+        # thread-safe OpenAI client -- parallelises with no wiring from the API.
+        if audit_workers is not None:
+            self.audit_workers = max(1, int(audit_workers))
+        else:
+            _env = os.environ.get("WASPADA_AUDIT_WORKERS", "").strip()
+            if _env:
+                self.audit_workers = max(1, int(_env))
+            else:
+                self.audit_workers = 8 if getattr(self.llm, "name", "") == "qwen" else 1
         # The Arbiter (Round 3). Defaults to an ArbiterAgent sharing this
         # orchestrator's brain (the orchestrator tiers it to qwen3.7-max
         # via with_model). Pass ``arbiter=`` to inject a custom one for tests.
@@ -209,7 +227,7 @@ class Orchestrator(Agent):
             DataEngineerAgent(de_brain, limit=self.ingest_limit),
             DataAnalystAgent(da_brain, as_of=self.as_of),
             risk_model,
-            RiskAuditorAgent(auditor_brain, k=self.audit_k),
+            RiskAuditorAgent(auditor_brain, k=self.audit_k, max_workers=self.audit_workers),
             InsightAgent(self.llm, gate=self.gate, top_n=self.top_n, policy=self.policy),
         ]
 
