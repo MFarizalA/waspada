@@ -8,8 +8,9 @@ NOT replace it.
 
 Flow
 ----
-1. **Load** the snapshot via the :mod:`waspada.data.lakehouse` layer (dlt +
-   DuckDB in production; an in-memory Arrow table in tests/offline).
+1. **Load** the snapshot via the :mod:`waspada.data.lakehouse` layer (in-process
+   DuckDB over the OSS-parquet Arrow table; the same in-memory Arrow table
+   in tests/offline).
 2. **Deterministic gate** (unchanged from IngestAgent): schema validation +
    non-empty freshness check. Dirty/malformed data -> ``ERROR`` / ``BLOCKED``
    loud. This runs BEFORE any reasoning — the gate is not advisory.
