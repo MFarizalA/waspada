@@ -4,7 +4,7 @@
   flex-direction: column;
 }
 
-/* --- Chinese-style megamenu banner: imperial-red gradient + gold seam --- */
+/* --- Cloud-style megamenu banner: cloud-blue gradient + sky-blue seam --- */
 .topbar {
   display: flex;
   align-items: center;
@@ -18,7 +18,7 @@
   top: 0;
   z-index: 5;
 }
-/* thin luminous gold seam under the banner */
+/* thin luminous sky-blue seam under the banner */
 .topbar::after {
   content: "";
   position: absolute;
