@@ -14,11 +14,13 @@ These tests pin the backend contract with
 from __future__ import annotations
 
 import json
+import re
 from typing import Any, Dict, List
 
 import pytest
 
 from waspada.agents import MockLLM
+from waspada.agents.llm import ChatResponse
 from waspada.agents.data_analyst import DataAnalystAgent
 from waspada.agents.data_engineer import DataEngineerAgent
 from waspada.agents.orchestrator import Orchestrator
@@ -145,49 +147,112 @@ def _isolated_de_brain(orch: Orchestrator) -> Orchestrator:
     def _test_fetch(*, lane="collections", limit=None):
         return test_table
 
-    # Data Analyst also gets a fresh mock brain so it doesn't accidentally reuse
-    # a scripted response meant for the Risk Auditor / Arbiter.
-    for a in orch._build_agents():
-        if isinstance(a, DataAnalystAgent):
-            a.llm = MockLLM()
-        if isinstance(a, DataEngineerAgent):
-            a.register_tool("fetch", _test_fetch)
+    # Orchestrator.run() calls _build_agents() FRESH each run, so mutating a prior
+    # build (the pre-existing one-shot pattern) is lost — the runtime agents would
+    # fetch real OSS and the Data Analyst would consume the debate routing brain.
+    # Wrap _build_agents so the fetch stub + Tier-2 isolation are (re)applied to
+    # whatever instances the run actually uses. The debate brain (orch.llm) stays
+    # reserved for the Skeptic / Actuary / Arbiter.
+    orig_build = orch._build_agents
+
+    def _build():
+        agents = orig_build()
+        for a in agents:
+            if isinstance(a, DataAnalystAgent):
+                a.llm = MockLLM()
+            if isinstance(a, DataEngineerAgent):
+                a.llm = MockLLM()
+                a.register_tool("fetch", _test_fetch)
+        return agents
+
+    orch._build_agents = _build  # type: ignore[method-assign]
     return orch
 
 
-def _debate_brain_script(n_disputes: int = 1) -> MockLLM:
-    """Return a MockLLM that opens ``n_disputes`` and resolves each one."""
-    challenge = MockLLM(script=[
-        {"role": "system", "content": ""},
-        {"role": "user", "content": "audit"},
-    ])
-    challenge.next = {
-        "challenge": True,
-        "rationale": "DTI exceeds 28%",
-        "confidence": 0.8,
-        "evidence": [{"field": "dti", "value": 31.2, "threshold": 28.0}],
-    }
-    rebuttal = MockLLM(script=[
-        {"role": "system", "content": ""},
-        {"role": "user", "content": "rebut"},
-    ])
-    rebuttal.next = {
-        "rebuttal": True,
-        "rationale": "model already used rate and grade",
-        "confidence": 0.6,
-        "evidence": [{"field": "grade", "value": "E", "weight": 0.4}],
-    }
-    ruling = MockLLM(script=[
-        {"role": "system", "content": ""},
-        {"role": "user", "content": "resolve"},
-    ])
-    ruling.next = {
-        "ruling": "uphold",
-        "confidence": 0.9,
-        "rationale": "auditor did not prove mismatch",
-        "evidence": [],
-    }
-    return MockLLM(script=[challenge] * n_disputes + [rebuttal, ruling] * n_disputes)
+# Band ordinal (mirror of risk_auditor._BAND_ORDINAL). Used to pick a Skeptic view
+# guaranteed to diverge from the model band by >= DISPUTE_GAP, so every audited
+# account deterministically opens a dispute regardless of the scored data.
+_BAND_ORD = {"Very Low": 1, "Low": 2, "Medium": 3, "High": 4, "Very High": 5}
+_BAND_RE = re.compile(r"band=([A-Za-z][A-Za-z ]*)")
+
+
+class _DebateBrain(MockLLM):
+    """Content-routing offline brain for the scripted-debate SSE tests.
+
+    Each debate agent issues a DISTINGUISHABLE prompt and parses a specific JSON
+    shape:
+
+      * Skeptic  (risk_auditor, native ``chat()`` loop) →
+        ``{"auditor_view", "confidence", "claim", "evidence"}``
+      * Actuary  (risk_model.defend_score, ``complete()``) →
+        ``{"verdict", "confidence", "claim", "evidence"}``
+      * Arbiter  (arbiter.rule, ``complete()``) →
+        ``{"ruling", "confidence", "rationale", "evidence"}``
+
+    The pre-WA-041 positional-script harness (a script of sub-brains each carrying
+    a ``.next`` dict) no longer matches ANY agent: nothing reads ``.next``, the
+    auditor now runs a native tool-loop, and the audit-slice size is data-driven
+    (WA-049/WA-080), so a fixed reply order can't line up. We route by prompt
+    content instead — deterministic no matter how many accounts are audited or in
+    what order (this brain is stateless, so it's also parallel-audit-safe).
+
+    The Skeptic reply is band-aware: it returns a view that diverges from the
+    model band by >= DISPUTE_GAP, so every audited account opens a dispute; the
+    Actuary upholds and the Arbiter upholds (conf 0.9 >= threshold), so each
+    dispute resolves ``upheld`` by ``arbiter``. Unmatched prompts (the Data
+    Engineer / Data Analyst reasoning loops, model scoring) fall back to the
+    canned reply so the surrounding pipeline runs unchanged.
+    """
+
+    def _reply_for(self, prompt: str) -> str:
+        p = prompt or ""
+        if "You are the Skeptic" in p:
+            m = _BAND_RE.search(p)
+            band = m.group(1).strip() if m else "Very High"
+            view = "Low" if _BAND_ORD.get(band, 5) >= 3 else "High"
+            return json.dumps({
+                "auditor_view": view,
+                "confidence": 0.8,
+                "claim": f"Independent read diverges from the {band} band (DTI 31.2 > 28).",
+                "evidence": ["dti=31.20", "grade=E"],
+            })
+        if "You are the Actuary" in p:
+            return json.dumps({
+                "verdict": "uphold",
+                "confidence": 0.7,
+                "claim": "Model already priced grade and rate into the band.",
+                "evidence": ["grade=E", "rate=22.40"],
+            })
+        if "You are the Arbiter" in p:
+            return json.dumps({
+                "ruling": "uphold",
+                "confidence": 0.9,
+                "rationale": "The auditor did not prove a band mismatch.",
+                "evidence": [],
+            })
+        return self._reply  # canned fallback: DE/DA reasoning, model scoring
+
+    def complete(self, prompt: str, *, history=None) -> str:
+        self.calls.append(prompt)
+        return self._reply_for(prompt)
+
+    def chat(self, prompt: str, *, tools=None, messages=None) -> ChatResponse:
+        # The auditor drives its native tool-loop through chat(); return a
+        # content-only response (no tool_calls) so the loop takes the final
+        # answer immediately from ``content``.
+        self.calls.append(prompt)
+        return ChatResponse(content=self._reply_for(prompt), tool_calls=[])
+
+
+def _debate_brain_script(n_disputes: int = 1) -> _DebateBrain:
+    """A content-routing debate brain (see :class:`_DebateBrain`).
+
+    ``n_disputes`` is retained for call-site compatibility but no longer drives
+    a reply count — the number of disputes now equals the number of audited
+    accounts, which the tests set via ``orch.audit_k``. Every audited account
+    opens a dispute that resolves ``upheld`` by the arbiter.
+    """
+    return _DebateBrain()
 
 
 # --------------------------------------------------------------------------- #
