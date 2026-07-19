@@ -116,6 +116,47 @@ class OSSClient:
         return table
 
 
+    # ------------------------------------------------------- OSS write path (shared)
+    def _bucket_for(self, bucket: Optional[str]) -> Any:
+        """Resolve an oss2 bucket handle. ``None`` -> the client's (Raw) bucket; a named
+        bucket (Staging/Mart) gets a cached handle sharing this client's auth+endpoint.
+
+        The FC RAM write policy grants PutObject/DeleteObject on staging+mart (WA-057);
+        this is the single write door the medallion writes (WA-090), the versioned model
+        binary (WA-082), and dispute-memory-OSS all go through -- build once, reuse.
+        """
+        if not bucket:
+            return self._bucket
+        handles = self.__dict__.setdefault("_bucket_handles", {})
+        if bucket not in handles:
+            import oss2  # lazy: only the multi-bucket write path needs a fresh handle
+            auth = oss2.Auth(
+                os.environ["OSS_ACCESS_KEY_ID"], os.environ["OSS_ACCESS_KEY_SECRET"]
+            )
+            handles[bucket] = oss2.Bucket(auth, os.environ["OSS_ENDPOINT"], bucket)
+        return handles[bucket]
+
+    def put_object(self, key: str, data: Any, *, bucket: Optional[str] = None) -> None:
+        """Write ``data`` (bytes or a file-like) to ``key`` in ``bucket`` (default: Raw).
+
+        Fail-loud: a write that can't complete raises (unlike the best-effort SLS audit
+        sink) -- a silently-dropped medallion/model write would be a correctness bug.
+        """
+        self._bucket_for(bucket).put_object(key, data)
+
+    def put_table(self, table: pa.Table, key: str, *, bucket: Optional[str] = None) -> int:
+        """Write a pyarrow Table as Parquet to ``key``; returns the number of bytes written.
+
+        The convenience used by the medallion writers (FeatureFrame -> Staging, payload ->
+        Mart) and any partitioned land (``{prefix}/dt=<YYYYMMDD>/loans.parquet``).
+        """
+        buf = BytesIO()
+        pq.write_table(table, buf)
+        payload = buf.getvalue()
+        self.put_object(key, payload, bucket=bucket)
+        return len(payload)
+
+
 def fetch_loans(lane: str = COLLECTIONS, *, limit: Optional[int] = None) -> pa.Table:
     """Module-level convenience: a fresh :class:`OSSClient` then ``fetch_loans``."""
     return OSSClient().fetch_loans(lane=lane, limit=limit)
