@@ -8,6 +8,7 @@ import { WorkList } from "@/components/WorkList";
 import { PortfolioHealth } from "@/components/PortfolioHealth";
 import { Alerts } from "@/components/Alerts";
 import { AgentDialogue } from "@/components/AgentDialogue";
+import { Escalations } from "@/components/Escalations";
 import { AccountDrawer } from "@/components/AccountDrawer";
 import { AuthScreen } from "@/components/AuthScreen";
 import styles from "./App.module.css";
@@ -174,6 +175,7 @@ function Dashboard() {
               </div>
             </div>
             <div className={styles.fullRow}>
+              <Escalations dialogue={dialogue} onJumpToDebate={jumpToDebate} />
               <AgentDialogue dialogue={dialogue} accounts={state.payload.work_list} />
             </div>
           </>

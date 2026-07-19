@@ -1,0 +1,120 @@
+/* G3 — Human Gate / escalations panel. Attention surface: what the society
+   deferred to the human, and how it was ruled. Token-driven, sharp-edged. */
+
+.panel {
+  margin-bottom: var(--sp-5);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--amber, var(--sev-moderate));
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
+}
+
+.header {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-3);
+  padding: var(--sp-3) var(--sp-4);
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-muted);
+}
+.headerText {
+  min-width: 0;
+}
+.title {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--text);
+}
+.subtitle {
+  margin: 2px 0 0;
+  font-size: 0.76rem;
+  color: var(--text-subtle);
+}
+.count {
+  margin-left: auto;
+  flex-shrink: 0;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--sev-moderate);
+  background: color-mix(in srgb, var(--sev-moderate) 14%, transparent);
+  border: 1px solid color-mix(in srgb, var(--sev-moderate) 40%, transparent);
+  padding: 2px 10px;
+  border-radius: var(--radius-sm);
+  white-space: nowrap;
+}
+
+.list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.item {
+  padding: var(--sp-3) var(--sp-4);
+  border-left: 3px solid var(--tone, var(--border-strong));
+  border-bottom: 1px solid var(--border);
+}
+.item:last-child {
+  border-bottom: none;
+}
+
+.itemHead {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  flex-wrap: wrap;
+}
+.loanId {
+  font-family: var(--font-mono);
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--text);
+}
+.clash {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  font-size: 0.82rem;
+  color: var(--text-muted);
+}
+.vs {
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-subtle);
+}
+.decision {
+  margin-left: auto;
+  font-size: 0.74rem;
+  font-weight: 700;
+  color: var(--tone, var(--text));
+  background: color-mix(in srgb, var(--tone, var(--text-subtle)) 14%, transparent);
+  border: 1px solid color-mix(in srgb, var(--tone, var(--text-subtle)) 40%, transparent);
+  padding: 2px 10px;
+  border-radius: var(--radius-sm);
+  white-space: nowrap;
+}
+.rationale {
+  margin: var(--sp-2) 0 0;
+  font-size: 0.8rem;
+  line-height: 1.45;
+  color: var(--text-muted);
+}
+.jump {
+  margin-top: var(--sp-2);
+  appearance: none;
+  border: none;
+  background: none;
+  padding: 0;
+  font: inherit;
+  font-size: 0.78rem;
+  color: var(--cn-red-600);
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.jump:hover {
+  color: var(--cn-red-700);
+}

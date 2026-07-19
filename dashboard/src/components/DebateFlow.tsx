@@ -2,6 +2,7 @@ import { Fragment, useState } from "react";
 
 import type { DisputeRecord, DisputeRound } from "@/types";
 import { useI18n, type TFunc } from "@/lib/i18n";
+import { confidenceTier, CONFIDENCE_TONE, CONFIDENCE_LABEL } from "@/lib/confidence";
 import styles from "./DebateFlow.module.css";
 
 /**
@@ -78,8 +79,9 @@ function toneStyle(tone: string) {
 }
 
 function FlowNode({
-  tone, title, badge, body, conf, model,
+  t, tone, title, badge, body, conf, model,
 }: {
+  t: TFunc;
   tone: string;
   title: string;
   badge?: string;
@@ -87,6 +89,7 @@ function FlowNode({
   conf?: number | null;
   model?: string | null;
 }) {
+  const tier = confidenceTier(conf);
   return (
     <div className={styles.node} style={toneStyle(tone)}>
       <div className={styles.nodeHead}>
@@ -97,7 +100,19 @@ function FlowNode({
       {body ? <p className={styles.nodeBody}>{body}</p> : null}
       {conf != null || model ? (
         <div className={styles.nodeMeta}>
-          {conf != null ? <span>conf {Math.round(conf * 100)}%</span> : null}
+          {conf != null ? (
+            <span className={styles.confMeta}>
+              {tier ? (
+                <span
+                  className={styles.confDot}
+                  style={{ background: CONFIDENCE_TONE[tier] }}
+                  title={t(CONFIDENCE_LABEL[tier])}
+                  aria-label={t(CONFIDENCE_LABEL[tier])}
+                />
+              ) : null}
+              conf {Math.round(conf * 100)}%
+            </span>
+          ) : null}
           {model ? <span className={styles.nodeModel}>{model}</span> : null}
         </div>
       ) : null}
@@ -165,6 +180,7 @@ export function DebateFlow({ disputes }: { disputes: DisputeRecord[] }) {
       {/* Layer 2 — the selected dispute's debate branch. */}
       <div className={styles.branch}>
         <FlowNode
+          t={t}
           tone="var(--sev-info)"
           title={speakerLabel(t, "risk_model")}
           badge={d.model_band}
@@ -174,6 +190,7 @@ export function DebateFlow({ disputes }: { disputes: DisputeRecord[] }) {
         {d.rounds.map((r, i) => (
           <Fragment key={r.round_no}>
             <FlowNode
+              t={t}
               tone={speakerTone(r.speaker)}
               title={speakerLabel(t, r.speaker)}
               badge={`R${r.round_no}`}

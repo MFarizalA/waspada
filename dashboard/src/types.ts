@@ -43,6 +43,14 @@ export interface ScoredAccount {
   final_band?: string;
   /** Why the society moved the band (present only when final_band ≠ score_band). */
   override_reason?: string;
+
+  /**
+   * G1: the model's single largest signed driver behind this score, e.g.
+   * `"dti=31.20 ↑"` (↑ pushed toward default, ↓ toward safe). Additive optional —
+   * present only when the run supplied the fitted model + features (WA-050
+   * `explain`); absent on older payloads. Shown as a "why this row" chip.
+   */
+  top_driver?: string;
 }
 
 /** Portfolio-level cross-sectional aggregates (PortfolioHealth TypedDict). */

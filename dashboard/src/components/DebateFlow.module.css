@@ -143,6 +143,18 @@
 .nodeModel {
   font-family: var(--font-mono);
 }
+/* G2 — confidence tier (green/amber/red) beside the numeric confidence */
+.confMeta {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.confDot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
 
 /* --- edges (vertical connector + pill label) ------------------------------- */
 .edge {

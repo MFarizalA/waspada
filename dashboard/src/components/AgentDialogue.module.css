@@ -360,6 +360,12 @@
   font-variant-numeric: tabular-nums;
 }
 
+.confTier {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
 .confidenceTrack {
   display: inline-block;
   width: 48px;
