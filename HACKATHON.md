@@ -438,10 +438,15 @@ removed · README/HACKATHON rewritten · AgentDialogue panel + types + fixture.
   ruling (max). **Cut line:** if time runs out, skip the arbiter — an upheld
   rebuttal escalates straight to the human gate. Still a complete story.
 - **WA-017** (Bimo · P1) — efficiency benchmark + committed JSON.
-- **WA-018** (owner + Bimo · P0) — Function Compute deploy: AMD64 build → ACR
-  push → FC custom container (CAPort **8080**, don't change the Dockerfile) →
-  HTTP trigger → public `*.fcapp.run` URL. Needs the owner's Alibaba account +
-  `DASHSCOPE_API_KEY` + OSS bucket/AccessKey.
+- **WA-018** (owner + Bimo · P0) — ✅ **SHIPPED 2026-07-18.** Function Compute
+  deploy: AMD64 build → ACR push → FC custom container (CAPort **8080**) →
+  HTTP trigger → public URL:
+  `https://waspadaprod-api-vouqzqqkiu.ap-southeast-1.fcapp.run`
+  (`/api/health` → `{"status":"ok"}`). Note: the `*.fcapp.run` test domain
+  forces `Content-Disposition: attachment` on `text/html` (platform anti-abuse),
+  so the dashboard `/` route downloads instead of rendering — demo the UI
+  locally against the deployed API; all `/api/*` routes serve inline. Custom
+  domain fix = WA-067 (post-hackathon).
 - **WA-019** (Kirana · P1) — polish AgentDialogue (first cut is in), wire a
   "Run live (Qwen)" action against `/api/run?brain=qwen` with a loading state.
 - **WA-020** (Reza · P1) — QA the debate: scripted-`MockLLM` dispute tests
