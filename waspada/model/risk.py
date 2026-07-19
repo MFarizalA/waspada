@@ -314,7 +314,7 @@ def train(
         _calibrated_proba({"pipeline": pipeline, "calibrator": calibrator}, X)
     )
 
-    return {
+    artifact = {
         "pipeline": pipeline,
         "calibrator": calibrator,  # WA-094: None when calibration was skipped
         "feature_columns": list(FEATURE_COLUMNS),
@@ -324,6 +324,14 @@ def train(
         "band_edges": band_edges,
         "trained_at": dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z"),
     }
+    # WA-082: stamp a deterministic version id so every run can cite the exact
+    # model that scored it (the registry recomputes the same id on publish/load).
+    try:
+        from .registry import model_id as _model_id
+        artifact["model_id"] = _model_id(artifact)
+    except Exception:  # pragma: no cover - defensive; id is audit metadata
+        pass
+    return artifact
 
 
 def _reference_band_edges(probs: np.ndarray) -> Optional[List[float]]:

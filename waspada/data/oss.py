@@ -218,6 +218,15 @@ class OSSClient:
         """
         self._bucket_for(bucket).put_object(key, data)
 
+    def get_bytes(self, key: str, *, bucket: Optional[str] = None) -> bytes:
+        """Read ``key`` from ``bucket`` (default: Raw) as raw bytes.
+
+        The read counterpart of :meth:`put_object` — the WA-082 model registry reads
+        the pickled model + ``latest.json`` manifest through this. Raises on a missing
+        key so the caller can fall back (train per-run).
+        """
+        return self._bucket_for(bucket).get_object(key).read()
+
     def put_table(self, table: pa.Table, key: str, *, bucket: Optional[str] = None) -> int:
         """Write a pyarrow Table as Parquet to ``key``; returns the number of bytes written.
 

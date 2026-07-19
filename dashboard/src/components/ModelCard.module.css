@@ -12,11 +12,14 @@
   gap: var(--sp-2);
   margin-bottom: var(--sp-3);
 }
+.headText { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
 .title {
   margin: 0;
   font-size: 0.95rem;
   font-weight: 700;
 }
+.modelId { font-family: var(--font-mono); font-size: 0.66rem; color: var(--text-subtle);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .calib {
   margin-left: auto;
   font-size: 0.66rem;

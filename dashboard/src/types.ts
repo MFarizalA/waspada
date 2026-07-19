@@ -121,6 +121,7 @@ export interface DisputeRecord {
  * the run scored with a fitted model; older payloads omit it.
  */
 export interface ModelCard {
+  model_id?: string | null;
   auc?: number | null;
   brier_raw?: number | null;
   brier_calibrated?: number | null;

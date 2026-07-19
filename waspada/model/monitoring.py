@@ -165,6 +165,7 @@ def build_monitor_record(
     split = model.get("split", {}) if isinstance(model, dict) else {}
 
     record: Dict[str, object] = {
+        "model_id": model.get("model_id") if isinstance(model, dict) else None,  # WA-082 lineage
         "auc": metrics.get("auc"),
         "brier_raw": metrics.get("brier_raw"),
         "brier_calibrated": metrics.get("brier_calibrated"),

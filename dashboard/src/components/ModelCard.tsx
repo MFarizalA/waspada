@@ -26,7 +26,12 @@ export function ModelCard({ card }: { card: ModelCardData | undefined }) {
   return (
     <section className={styles.card} aria-labelledby="modelcard-heading">
       <header className={styles.head}>
-        <h2 id="modelcard-heading" className={styles.title}>{t("mc.title")}</h2>
+        <div className={styles.headText}>
+          <h2 id="modelcard-heading" className={styles.title}>{t("mc.title")}</h2>
+          {card.model_id ? (
+            <span className={styles.modelId} title={t("mc.modelId")}>{card.model_id}</span>
+          ) : null}
+        </div>
         <span
           className={styles.calib}
           data-on={card.calibrated ? "1" : undefined}

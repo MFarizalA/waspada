@@ -352,6 +352,7 @@
     }
   ],
   "model_card": {
+    "model_id": "pd-lr-9c1f4a7b2e08",
     "auc": 0.883,
     "brier_raw": 0.171,
     "brier_calibrated": 0.142,
