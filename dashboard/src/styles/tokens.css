@@ -77,10 +77,12 @@
   --chart-bar-trend:  #003cb3;
   --chart-track:      #e3e8f0;
 
-  /* Shape — crisp/tight, TDesign-like */
-  --radius-sm: 4px;
-  --radius:    8px;
-  --radius-lg: 12px;
+  /* Shape — SHARP. The 2026 fintech register: hard rectangles, precision over
+     softness. Chips/badges square off via --radius-sm; only genuinely circular
+     elements (dots, spinners) stay round. */
+  --radius-sm: 0;
+  --radius:    2px;
+  --radius-lg: 4px;
 
   /* Type — clean humanist sans throughout (Tencent Cloud drops serif display).
      CJK families appended so 简体中文 renders natively. */
@@ -150,6 +152,9 @@ body {
   line-height: 1.55;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
+  /* Finance rule: numbers are the product. Tabular figures app-wide so every
+     p_default / EL / rate column aligns on the decimal (typography research). */
+  font-variant-numeric: tabular-nums;
 }
 
 /* Chinese runs a touch looser vertically for legibility. */

@@ -36,7 +36,7 @@
   color: var(--text-muted);
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 999px;
+  border-radius: var(--radius-sm);
   white-space: nowrap;
 }
 .spineNode[data-debate="1"] {
@@ -64,7 +64,7 @@
   color: var(--text-muted);
   background: var(--surface);
   border: 1px solid var(--border-strong);
-  border-radius: 999px;
+  border-radius: var(--radius-sm);
   cursor: pointer;
   transition: background 0.12s, color 0.12s, border-color 0.12s;
 }
@@ -123,7 +123,7 @@
   color: var(--tone, var(--text-muted));
   background: color-mix(in srgb, var(--tone, var(--text-subtle)) 16%, transparent);
   padding: 1px 8px;
-  border-radius: 999px;
+  border-radius: var(--radius-sm);
   white-space: nowrap;
 }
 .nodeBody {
@@ -165,7 +165,7 @@
   color: var(--text-muted);
   background: var(--surface);
   border: 1px solid var(--border-strong);
-  border-radius: 999px;
+  border-radius: var(--radius-sm);
   padding: 2px 12px;
   text-transform: capitalize;
 }
@@ -185,7 +185,7 @@
   padding: var(--sp-2) var(--sp-4);
   background: color-mix(in srgb, var(--tone, var(--text-subtle)) 14%, var(--surface));
   border: 1px solid var(--tone, var(--border-strong));
-  border-radius: 999px;
+  border-radius: var(--radius-sm);
 }
 .resTitle {
   font-size: 0.85rem;

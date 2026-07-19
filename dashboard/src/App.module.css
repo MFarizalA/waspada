@@ -46,7 +46,7 @@
   margin: 0;
   font-family: var(--font-display);
   font-size: 1.28rem;
-  font-weight: 700;
+  font-weight: 750;
   letter-spacing: 0.04em;
   color: var(--on-brand);
   line-height: 1.1;
@@ -122,7 +122,7 @@
   color: var(--on-brand);
   padding: 2px var(--sp-2);
   border: 1px solid var(--cn-gold-400);
-  border-radius: 999px;
+  border-radius: var(--radius-sm);
   background: rgba(0, 0, 0, 0.15);
   white-space: nowrap;
 }
@@ -221,7 +221,7 @@
   gap: var(--sp-2);
   padding: var(--sp-2) var(--sp-4);
   border: 1px solid var(--cn-red-600);
-  border-radius: 999px;
+  border-radius: var(--radius-sm);
   background: var(--surface-tint);
   color: var(--cn-red-700);
   font-size: 0.875rem;
