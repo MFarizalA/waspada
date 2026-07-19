@@ -58,8 +58,10 @@ holding the gate at both layers.*
   what exists: function calling, MCP, JSON mode, tiering, streaming.
 
 **Innovation & AI Creativity (architecture quality):**
-- Adversarial **debate protocol with a deterministic cost ceiling** (≤ K×3 LLM
-  calls, K=8 default) — negotiation without unbounded agent chatter.
+- Adversarial **debate protocol with a deterministic cost ceiling** (≤ K×3
+  debate *rounds*, K=8 default; the challenge round is itself a bounded native
+  tool-calling loop, so ≤ K×6 LLM calls worst case) — negotiation without
+  unbounded agent chatter.
 - **Evidence-grounded claims** — a debate turn must cite feature values /
   portfolio stats (pulled via MCP) or it's discounted; claims are data, not vibes.
 - `DISPUTED` as a **first-class pipeline state** (alongside ok/blocked/error) —
@@ -71,8 +73,9 @@ holding the gate at both layers.*
 **Problem Value & Impact:** real multifinance collections pain (stale manual
 work-lists → NPL losses); the society pattern generalizes to any
 score-then-contest decision (origination lane already architected). **Alibaba
-Cloud native — 4 services:** OSS (portfolio store) + Function Compute (backend)
-+ Qwen Cloud (reasoning) + Simple Log Service (queryable audit stream of every
+Cloud native — 5 services:** OSS (portfolio store) + Function Compute (backend)
++ ApsaraDB RDS MySQL (auth) + Container Registry/ACR (image builds) + Qwen Cloud
+(reasoning) + Simple Log Service (queryable audit stream of every
 agent turn — the "show me the audit trail" answer for a regulated lender).
 
 **Presentation & Documentation:** the dashboard's **Agent Society panel**
@@ -178,9 +181,10 @@ sequenceDiagram
     end
 ```
 
-- **Cost ceiling is deterministic:** ≤ K×3 calls worst case (K challenge + at
-  most K rebuttals + at most K rulings); typical runs far less. No open-ended
-  agent chatter.
+- **Cost ceiling is deterministic:** ≤ K×3 debate *rounds* (K challenge + at
+  most K rebuttals + at most K rulings). Each challenge is a bounded native
+  tool-calling loop (≤4 turns), so the worst-case LLM-call count is ≤ K×6;
+  typical runs far less. No open-ended agent chatter.
 - Every LLM turn returns **JSON-mode** output parsed into a `DisputeRound`;
   parse failure at any round degrades safely (see skill cards).
 - The pipeline result while a dispute is live is `Status.DISPUTED`; the
@@ -265,7 +269,7 @@ flowchart TB
         ORCH -.-> DATA
         DA --> RM --> DEBATE --> INS
         DA -. "backs evidence base" .-> MCP
-        SK -- "MCP (stdio)" --> MCP
+        SK -- "MCP (in-process; stdio verified out-of-band)" --> MCP
     end
 
     subgraph QC["Qwen Cloud (dashscope-intl · compatible-mode/v1)"]
