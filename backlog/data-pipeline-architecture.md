@@ -22,7 +22,7 @@ the dead Staging/Mart tiers). Everything is $0-runtime and Alibaba-native.
 ```
                        ┌──────────────── PRODUCER (batch, scheduled) ────────────────┐
  SOURCE  ──extract──▶  TRANSFORM→RawLoans ──validate──▶  LAND: OSS Raw (Bronze)
- (LC CSV /            (map source schema      (frozen        loans/dt=<ddMMYY>-<n>/loans.parquet
+ (LC CSV /            (map source schema      (frozen        loans/dt=<YYYYMMDD>/loans.parquet
   SDV synthetic /      → RawLoans)             contract)     via dlt: merge on loan_id + _dlt_loads lineage
   Bondora / DB)                                             │
                        └───────────────────────────────────┼──── FC Time Trigger (daily) ─────────┘
@@ -69,7 +69,7 @@ Downstream (features → score → debate) is **source-agnostic** because it onl
 
 ## 4. Ingestion — source → OSS (producer)
 - **Transform + validate:** map source schema → `RawLoans`; `validate_table(RawLoans)` is the gate.
-- **Land partitioned:** write `loans/dt=<ddMMYY>-<n>/loans.parquet` (owner convention, WA-088). Each
+- **Land partitioned:** write `loans/dt=<YYYYMMDD>/loans.parquet` (owner convention, WA-088). Each
   batch is a new immutable partition (auditable, backfillable, rollback = point at the prior partition).
 - **dlt (WA-083):** the load runs through dlt — `merge` dedup on `loan_id`, schema contract (freeze),
   `_dlt_loads` lineage (freshness + rows-loaded the Data Engineer can cite). Incremental cursors load
