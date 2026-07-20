@@ -23,7 +23,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any, Callable, Dict, Optional
 
-from fastapi import Depends, FastAPI
+from fastapi import Depends, FastAPI, Request
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 import uvicorn
@@ -138,14 +138,17 @@ async def health():
 def _build_orchestrator(
     brain: str = "mock",
     *,
+    policy: Optional[Any] = None,
     on_round_complete: Optional[Callable[[Any, Any], None]] = None,
     on_dispute_resolved: Optional[Callable[[Any], None]] = None,
 ) -> Orchestrator:
     """Build a real-data orchestrator with auto-approve gate.
 
     ``brain`` selects the reasoning LLM (``mock`` default; ``qwen`` opt-in).
-    The streaming hooks are passed straight through to ``Orchestrator``; when
-    None the orchestrator behaves exactly as before.
+    ``policy`` (WA-095) is a per-run :class:`RiskPolicy` submitted by the human's
+    parameter matrix — when given it governs the run (and drives top_n, so we
+    don't override it). Absent it, the committed ``WASPADA_POLICY_FILE`` is loaded
+    and top_n falls back to the API default (20).
 
     The data-engineer agent's default ``fetch`` tool already resolves to
     ``waspada.data.oss.fetch_loans``; no tool injection is required.
@@ -155,12 +158,15 @@ def _build_orchestrator(
     from waspada.policy import load_policy
 
     llm = get_llm(brain) if brain and brain != "mock" else MockLLM()
+    per_run = policy is not None
     orch = Orchestrator(
         llm,
         as_of=dt.date(2024, 12, 1),
-        top_n=20,
+        # A per-run matrix drives top_n; else keep the API default. (Precedence in
+        # Orchestrator: explicit arg > policy > default.)
+        top_n=None if per_run else 20,
         memory_backend=get_memory_backend(),
-        policy=load_policy(os.environ.get("WASPADA_POLICY_FILE")),
+        policy=policy if per_run else load_policy(os.environ.get("WASPADA_POLICY_FILE")),
         on_round_complete=on_round_complete,
         on_dispute_resolved=on_dispute_resolved,
     )
@@ -230,7 +236,7 @@ def _brain_error(brain: str, exc: Exception) -> JSONResponse:
 
 
 @app.post("/api/run")
-async def run_pipeline(brain: str = "mock", _user: dict = Depends(current_user)):
+async def run_pipeline(request: Request, brain: str = "mock", _user: dict = Depends(current_user)):
     """Run the full agent pipeline on the real OSS RawLoans snapshot.
 
     Returns the DashboardPayload + the plain-language analyst report.
@@ -238,14 +244,30 @@ async def run_pipeline(brain: str = "mock", _user: dict = Depends(current_user))
     for the risk-auditor negotiation step (``mock`` default = fast/free/
     deterministic; ``qwen`` = real Qwen calls via DashScope, opt-in only).
 
+    WA-095: the request body may carry ``{"policy": {...}}`` — the human's
+    parameter matrix — which governs THIS run (band→action, alert thresholds,
+    dispute_gap, arbiter_confidence, audit_k, top_n). An invalid matrix is a
+    clean **400**, never a 500.
+
     If OSS is unreachable at startup, the app boots but ``/api/run`` returns
     **503 with a clear detail** rather than falling back to synthetic data.
-    If ``brain=qwen`` is selected but Qwen can't be built/reached (no
-    ``DASHSCOPE_API_KEY``, bad key, network down), we return a **503 with a
-    clear message** rather than a bare 500.
     """
     if not getattr(app.state, "oss_available", True) is True:
         return _data_source_unavailable()
+
+    # WA-095: parse an optional per-run parameter matrix from the body.
+    policy = None
+    try:
+        body = await request.json()
+    except Exception:
+        body = None
+    if isinstance(body, dict) and body.get("policy") is not None:
+        from waspada.policy import policy_from_dict
+
+        try:
+            policy = policy_from_dict(body["policy"])
+        except ValueError as exc:
+            return JSONResponse({"error": f"Invalid parameter matrix: {exc}"}, status_code=400)
 
     ctx = AgentContext(
         lane="collections",
@@ -253,7 +275,7 @@ async def run_pipeline(brain: str = "mock", _user: dict = Depends(current_user))
         meta={"source": "oss-real", "run_id": uuid.uuid4().hex[:12]},
     )
     try:
-        orch = _build_orchestrator(brain)
+        orch = _build_orchestrator(brain, policy=policy)
         orch.plan("collections")
         result = orch.run(ctx)
     except Exception as exc:  # brain unbuildable / unreachable → clean 503, not a 500

@@ -10,6 +10,7 @@ import { Alerts } from "@/components/Alerts";
 import { AgentDialogue } from "@/components/AgentDialogue";
 import { Escalations } from "@/components/Escalations";
 import { ModelCard } from "@/components/ModelCard";
+import { ParameterMatrix } from "@/components/ParameterMatrix";
 import { AccountDrawer } from "@/components/AccountDrawer";
 import { AuthScreen } from "@/components/AuthScreen";
 import styles from "./App.module.css";
@@ -163,6 +164,7 @@ function Dashboard() {
             )}
             <div className={styles.grid}>
               <div className={styles.colMain}>
+                <ParameterMatrix />
                 <WorkList
                   accounts={state.payload.work_list}
                   contestedLoanIds={contestedIds}
