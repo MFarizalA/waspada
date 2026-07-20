@@ -18,34 +18,52 @@ Have the dashboard loaded. If doing the live debate, be ready to trigger **one**
 Show the **EWS dashboard**: the work-list (riskiest accounts + recommended action), portfolio
 health (NPL ratio, worst vintage), and the cohort alerts. Note the bilingual EN/中文 toggle.
 
-### 0:25–1:30 · The society debate  ← THE MONEY SHOT
+### 0:25–1:20 · The society debate  ← THE MONEY SHOT
 > "But a single score has no second opinion. So the agents argue about the riskiest accounts."
 
-Trigger the live run (**Run live / `brain=qwen`**). On the **Agent Society panel**, let the debate stream:
+Scroll to the **Agent Society panel**. Point at the **debate flow-chart** (the node graph): the
+society spine, then the selected dispute's branch lighting up round by round.
 - **Risk Auditor** challenges a score (cites feature evidence via MCP).
-- **Actuary** defends or concedes (its classical-ML score + the model's own drivers).
+- **Actuary** defends or concedes — from the model's *own* signed drivers, not a guess.
 - **Credit Arbiter** rules when they disagree.
-> "Each claim must cite evidence — pulled through a real MCP tool interface. The agents run on
-> **Qwen Cloud**, tiered by cognitive load: flash for triage, plus for analysis, max for the ruling."
+> "Each claim cites evidence through a real MCP tool interface. The confidence dots — green, amber,
+> red — show how sure each agent is. The agents run on **Qwen Cloud**, tiered by cognitive load:
+> flash to triage, plus to analyze, max to rule."
 
-### 1:30–2:15 · Governance — the debate is load-bearing
-Show a **DISPUTED** account and the **human approval gate**.
-> "Disagreement is a first-class state. A ruling doesn't just change the transcript — it changes the
-> work-list: the account's band and its recommended action update. And governance is asymmetric —
-> raising risk auto-applies, but *cancelling* a collector call needs human approval."
+*(Optional live money-shot: trigger **one** `brain=qwen` run and let the flow-chart animate as the
+SSE rounds arrive. Otherwise the committed fixture shows a real completed debate — same UI.)*
 
-### 2:15–3:00 · Real data + Alibaba + efficiency
-> "This runs on **real Lending Club loan data** in Alibaba **OSS**, validated and loaded through a
-> **dlt** pipeline with lineage the Data Engineer cites as evidence, scored by a leakage-guarded
-> sklearn model — all on **Function Compute**."
+### 1:20–2:00 · Governance — the debate is load-bearing, and a human is in control
+> "Disagreement is a first-class state — and the human governs it."
 
-Close on the efficiency line + the live URL:
-> "The society scores 100% of the book with a classical model and spends LLM budget only on the
-> contested few — a measurable efficiency gain over a one-call-per-account single agent. It's live
-> at **app.waspada.xyz**."
+Three quick beats:
+- **The debate changes the decision.** Show a **DISPUTED** row: the ruling updates the band *and*
+  the recommended action — not just the transcript. Governance is asymmetric: raising risk
+  auto-applies; *cancelling* a collector call needs the **human gate** (the Human Gate panel).
+- **The Model Card** (side panel): AUC, a *calibrated* default probability, the served band-mix bar,
+  a drift flag, and the exact model version (`pd-lr-…`) that scored the run.
+- **The Parameter Matrix:** edit the band→action grid or a knob (dispute gap, audit K), hit **Run
+  with this matrix** — the work-list and debate obey it, stamped with a `policy_id`.
+> "A calibrated, version-tracked model, drift-monitored, under a policy the analyst sets. The human
+> doesn't just approve one call — they set the rules the whole society plays by."
+
+### 2:00–2:35 · One engine, two lanes
+> "The same society runs a second product lane — with zero architecture change."
+
+Show (or narrate over the CLI) the **Origination** lane: instead of call/watch/auto-cure, the
+society decides **approve / refer / reject** on new applications, with its own application-time
+model — the debate, gate, and dashboard reused verbatim.
+
+### 2:35–3:00 · Real data + Alibaba + efficiency
+> "It runs on **real Lending Club loan data** in Alibaba **OSS**, loaded through a **dlt** pipeline
+> with lineage the Data Engineer cites, scored by a leakage-guarded sklearn model — all on
+> **Function Compute**. The society scores 100% of the book classically and spends LLM budget only on
+> the contested few — a measurable efficiency gain over one-call-per-account. Live at
+> **app.waspada.xyz**."
 
 ---
 
-**Shot list (if editing):** dashboard → society panel mid-debate → a dispute + gate → OSS/FC console
-flash → the live URL. **Fallback if the live Qwen run is flaky:** the dashboard ships a committed
-fixture that shows a real completed debate transcript — record that instead; it's the same UI.
+**Shot list (if editing):** dashboard (blue theme) → debate flow-chart mid-argument → a dispute +
+Human Gate → Model Card → Parameter Matrix run → origination (approve/refer/reject) → OSS/FC console
+flash → live URL. **Fallback if live Qwen is flaky:** the committed fixture shows a real completed
+debate + a populated model card — record that; it's the same UI, zero risk.
