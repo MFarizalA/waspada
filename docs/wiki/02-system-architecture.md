@@ -64,8 +64,16 @@ the flow between them is code.
 ## 4. Two lanes
 
 - **Collections** (built): the early-warning / work-list lane this wiki documents.
-- **Origination** (designed, `WA-033…039`): a second lane (approve/refer/reject at
-  application time) sharing the same harness + contract. Post-hackathon scope.
+- **Origination** (built, `WA-033…039`): the second lane — approve/refer/reject
+  new applications on the **same engine and society**. Its own application-time
+  contract (`RawApplications` → `ApplicationFeatureFrame` → `ScoredApplications`),
+  feature recipe, out-of-time application-cohort model split, and an
+  approve/refer/reject decision matrix the debate's rulings actually move — while
+  the orchestrator, debate, gate, and dashboard machinery run **verbatim** (an id
+  alias keeps them lane-agnostic). `python -m waspada.agents --lane origination`
+  runs the whole society end-to-end offline. Label honesty: the source has funded
+  loans only, so the label is *funded-then-defaulted* — no reject-inference is
+  claimed.
 
 ## 5. The API layer
 
