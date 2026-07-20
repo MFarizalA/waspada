@@ -133,10 +133,45 @@ function Edge({ label, sub }: { label: string; sub?: string }) {
   );
 }
 
-export function DebateFlow({ disputes }: { disputes: DisputeRecord[] }) {
+/** The agent-society spine (Layer 1). Extracted so it can render on its own
+ *  during the connecting/convening state, before any dispute has streamed in. */
+function Spine({ t }: { t: TFunc }) {
+  return (
+    <div className={styles.spine} role="img" aria-label="Agent society pipeline">
+      {SPINE.map((n, i) => (
+        <Fragment key={n.key}>
+          <span className={styles.spineNode} data-debate={n.debate ? "1" : undefined}>
+            {speakerLabel(t, n.key)}
+          </span>
+          {i < SPINE.length - 1 ? (
+            <span className={styles.spineArrow} aria-hidden="true">›</span>
+          ) : null}
+        </Fragment>
+      ))}
+    </div>
+  );
+}
+
+export function DebateFlow({
+  disputes,
+  pending = false,
+}: {
+  disputes: DisputeRecord[];
+  /** Show the spine + a "convening" hint while the stream connects, before the
+   *  first round lands — replaces a blank loading spinner with real structure. */
+  pending?: boolean;
+}) {
   const { t } = useI18n();
   const [sel, setSel] = useState(0);
-  if (!disputes || disputes.length === 0) return null;
+  if (!disputes || disputes.length === 0) {
+    if (!pending) return null;
+    return (
+      <div className={styles.flow} data-pending="1">
+        <Spine t={t} />
+        <p className={styles.convening}>{t("flow.convening")}</p>
+      </div>
+    );
+  }
 
   const idx = Math.min(sel, disputes.length - 1);
   const d = disputes[idx];
@@ -145,18 +180,7 @@ export function DebateFlow({ disputes }: { disputes: DisputeRecord[] }) {
   return (
     <div className={styles.flow}>
       {/* Layer 1 — the agent society spine (always shown). */}
-      <div className={styles.spine} role="img" aria-label="Agent society pipeline">
-        {SPINE.map((n, i) => (
-          <Fragment key={n.key}>
-            <span className={styles.spineNode} data-debate={n.debate ? "1" : undefined}>
-              {speakerLabel(t, n.key)}
-            </span>
-            {i < SPINE.length - 1 ? (
-              <span className={styles.spineArrow} aria-hidden="true">›</span>
-            ) : null}
-          </Fragment>
-        ))}
-      </div>
+      <Spine t={t} />
 
       {/* Dispute selector when more than one account is contested. */}
       {disputes.length > 1 ? (
