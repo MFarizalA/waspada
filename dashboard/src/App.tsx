@@ -142,7 +142,10 @@ function Dashboard() {
 
         {state.status === "ready" && (() => {
           const dialogue = state.payload.agent_dialogue ?? [];
-          const contestedIds = new Set(dialogue.map((d) => d.loan_id));
+          // Login starts clean: no contested highlights / gate until the analyst
+          // runs the society. The fixture debate is kept and offered as a one-tap
+          // "sample run" inside the debate panel (demo fallback), not auto-shown.
+          const contestedIds = new Set<string>();
           const jumpToDebate = (loanId: string) => {
             document.getElementById(`debate-${loanId}`)?.scrollIntoView({
               behavior: "smooth",
@@ -188,7 +191,7 @@ function Dashboard() {
               </div>
             </div>
             <div className={styles.fullRow}>
-              <Escalations dialogue={dialogue} onJumpToDebate={jumpToDebate} />
+              <Escalations dialogue={[]} onJumpToDebate={jumpToDebate} />
               <AgentDialogue dialogue={dialogue} accounts={state.payload.work_list} />
             </div>
           </>

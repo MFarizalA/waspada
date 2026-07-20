@@ -144,6 +144,119 @@
   align-self: flex-start;
 }
 
+/* --- idle state: society spine + the primary "Watch the debate" CTA --------- */
+.idle {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--sp-3);
+}
+.sampleBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  font-size: 0.9rem;
+  font-weight: 700;
+  padding: 10px var(--sp-4);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--pasar-teal-600);
+  background: var(--pasar-teal-600);
+  color: #fff;
+  cursor: pointer;
+  transition: background 0.12s ease;
+}
+.sampleBtn:hover {
+  background: var(--pasar-teal-700);
+}
+
+/* --- transport controls: the human drives the reveal ----------------------- */
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-2) 0 var(--sp-3);
+}
+.ctrlBtn {
+  font-size: 0.8rem;
+  font-weight: 600;
+  padding: 5px var(--sp-3);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-strong);
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+  transition: background 0.12s ease, border-color 0.12s ease;
+}
+.ctrlBtn:hover:not(:disabled) {
+  border-color: var(--pasar-teal-600);
+  color: var(--pasar-teal-700);
+}
+.ctrlBtn[data-primary="1"] {
+  border-color: var(--pasar-teal-600);
+  background: var(--pasar-teal-600);
+  color: #fff;
+}
+.ctrlBtn[data-primary="1"]:hover:not(:disabled) {
+  background: var(--pasar-teal-700);
+  color: #fff;
+}
+.ctrlBtn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+/* segmented speed toggle */
+.speed {
+  display: inline-flex;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+.speed button {
+  font-size: 0.76rem;
+  font-weight: 600;
+  padding: 5px var(--sp-2);
+  border: none;
+  background: var(--surface);
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.speed button + button {
+  border-left: 1px solid var(--border-strong);
+}
+.speed button[data-on="1"] {
+  background: var(--pasar-teal-50);
+  color: var(--pasar-teal-700);
+}
+.progress {
+  margin-left: auto;
+  font-size: 0.74rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-subtle);
+}
+
+/* --- "…is thinking" beat between reveals ----------------------------------- */
+.thinking {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  margin-top: var(--sp-2);
+  font-size: 0.82rem;
+  font-weight: 500;
+  color: var(--text-muted);
+  padding: var(--sp-2) var(--sp-3);
+  background: var(--surface-muted);
+  border-radius: var(--radius-sm);
+  align-self: flex-start;
+}
+.thinkingDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--pasar-teal-600);
+  animation: agent-pulse 1.2s ease-in-out infinite;
+}
+
 @keyframes agent-spin {
   to {
     transform: rotate(360deg);

@@ -1,8 +1,9 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 
 import type { DisputeRecord, DisputeRound, ScoredAccount } from "@/types";
 import { useLiveRun } from "@/lib/useLiveRun";
 import { useLiveDebateStream } from "@/lib/useLiveDebateStream";
+import { usePacedReveal } from "@/lib/usePacedReveal";
 import { useI18n, type TFunc } from "@/lib/i18n";
 import { riskLevelColor, riskLevelLabel, riskLevelDisplay } from "@/lib/riskLevel";
 import { confidenceTier, CONFIDENCE_TONE, CONFIDENCE_LABEL } from "@/lib/confidence";
@@ -95,7 +96,9 @@ function Round({ round }: { round: DisputeRound }) {
 
 function DisputeCard({ dispute, pDefault }: { dispute: DisputeRecord; pDefault?: number }) {
   const { t } = useI18n();
-  const resColor = RESOLUTION_COLOR[dispute.resolution];
+  // While the reveal is still unfolding this dispute, don't spoil its verdict.
+  const pending = dispute.pendingResolution === true;
+  const resColor = pending ? "var(--text-subtle)" : RESOLUTION_COLOR[dispute.resolution];
   return (
     <li
       id={`debate-${dispute.loan_id}`}
@@ -123,7 +126,7 @@ function DisputeCard({ dispute, pDefault }: { dispute: DisputeRecord; pDefault?:
           </span>
         </span>
         <span className="badge" style={{ background: resColor, color: "#fff" }}>
-          {t(`res.${dispute.resolution}`)}
+          {pending ? t("flow.deliberating") : t(`res.${dispute.resolution}`)}
         </span>
       </div>
       <ol className={styles.rounds} role="list">
@@ -131,12 +134,14 @@ function DisputeCard({ dispute, pDefault }: { dispute: DisputeRecord; pDefault?:
           <Round key={round.round_no} round={round} />
         ))}
       </ol>
-      <p className={styles.rationale}>
-        <span className={styles.rationaleLabel}>
-          {t("ad.resolvedBy", { resolver: speakerLabel(t, dispute.resolved_by) })}
-        </span>{" "}
-        {dispute.rationale}
-      </p>
+      {!pending && (
+        <p className={styles.rationale}>
+          <span className={styles.rationaleLabel}>
+            {t("ad.resolvedBy", { resolver: speakerLabel(t, dispute.resolved_by) })}
+          </span>{" "}
+          {dispute.rationale}
+        </p>
+      )}
     </li>
   );
 }
@@ -163,9 +168,13 @@ export function AgentDialogue({ dialogue, accounts = [] }: AgentDialogueProps) {
   const stream = useLiveDebateStream();
   const isLive = state.status === "ok";
   const isStreaming = stream.state.status === "live" || stream.state.status === "connecting";
+  // The debate starts idle on login — the analyst runs the society, and only
+  // then does the transcript appear. The committed fixture is offered as an
+  // explicit "sample run" (demo fallback) rather than shown as a done debate.
+  const [showSample, setShowSample] = useState(false);
 
   // The stream takes precedence when active — it's the most "live" view. Then a
-  // completed Run-live run. Then the fixture.
+  // completed Run-live run. Then the fixture (only once revealed).
   let effective: DisputeRecord[];
   let active: "fixture" | "run" | "stream";
   if (isStreaming) {
@@ -176,10 +185,19 @@ export function AgentDialogue({ dialogue, accounts = [] }: AgentDialogueProps) {
     effective = state.payload.agent_dialogue ?? [];
     active = "run";
   } else {
-    effective = dialogue ?? [];
+    effective = showSample ? (dialogue ?? []) : [];
     active = "fixture";
   }
   const running = state.status === "running";
+
+  // Human-paced reveal: turn the ordered debate data into a step-by-step reveal
+  // the analyst controls (play/pause/step/replay). Reset only when a new session
+  // starts — keyed on source + whether the sample was revealed. NOT on the data
+  // itself, so a growing SSE array (whose first dispute id flips LIVE→real
+  // mid-stream) keeps advancing instead of restarting.
+  const revealKey = `${active}|${showSample ? "sample" : ""}`;
+  const reveal = usePacedReveal(effective, { resetKey: revealKey });
+  const revealed = reveal.revealed;
 
   // loan_id -> p_default, for the FICO-style paired display on the Actuary's
   // side of the clash line. A completed "Run live" carries its own fresh
@@ -194,9 +212,12 @@ export function AgentDialogue({ dialogue, accounts = [] }: AgentDialogueProps) {
     [liveAccounts, accounts],
   );
 
+  // Count only resolved (non-pending) escalations so the badge never spoils an
+  // outcome the reveal hasn't reached yet.
   const escalated = useMemo(
-    () => effective.filter((d) => d.resolution.startsWith("escalated")).length,
-    [effective],
+    () =>
+      revealed.filter((d) => !d.pendingResolution && d.resolution.startsWith("escalated")).length,
+    [revealed],
   );
 
   // Pre-WA-014 payloads have no agent_dialogue at all — the panel is invisible.
@@ -314,37 +335,102 @@ export function AgentDialogue({ dialogue, accounts = [] }: AgentDialogueProps) {
       {running || stream.state.status === "connecting" ? (
         <DebateFlow disputes={[]} pending />
       ) : effective.length === 0 ? (
-        <p className={styles.empty}>
-          {active === "stream"
-            ? stream.state.status === "live" && stream.state.done
-              ? t("ad.empty.streamDone")
-              : t("ad.empty.streamWait")
-            : isLive
-              ? t("ad.empty.live")
-              : t("ad.empty.fixture")}
-        </p>
+        active === "fixture" ? (
+          // Idle on login: show the society spine + a call to action rather than
+          // a pre-baked "done" debate or a "no disputes" line — the debate only
+          // appears once the analyst starts a run. The committed fixture is
+          // offered as an explicit "sample run" (demo fallback).
+          <div className={styles.idle}>
+            <DebateFlow disputes={[]} pending captionKey="flow.idle" />
+            {(dialogue?.length ?? 0) > 0 && (
+              <button
+                type="button"
+                className={styles.sampleBtn}
+                onClick={() => setShowSample(true)}
+              >
+                {t("ad.watchDebate")}
+              </button>
+            )}
+          </div>
+        ) : (
+          <p className={styles.empty}>
+            {active === "stream"
+              ? stream.state.status === "live" && stream.state.done
+                ? t("ad.empty.streamDone")
+                : t("ad.empty.streamWait")
+              : t("ad.empty.live")}
+          </p>
+        )
       ) : (
         <>
-          {/* WA-091: node-graph view of the society + the selected dispute's
-              debate branch, above the transcript. Same `effective` data, so it
-              animates live as SSE rounds arrive. */}
-          <DebateFlow disputes={effective} />
-          <ul className={styles.disputeList} role="list">
-          {effective.map((dispute) => (
-            <DisputeCard
-              key={dispute.loan_id}
-              dispute={dispute}
-              pDefault={pDefaultByLoanId.get(dispute.loan_id)}
+          {/* Transport controls — the human drives the reveal: pause on a turn to
+              read it, step one turn at a time, or replay the whole debate. */}
+          <div className={styles.controls} role="group" aria-label={t("ad.controlsLabel")}>
+            <button
+              type="button"
+              className={styles.ctrlBtn}
+              data-primary="1"
+              onClick={reveal.playing ? reveal.pause : reveal.play}
+              disabled={reveal.done}
+            >
+              {reveal.playing ? t("ad.pause") : t("ad.play")}
+            </button>
+            <button type="button" className={styles.ctrlBtn} onClick={reveal.step} disabled={reveal.done}>
+              {t("ad.step")}
+            </button>
+            <button type="button" className={styles.ctrlBtn} onClick={reveal.replay} disabled={reveal.atStart}>
+              {t("ad.replay")}
+            </button>
+            <span className={styles.speed} role="group" aria-label={t("ad.speedLabel")}>
+              <button
+                type="button"
+                data-on={reveal.speed === "normal" ? "1" : undefined}
+                onClick={() => reveal.setSpeed("normal")}
+              >
+                {t("ad.speedNormal")}
+              </button>
+              <button
+                type="button"
+                data-on={reveal.speed === "slow" ? "1" : undefined}
+                onClick={() => reveal.setSpeed("slow")}
+              >
+                {t("ad.speedSlow")}
+              </button>
+            </span>
+            <span className={styles.progress} aria-hidden="true">
+              {reveal.cursor} / {reveal.totalSteps}
+            </span>
+          </div>
+
+          {/* WA-091: node-graph view of the society + the currently-revealing
+              dispute's branch. Fed the PACED `revealed` set (rounds sliced to the
+              reveal cursor), so each turn pops in as the human watches. */}
+          {revealed.length === 0 ? (
+            <DebateFlow disputes={[]} pending captionKey="flow.convening" />
+          ) : (
+            <DebateFlow
+              disputes={revealed}
+              selectedIndex={reveal.done ? undefined : reveal.activeDisputeIndex}
             />
-          ))}
-          {/* While streaming and not yet done, show a quiet "more coming" tail
-              under the live cards so the panel reads as actively streaming. */}
-          {active === "stream" && !(stream.state.status === "live" && stream.state.done) && (
-            <li className={styles.streamingTail} aria-hidden="true">
-              <span className={styles.spinnerSmall} />
-              {t("ad.streamingMore")}
-            </li>
           )}
+
+          {/* The "…is thinking" beat — names the next speaker while the reveal
+              waits for its turn, so the human sees the society working. */}
+          {reveal.thinking && (
+            <div className={styles.thinking} role="status" aria-live="polite">
+              <span className={styles.thinkingDot} aria-hidden="true" />
+              {t("ad.thinking", { speaker: speakerLabel(t, reveal.thinking.speaker) })}
+            </div>
+          )}
+
+          <ul className={styles.disputeList} role="list">
+            {revealed.map((dispute) => (
+              <DisputeCard
+                key={dispute.loan_id}
+                dispute={dispute}
+                pDefault={pDefaultByLoanId.get(dispute.loan_id)}
+              />
+            ))}
           </ul>
         </>
       )}

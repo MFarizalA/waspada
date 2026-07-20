@@ -155,11 +155,19 @@ function Spine({ t }: { t: TFunc }) {
 export function DebateFlow({
   disputes,
   pending = false,
+  captionKey = "flow.convening",
+  selectedIndex,
 }: {
   disputes: DisputeRecord[];
-  /** Show the spine + a "convening" hint while the stream connects, before the
-   *  first round lands — replaces a blank loading spinner with real structure. */
+  /** Show the spine + a caption while the stream connects / before any run —
+   *  replaces a blank loading spinner (or a pre-baked "done" debate) with real
+   *  structure and a call to action. */
   pending?: boolean;
+  /** i18n key for the caption under the spine (idle vs connecting). */
+  captionKey?: string;
+  /** Controlled selection — when set, the flow auto-follows the paced reveal's
+   *  active dispute instead of the user's tab click. */
+  selectedIndex?: number;
 }) {
   const { t } = useI18n();
   const [sel, setSel] = useState(0);
@@ -168,12 +176,14 @@ export function DebateFlow({
     return (
       <div className={styles.flow} data-pending="1">
         <Spine t={t} />
-        <p className={styles.convening}>{t("flow.convening")}</p>
+        <p className={styles.convening}>{t(captionKey)}</p>
       </div>
     );
   }
 
-  const idx = Math.min(sel, disputes.length - 1);
+  // Controlled selection (paced reveal follows the active dispute) falls back to
+  // the user's tab click when uncontrolled.
+  const idx = Math.min(selectedIndex ?? sel, disputes.length - 1);
   const d = disputes[idx];
   const lastRound = d.rounds[d.rounds.length - 1];
 
@@ -210,7 +220,10 @@ export function DebateFlow({
           badge={d.model_band}
           body={`Scored account ${d.loan_id} as ${d.model_band}.`}
         />
-        <Edge label="opens dispute" sub={`${speakerLabel(t, "risk_auditor")}: ${d.auditor_view}`} />
+        <Edge
+          label="opens dispute"
+          sub={`${speakerLabel(t, "risk_auditor")}: ${d.auditor_view}`}
+        />
         {d.rounds.map((r, i) => (
           <Fragment key={r.round_no}>
             <FlowNode
@@ -225,20 +238,34 @@ export function DebateFlow({
             {i < d.rounds.length - 1 ? <Edge label={edgeVerdict(r)} /> : null}
           </Fragment>
         ))}
-        <Edge label={lastRound ? edgeVerdict(lastRound) : "resolves"} />
-        <div
-          className={styles.resNode}
-          style={toneStyle(RES_TONE[d.resolution] ?? "var(--text-subtle)")}
-        >
-          <span className={styles.dot} aria-hidden="true" />
-          <div>
-            <div className={styles.resTitle}>{t(`res.${d.resolution}`)}</div>
-            <div className={styles.resMeta}>
-              {t("ad.resolvedBy", { resolver: speakerLabel(t, d.resolved_by) })}
-              {d.revised_band ? ` · → ${d.revised_band}` : ""}
+        {/* While the reveal is mid-flight (paced), hold the outcome back and show a
+            "deliberating" node so the ending isn't spoiled. */}
+        {d.pendingResolution ? (
+          <>
+            <Edge label={lastRound ? edgeVerdict(lastRound) : "resolves"} />
+            <div className={styles.resNode} data-deliberating="1">
+              <span className={styles.dot} aria-hidden="true" />
+              <div className={styles.resTitle}>{t("flow.deliberating")}</div>
             </div>
-          </div>
-        </div>
+          </>
+        ) : (
+          <>
+            <Edge label={lastRound ? edgeVerdict(lastRound) : "resolves"} />
+            <div
+              className={styles.resNode}
+              style={toneStyle(RES_TONE[d.resolution] ?? "var(--text-subtle)")}
+            >
+              <span className={styles.dot} aria-hidden="true" />
+              <div>
+                <div className={styles.resTitle}>{t(`res.${d.resolution}`)}</div>
+                <div className={styles.resMeta}>
+                  {t("ad.resolvedBy", { resolver: speakerLabel(t, d.resolved_by) })}
+                  {d.revised_band ? ` · → ${d.revised_band}` : ""}
+                </div>
+              </div>
+            </div>
+          </>
+        )}
       </div>
     </div>
   );

@@ -40,7 +40,7 @@ Then smoke-test:
 ```bash
 curl -s https://app.waspada.xyz/api/health           # → {"status":"ok","service":"waspada"}
 # open https://app.waspada.xyz  → dashboard RENDERS (not a download)
-# log in (analyst@waspada.demo / waspada123) → work-list, debate flow-chart, model card, matrix all show
+# register an account + sign in → work-list, debate flow-chart, model card, matrix all show
 ```
 Real Lending Club data is already in OSS, so `POST /api/run?brain=mock` returns real data (no 503).
 > **Minimum-viable fallback:** if the redeploy is flaky, the **current deploy + the committed fixture

@@ -4,7 +4,7 @@
 The money shot is the live Qwen debate. Record the screen; a calm voiceover reads the beats.
 **Names on screen/voice: industry only — Risk Auditor, Actuary, Credit Arbiter** (never Skeptic/Judge/Defendant).
 
-**Setup before recording:** open `https://app.waspada.xyz`, log in (`analyst@waspada.demo` / `waspada123`).
+**Setup before recording:** open `https://app.waspada.xyz`, **register an account** (the public deploy has no seeded demo login) and sign in.
 Have the dashboard loaded. If doing the live debate, be ready to trigger **one** `brain=qwen` run
 (conserves credits — do it once, cleanly).
 
