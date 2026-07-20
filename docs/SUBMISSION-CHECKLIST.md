@@ -1,68 +1,92 @@
-# WASPADA — submission-day checklist (deadline: 2026-07-20)
+# WASPADA — Submission Runbook
 
-Stefanie is offline (Kimi K3 quota to ~22–23 Jul), so the owner drives. This is the ordered
-critical path. **Bold = owner-only.** Everything code/doc is already built + green.
+**Deadline: 05:00 WIB · Mon 21 Jul.** Target everything **done by 00:00 WIB** (5 h buffer).
+**Bold = owner-only** (you). Everything else is built, green, and merged to `develop`.
 
-## Status going in
-- ✅ Product is real: 6-agent society, bounded debate, governance, MCP, model tiering, FC deploy.
-- ✅ Data foundation (source→OSS→dlt→medallion) landed on `integrate/full-land`, suite 486 green.
-- ✅ Real Lending Club data (50k rows) already in OSS. Diagram + submission description written.
-- ⚠️ Deployed image is STALE (serves old synthetic). Repo is PRIVATE. Videos not shot.
+---
 
-## The path (≈ do in this order)
+## Where we stand (all ✅)
+- Repo is **PUBLIC**; MIT license.
+- `develop` has **everything**: two decision lanes (Collections + Origination), the six-agent
+  debate, PD-model governance (calibration · drift monitoring · registry), the human parameter
+  matrix, the cloud-blue UI + brand, and the docs/wiki (9 pages + diagrams).
+- Full suite green offline; both lanes run end-to-end with `python -m waspada.agents --lane <lane>`.
+- `develop → main` release verified **conflict-free** (102 commits ahead).
+- Only *stale* thing: the deployed FC image (predates recent work) — step 1 refreshes it.
 
-### 1. Land + release the code (~10 min)
+---
+
+## The path — your 0→5 plan, in order
+
+### 0 · Release everything to `main`  (~5 min) — **owner**
 ```bash
 git fetch origin
-# land the integration on develop (fast-forward, doesn't touch your WA-077 checkout)
-git push origin origin/feature/submission-day:develop
-# release develop -> main so main has EVERYTHING (incl. custom_domain.tf + the diagram/desc)
-git push origin origin/develop:main            # if main is behind + FF-able; else open a merge PR
+git checkout main && git pull --ff-only origin main
+git merge --no-ff origin/develop -m "release: WASPADA v1 → main (two lanes + governance + docs)"
+git push origin main
 ```
-> If `main` isn't fast-forwardable, do a normal merge locally from a clean checkout. The point:
-> **`main` must contain `deploy/iac/custom_domain.tf`** (else an apply-from-main destroys the domain)
-> and the docs (for the cloud-proof permalink + diagram link).
+Pushing `main` **triggers the CI image build** (`.github/workflows/build-image.yml`) → pushes
+`api:latest` / `:<sha>` to ACR. *(The post-push verify step may show red — cosmetic WA-065 guard;
+the image still pushes at the build step.)* Watch the Action go green on the build step.
 
-### 2. **Flip the repo PUBLIC** (owner, ~2 min)
-GitHub → Settings → Danger Zone → Change visibility → Public. **Unblocks 3 requirements at once:**
-public repo URL, License auto-detection, and the cloud-proof permalink resolving.
-
-### 3. Deploy a current image (~20 min) — real data is already in OSS
-Build + push the image (CI on the `main` push does this: `build-image.yml`), then roll FC onto it:
+### 1 · Make sure everything runs smoothly  (~15 min)
+**Already verified by me (offline):** full test suite green, `tsc + vite` build green, both lanes
+run end-to-end. **You verify the live deploy after redeploy:**
 ```bash
 cd deploy/iac
-tofu apply -replace=alicloud_fcv3_function.api -var-file=secrets.tfvars   # apply FROM develop/main-current
+tofu apply -replace=alicloud_fcv3_function.api -var-file=secrets.tfvars   # roll FC onto the new image
 ```
-- **Real 50k-row LendingClub data is in OSS** (`loans.parquet`), so `/api/run` reads real data (no 503).
-- Landmine (now resolved by step 1): `custom_domain.tf` + `rds_grant.tf` are on main → safe.
-- Verify: `https://app.waspada.xyz` renders; `POST /api/run?brain=mock` returns real data.
+Then smoke-test:
+```bash
+curl -s https://app.waspada.xyz/api/health           # → {"status":"ok","service":"waspada"}
+# open https://app.waspada.xyz  → dashboard RENDERS (not a download)
+# log in (analyst@waspada.demo / waspada123) → work-list, debate flow-chart, model card, matrix all show
+```
+Real Lending Club data is already in OSS, so `POST /api/run?brain=mock` returns real data (no 503).
+> **Minimum-viable fallback:** if the redeploy is flaky, the **current deploy + the committed fixture
+> debate** is enough to record the demo. Redeploy is a quality upgrade, not a blocker.
 
-### 4. **Record the two videos** (owner) — see `docs/demo-video-scenario.md` + `docs/deployment-video-scenario.md`
-- **Demo (~3 min):** the dashboard + the live Qwen debate (the money shot). **Do ONE `brain=qwen` run** (conserves credits) and capture the Agent-Society panel streaming the debate.
-- **Deployment (~1–2 min):** the Alibaba console tour (OSS/ACR/FC/SLS/RDS) + `main.tf` + the live URL.
+### 2 · Demo video (~3 min) — **owner** · script: [`demo-video-scenario.md`](demo-video-scenario.md)
+The money shot: dashboard → the agent debate (flow-chart lights up round by round) → governance
+(model card + parameter matrix) → the two lanes → Alibaba/efficiency close. The committed fixture
+shows a **real completed debate** — record that, zero live-Qwen risk. (Optional: one `brain=qwen`
+run for a live money-shot if credits allow.)
 
-### 5. (If credits allow) the efficiency baseline — `docs`/WA-085
-One `python -m waspada.bench_society.run_bench` with `DASHSCOPE_API_KEY` set fills the single-agent
-baseline → substantiates the Track-3 "measurable efficiency gain." ~cents. Skip if out of credits;
-the calls-per-account gain (~10.7×) still stands by construction.
+### 3 · Deployment video (~1–2 min) — **owner** · script: [`deployment-video-scenario.md`](deployment-video-scenario.md)
+Alibaba console tour (OSS · ACR · Function Compute · SLS · RDS) + `deploy/iac/main.tf` (all five
+services in one file) + the live URL responding.
 
-### 6. **Submit the form** (owner)
+### 4 · Social-media post — **owner** · copy: [`social-post.md`](social-post.md)
+Ready-to-paste EN + 中文 copy + the banner image (`docs/brand/banner.png`). Post to
+LinkedIn / X / WeChat as you like.
+
+### 5 · Submit the form — **owner**
 | Field | Value |
 |---|---|
 | Track | **Track 3 — Agent Society** |
-| Public repo | `https://github.com/MFarizalA/waspada` (after step 2) |
-| License | MIT (auto-detected once public) |
-| Cloud proof | permalink to `deploy/iac/main.tf` on `main` (OSS+ACR+FC+SLS+RDS in one file) |
-| Architecture diagram | `docs/architecture.svg` (linked from README) |
-| Text description | paste from `docs/submission-description.md` (industry names, Qwen tiers, MCP, Alibaba) |
+| Public repo | `https://github.com/MFarizalA/waspada` |
+| License | MIT |
+| Cloud proof | permalink to `deploy/iac/main.tf` on `main` (OSS + ACR + FC + SLS + RDS in one file) |
+| Architecture | `docs/architecture.svg` + the [engineering wiki](wiki/Home.md) (9 pages + diagrams) |
+| Description | paste [`submission-description.md`](submission-description.md) |
 | Demo video | the ~3-min upload |
+| Deployment video | the ~1–2 min upload |
 | Live URL | `https://app.waspada.xyz` |
 
-## If time runs out — minimum viable submission
-Steps **1 → 2 → 4(demo only) → 6**. A public repo + the diagram + the description + a demo video
-(even on the current synthetic deploy) + the `main.tf` cloud proof = a valid, complete entry. The
-redeploy (3) and baseline (5) are quality upgrades, not blockers.
+---
 
-## Your (Bimo) parallel track
-**WA-077** (real-data cutover) + its 2 red `test_stream` SSE tests are yours and independent — finish
-if you can, but they don't block the submission (the deployed demo works either way).
+## Suggested WIB timeline (target done 00:00, deadline 05:00)
+| Time (WIB) | Step |
+|---|---|
+| ~19:00 (home) | 0 — release to main, kick CI build |
+| ~19:20 | 1 — redeploy FC + smoke-test live |
+| ~19:45 | 2 — record demo video |
+| ~20:15 | 3 — record deployment video |
+| ~20:35 | 4 — post to social |
+| ~20:50 | 5 — fill + submit the form |
+| **~21:00** | **Done — 8 h before the 05:00 deadline** |
+
+## If time runs out — minimum-viable submission
+**0 → (skip redeploy, use current deploy + fixture) → 2 (demo only) → 5.** A public repo + the
+diagram/wiki + the description + a demo video + the `main.tf` cloud proof = a valid, complete
+Track-3 entry. Everything else is a quality upgrade.

@@ -21,7 +21,11 @@
 
 **The debate.** Disputes are resolved by a **bounded debate** (at most K×3 rounds): Auditor challenge → Actuary rebuttal → Arbiter ruling, ending in one of four terminal resolutions or escalating to a human. Every claim must cite evidence, served through a real **Model Context Protocol (MCP)** tool interface (`portfolio_stats`, `lookup_account`). Governance is asymmetric: escalations that *raise* risk auto-apply, while de-escalations that would cancel a collector call require explicit human approval — matching the asymmetric cost of the two errors.
 
-**Qwen Cloud.** The society reasons over **Qwen Cloud (DashScope)**, tiered by cognitive load: **qwen3.7-flash** for triage (Data Engineer, Risk Auditor), **qwen3.7-plus** for analysis and defense (Data Analyst, Actuary), **qwen3.7-max** for the Arbiter's rulings — all through native function-calling loops.
+**Governance & human control.** The model is calibrated (its `p_default` is a true probability), version-tracked (every run cites the exact `pd-lr-…` that scored it), and drift-monitored (per-run AUC, Brier, and a Population Stability Index over features, surfaced as a model card). Above all of it sits a human **parameter matrix**: the analyst sets the policy the whole society plays by — the risk-band→action grid, the dispute-admissibility gap, the Arbiter's escalation threshold, the audit budget — *before* a run, and every decision is stamped with the governing `policy_id`. The human doesn't just approve one call; they set the rules.
+
+**One engine, two lanes.** The same society runs a second decision lane — **Origination** (approve / refer / reject new applications) — on its own application-time model, with the debate, gate, and dashboard reused verbatim. The architecture proved itself: a second product lane landed with zero infrastructure change.
+
+**Qwen Cloud.** The society reasons over **Qwen Cloud (DashScope)**, tiered by cognitive load: **qwen3.6-flash** for triage (Data Engineer, Risk Auditor), **qwen3.7-plus** for analysis and defense (Data Analyst, Actuary), **qwen3.7-max** for the Arbiter's rulings — all through native function-calling loops.
 
 **Alibaba Cloud.** FastAPI runs on **Function Compute** (custom container pulled from **Container Registry**); the loan book lives in **OSS** and is read into an in-process **DuckDB**; **RDS MySQL** backs authentication; **SLS** captures every run's audit trail. All infrastructure is declared in OpenTofu (`deploy/iac/main.tf`).
 
