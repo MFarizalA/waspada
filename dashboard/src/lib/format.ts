@@ -7,21 +7,21 @@ const PCT = new Intl.NumberFormat("en-US", {
 });
 
 /**
- * IDR currency formatter. The portfolio is Indonesian consumer credit, so EL
- * is denominated in rupiah. We use the `en-ID` locale (thousands separators)
- * with the ISO code "IDR" rather than the Rp symbol so it reads unambiguously in
- * both light/dark themes and doesn't depend on a localised glyph rendering.
+ * USD currency formatter. The book is the real Lending Club portfolio (US
+ * consumer credit), so Expected Loss is denominated in dollars. `en-US` locale
+ * with ISO code "USD"; whole-dollar (no cents) since EL is an estimate, not a
+ * ledger figure.
  */
-const IDR = new Intl.NumberFormat("en-ID", {
+const USD = new Intl.NumberFormat("en-US", {
   style: "currency",
-  currency: "IDR",
+  currency: "USD",
   minimumFractionDigits: 0,
   maximumFractionDigits: 0,
 });
 
-/** 45_250_000 → "IDR 45,250,000". Rupiah is whole-rupiah — no fraction digits. */
-export function idr(v: number): string {
-  return IDR.format(Math.round(v));
+/** 45_250 → "$45,250". Whole-dollar — EL is an estimate, cents are noise. */
+export function usd(v: number): string {
+  return USD.format(Math.round(v));
 }
 
 /** 0.122 → "12.2%". Treats the input as a fraction in [0,1]. */

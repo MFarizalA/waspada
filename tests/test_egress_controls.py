@@ -64,6 +64,14 @@ class TestQwenBaseUrlAllowlist:
         )
         assert llm.name == "qwen"
 
+    def test_maas_token_plan_endpoint_accepted(self, monkeypatch):
+        """The Model Studio token-plan MaaS endpoint is a valid Alibaba host."""
+        monkeypatch.setenv("DASHSCOPE_API_KEY", "test-key-123")
+        llm = QwenLLM(
+            base_url="https://token-plan.ap-southeast-1.maas.aliyuncs.com/compatible-mode/v1"
+        )
+        assert llm.name == "qwen"
+
 
 # --------------------------------------------------------------------------- #
 # 2. DuckDB SQL column allowlist

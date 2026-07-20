@@ -1,6 +1,6 @@
 import type { OriginationHealth } from "@/types";
 import { useI18n } from "@/lib/i18n";
-import { idr } from "@/lib/format";
+import { usd } from "@/lib/format";
 import styles from "./ModelCard.module.css";
 
 /**
@@ -37,7 +37,7 @@ export function OriginationHealthPanel({ health }: { health: OriginationHealth }
         </div>
         <div className={styles.metric}>
           <span className={styles.mLabel}>{t("oh.approvedVolume")}</span>
-          <span className={styles.mValue}>{idr(health.approved_volume ?? 0)}</span>
+          <span className={styles.mValue}>{usd(health.approved_volume ?? 0)}</span>
         </div>
       </div>
 

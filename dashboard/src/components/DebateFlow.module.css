@@ -265,3 +265,21 @@
     animation: none;
   }
 }
+
+/* Outcome held back while the reveal is mid-flight — reads as "still deciding"
+   (dashed, muted, gently pulsing) so the verdict isn't spoiled early. */
+.resNode[data-deliberating="1"] {
+  border-style: dashed;
+  border-color: var(--border-strong);
+  background: var(--surface-muted);
+  color: var(--text-muted);
+}
+.resNode[data-deliberating="1"] .resTitle {
+  color: var(--text-muted);
+  animation: debatePulse 1.4s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .resNode[data-deliberating="1"] .resTitle {
+    animation: none;
+  }
+}
