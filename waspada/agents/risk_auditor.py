@@ -40,6 +40,8 @@ from __future__ import annotations
 
 import json
 import re
+import threading
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 import pyarrow as pa
@@ -135,9 +137,34 @@ class RiskAuditorAgent(Agent):
     name = "risk_auditor"
     role = "audit top-K scores and open disputes"
 
-    def __init__(self, llm: Optional[LLM] = None, *, k: int = 8) -> None:
+    def __init__(self, llm: Optional[LLM] = None, *, k: int = 8, max_workers: int = 1,
+                 dispute_gap: int = DISPUTE_GAP) -> None:
         super().__init__(llm=llm if llm is not None else MockLLM())
         self.k = k
+        # WA-095: admissibility gap the human sets in the parameter matrix. Tighter
+        # (1) opens more disputes; looser (3-4) opens fewer. Defaults to the module
+        # constant so an un-configured auditor is unchanged.
+        self.dispute_gap = int(dispute_gap)
+        # WA-080: audit the K accounts concurrently when max_workers > 1. Each
+        # account's audit is an independent LLM tool-loop (the dominant cost of a
+        # live-Qwen run: up to K x _MAX_TOOL_TURNS sequential calls). Running them
+        # in parallel collapses the audit wall-clock from the *sum* of K chains to
+        # the *longest single* chain -- the change that lets a live debate finish
+        # inside the FC invocation timeout instead of dying mid-audit.
+        #
+        # Default 1 = sequential = byte-for-byte the pre-WA-080 path. This is
+        # deliberate: the scripted MockLLM every test injects is NOT thread-safe
+        # (``_next_scripted`` mutates a shared cursor), so parallelism is opt-in
+        # and only the live QwenLLM path (a genuinely thread-safe OpenAI client)
+        # turns it on. See :meth:`_run_audits`.
+        self.max_workers = max(1, int(max_workers))
+        # Serializes the local evidence-tool calls (portfolio_stats /
+        # lookup_account) so parallel audits stay correct for ANY tool backend --
+        # the pyarrow stubs and the in-process MCP client are read-only and
+        # already safe, but a stdio MCP client shares one pipe. The lock is held
+        # only around the microsecond-scale local read, never around the LLM
+        # call, so it costs nothing on the hot path.
+        self._tool_lock = threading.Lock()
         # Local stub tools (the WA-015 MCP-backed tools attach via
         # :meth:`attach_mcp`). Same register_tool / tools.get pattern as
         # IngestAgent's ``fetch`` — the defaults here are computed from the
@@ -221,11 +248,16 @@ class RiskAuditorAgent(Agent):
                    + " ".join(f"{k}={v}" for k, v in strata.items())),
         )
 
+        # WA-080: audit every account (parallel when max_workers > 1), then open
+        # disputes from the results in ``top`` order. The audit (LLM calls) is the
+        # concurrent part; opening disputes is cheap, sequential, and ordered -- so
+        # the dispute list (and therefore the downstream debate) is deterministic
+        # regardless of which audit finished first.
+        results = self._run_audits(scored, features, top)
         disputes: List[Dispute] = []
         n_parsed = 0
         n_parse_fail = 0
-        for idx in top:
-            parsed = self._audit_one(scored, features, idx)
+        for idx, parsed in zip(top, results):
             if parsed is None:
                 n_parse_fail += 1
                 continue  # graceful degrade: skip, pipeline continues
@@ -273,6 +305,40 @@ class RiskAuditorAgent(Agent):
     def _feature_table(self, context: AgentContext) -> Optional[pa.Table]:
         tbl = context.data_handles.get("feature_frame")
         return tbl if isinstance(tbl, pa.Table) else None
+
+    def _run_audits(
+        self, scored: pa.Table, features: Optional[pa.Table], top: Sequence[int],
+    ) -> List[Optional[Tuple[str, Optional[float], str, List[str]]]]:
+        """Audit each account in ``top``, returning results in ``top`` order.
+
+        Sequential when ``max_workers <= 1`` (the default) -- literally the
+        pre-WA-080 loop, which keeps scripted-MockLLM runs deterministic. When
+        ``max_workers > 1`` the per-account audits run on a thread pool: LLM
+        calls are network-bound, so threads (which release the GIL during I/O)
+        give near-linear speed-up without an async rewrite.
+        ``ThreadPoolExecutor.map`` preserves input order, so the caller opens
+        disputes deterministically.
+
+        An audit that raises degrades to ``None`` (skip the account) rather than
+        failing the whole slice -- matching the graceful-degrade contract the
+        sequential path already honours via :meth:`_run_tool_loop`.
+        """
+        top = list(top)
+        if self.max_workers <= 1 or len(top) <= 1:
+            return [self._audit_one(scored, features, idx) for idx in top]
+
+        def _safe(idx: int) -> Optional[Tuple[str, Optional[float], str, List[str]]]:
+            try:
+                return self._audit_one(scored, features, idx)
+            except Exception as exc:  # one bad account never kills the slice
+                self.step("audit_error", status=Status.ERROR,
+                          notes=f"account idx={idx} raised: {exc}")
+                return None
+
+        workers = min(self.max_workers, len(top))
+        self.step("audit_parallel", notes=f"auditing {len(top)} account(s) on {workers} worker(s)")
+        with ThreadPoolExecutor(max_workers=workers, thread_name_prefix="audit") as ex:
+            return list(ex.map(_safe, top))
 
     def _audit_one(
         self, scored: pa.Table, features: Optional[pa.Table], idx: int,
@@ -413,17 +479,22 @@ class RiskAuditorAgent(Agent):
         """
         args = tc.parsed_arguments()
         try:
+            # WA-080: serialize the actual tool read so parallel audits are safe
+            # for any backend (stdio MCP shares one pipe). Held only around the
+            # local read, never the LLM call.
             if tc.name == "lookup_account":
                 loan_id = str(args.get("loan_id", ctx.get("loan_id", "")))
                 fn = self.tools.get("lookup_account", _default_lookup_account)
                 # The tool takes (features_table, loan_id); on the MCP path the
                 # table is ignored. We stash the features table on ctx.
-                row = fn(ctx.get("_features_table"), loan_id)
+                with self._tool_lock:
+                    row = fn(ctx.get("_features_table"), loan_id)
                 return json.dumps(row or {})
             elif tc.name == "portfolio_stats":
                 segment = args.get("segment")
                 fn = self.tools.get("portfolio_stats", _default_portfolio_stats)
-                stats = fn(ctx.get("_scored_table"), segment)
+                with self._tool_lock:
+                    stats = fn(ctx.get("_scored_table"), segment)
                 return json.dumps(stats or {})
             else:
                 return json.dumps({"error": f"unknown tool: {tc.name}"})
@@ -447,7 +518,8 @@ class RiskAuditorAgent(Agent):
         # tool ignores the table arg (the client owns the data).
         lookup_fn = self.tools.get("lookup_account", _default_lookup_account)
         try:
-            row = lookup_fn(features, loan_id) if features is not None else None
+            with self._tool_lock:  # WA-080: safe under parallel audits
+                row = lookup_fn(features, loan_id) if features is not None else None
         except Exception:  # pragma: no cover - defensive; evidence is enrichment
             row = None
         if isinstance(row, dict) and row:
@@ -464,7 +536,8 @@ class RiskAuditorAgent(Agent):
         # Portfolio stats via the registered tool (local stub, or MCP in WA-015).
         stats_fn = self.tools.get("portfolio_stats", _default_portfolio_stats)
         try:
-            stats = stats_fn(scored, seg) if seg is not None else {}
+            with self._tool_lock:  # WA-080: safe under parallel audits
+                stats = stats_fn(scored, seg) if seg is not None else {}
         except Exception:  # pragma: no cover - defensive; stats are enrichment only
             stats = {}
         if not isinstance(stats, dict):
@@ -567,15 +640,15 @@ class RiskAuditorAgent(Agent):
             auditor_view=view,
         )
 
-    @staticmethod
-    def _should_dispute(model_band: str, auditor_view: str) -> bool:
-        """Admissibility: dispute iff the band/view ordinals differ by ≥ DISPUTE_GAP."""
+    def _should_dispute(self, model_band: str, auditor_view: str) -> bool:
+        """Admissibility: dispute iff the band/view ordinals differ by ≥ dispute_gap
+        (WA-095: the matrix-configurable gap; defaults to the module DISPUTE_GAP)."""
         # .title() normalizes case for multi-word levels ("very high" → "Very High").
         b = _BAND_ORDINAL.get(str(model_band).strip().title())
         v = _VIEW_ORDINAL.get(str(auditor_view).strip().lower())
         if b is None or v is None:
             return False
-        return abs(b - v) >= DISPUTE_GAP
+        return abs(b - v) >= self.dispute_gap
 
 
 # --------------------------------------------------------------------------- #

@@ -8,6 +8,10 @@ import { WorkList } from "@/components/WorkList";
 import { PortfolioHealth } from "@/components/PortfolioHealth";
 import { Alerts } from "@/components/Alerts";
 import { AgentDialogue } from "@/components/AgentDialogue";
+import { Escalations } from "@/components/Escalations";
+import { ModelCard } from "@/components/ModelCard";
+import { OriginationHealthPanel } from "@/components/OriginationHealthPanel";
+import { ParameterMatrix } from "@/components/ParameterMatrix";
 import { AccountDrawer } from "@/components/AccountDrawer";
 import { AuthScreen } from "@/components/AuthScreen";
 import styles from "./App.module.css";
@@ -161,6 +165,7 @@ function Dashboard() {
             )}
             <div className={styles.grid}>
               <div className={styles.colMain}>
+                <ParameterMatrix />
                 <WorkList
                   accounts={state.payload.work_list}
                   contestedLoanIds={contestedIds}
@@ -169,11 +174,21 @@ function Dashboard() {
                 />
               </div>
               <div className={styles.colSide}>
-                <PortfolioHealth health={state.payload.portfolio_health} />
+                {state.payload.lane === "origination" ? (
+                  <OriginationHealthPanel
+                    health={state.payload.portfolio_health as import("@/types").OriginationHealth}
+                  />
+                ) : (
+                  <PortfolioHealth
+                    health={state.payload.portfolio_health as import("@/types").PortfolioHealth}
+                  />
+                )}
+                <ModelCard card={state.payload.model_card} />
                 <Alerts alerts={state.payload.alerts} />
               </div>
             </div>
             <div className={styles.fullRow}>
+              <Escalations dialogue={dialogue} onJumpToDebate={jumpToDebate} />
               <AgentDialogue dialogue={dialogue} accounts={state.payload.work_list} />
             </div>
           </>

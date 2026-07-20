@@ -35,6 +35,10 @@ def client(monkeypatch):
     # TestClient triggers the startup event (which would also seed), but we
     # already seeded explicitly above; rebuild to pick up env cleanly.
     with TestClient(main_mod.app) as c:
+        # WA-077: the lifespan OSS probe ran at startup (before any patch of
+        # _probe_oss could apply), so force the probe state here or the
+        # run-gate 503s on these no-OSS-cred tests.
+        main_mod.app.state.oss_available = True
         yield c
 
     auth_mod.reset_store()
@@ -208,7 +212,7 @@ class TestRunGate:
         resp = client.post("/api/run", headers={"Authorization": "Bearer garbage"})
         assert resp.status_code == 401
 
-    def test_run_with_valid_token_passes_gate(self, client):
+    def test_run_with_valid_token_passes_gate(self, client, monkeypatch):
         # login as the seeded analyst, then hit /api/run with the JWT
         login = client.post("/api/auth/login", json={
             "email": "analyst@waspada.demo",
@@ -216,6 +220,34 @@ class TestRunGate:
         })
         assert login.status_code == 200
         token = login.json()["token"]
+
+        # WA-077: /api/run fetches from OSS in prod; tests have no OSS creds,
+        # so stub the Data Engineer's fetch tool (per conftest's contract:
+        # each test injects its own data stub).
+        from api import main as main_mod
+        from waspada.agents.__main__ import _sample_raw_table
+        from waspada.agents.data_engineer import DataEngineerAgent
+
+        def _test_fetch(*, lane="collections", limit=None):
+            return _sample_raw_table(n=60)
+
+        orig_build = main_mod._build_orchestrator
+
+        def _build_with_test_fetch(brain: str = "mock", **kwargs):
+            orch = orig_build(brain, **kwargs)
+            orig = orch._build_agents
+
+            def _build():
+                agents = orig()
+                for a in agents:
+                    if isinstance(a, DataEngineerAgent):
+                        a.register_tool("fetch", _test_fetch)
+                return agents
+
+            orch._build_agents = _build  # type: ignore[method-assign]
+            return orch
+
+        monkeypatch.setattr(main_mod, "_build_orchestrator", _build_with_test_fetch)
 
         resp = client.post("/api/run", headers={"Authorization": f"Bearer {token}"})
         # 200 means the gate passed; the pipeline itself must also succeed.

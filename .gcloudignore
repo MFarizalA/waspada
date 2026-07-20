@@ -1,6 +1,0 @@
-#!include:.gitignore
-
-# The Dockerfile needs the pre-built dashboard, which .gitignore excludes
-# from version control (build artifact) but Cloud Build still needs to see.
-!dashboard/dist/
-!dashboard/dist/**
