@@ -185,6 +185,29 @@ backlog/                     # ticket specs (WA-001..WA-030)
 
 ---
 
+## Documentation
+
+The engineering wiki lives in [`docs/wiki/`](docs/wiki/Home.md):
+
+| # | Page | What it covers |
+|---|------|----------------|
+| 01 | [Data Architecture](docs/wiki/01-data-architecture.md) | The frozen data contract, the medallion (OSS Bronze/Silver/Gold), dlt + DuckDB, partitioning |
+| 02 | [System Architecture](docs/wiki/02-system-architecture.md) | The end-to-end system: agents, orchestrator, API, dashboard, cloud |
+| 03 | [Harness Architecture](docs/wiki/03-harness-architecture.md) | The agent framework — base classes, tools, the LLM surface, the approval gate |
+| 04 | [Debate Mechanism](docs/wiki/04-debate-mechanism.md) | The three-round adversarial debate, admissibility, adjudication, cost ceiling |
+| 05 | [Tech Stack](docs/wiki/05-techstack.md) | Every language, library, and service, and why |
+| 06 | [Team & Collaboration](docs/wiki/06-team-and-collaboration.md) | The two lanes, ownership boundaries, the git worktree workflow |
+| 07 | [Alibaba Cloud Infrastructure](docs/wiki/07-alibaba-cloud-infra.md) | OSS, Function Compute, RDS, ACR, SLS, RAM — the IaC |
+| 08 | [LLM / Qwen Model](docs/wiki/08-llm-qwen-model.md) | The reasoning brains, model tiering, native function calling, egress control |
+| 09 | [ML Governance](docs/wiki/09-ml-governance.md) | The PD model, calibration, drift monitoring, versioning, the parameter matrix |
+
+Other docs (all under [`docs/`](docs/)): [HACKATHON.md](docs/HACKATHON.md) (the
+full design + judging-rubric mapping) · [DEMO.md](docs/DEMO.md) ·
+[CONTRIBUTING.md](docs/CONTRIBUTING.md) · [SECURITY.md](docs/SECURITY.md) ·
+[SUBMISSION-CHECKLIST.md](docs/SUBMISSION-CHECKLIST.md).
+
+---
+
 ## Quick start
 
 ### Prerequisites
