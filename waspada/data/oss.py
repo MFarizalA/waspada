@@ -24,7 +24,7 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 
 from ..config import COLLECTIONS, ORIGINATION, Config, load_config
-from ..schema import RawLoans, validate_table
+from ..schema import RawApplications, RawLoans, validate_table
 
 __all__ = ["OSSClient", "fetch_loans", "latest_partition_key"]
 
@@ -33,6 +33,8 @@ __all__ = ["OSSClient", "fetch_loans", "latest_partition_key"]
 # object's columns as-is) means a stray column added upstream never silently
 # reshapes the contract.
 _RAW_LOANS_COLUMNS: tuple[str, ...] = tuple(f.name for f in dataclasses.fields(RawLoans))
+# WA-038: the Origination lane's projection — RawApplications columns.
+_RAW_APPLICATIONS_COLUMNS: tuple[str, ...] = tuple(f.name for f in dataclasses.fields(RawApplications))
 
 # WA-047: the OSS layout is date-partitioned -- ``{prefix}/dt=<YYYYMMDD>/loans.parquet``
 # (owner convention). ``YYYYMMDD`` sorts lexicographically == chronologically, so the
@@ -180,13 +182,22 @@ class OSSClient:
             raise ValueError(
                 f"lane={lane!r} is invalid; must be 'collections' or 'origination'"
             )
-        key = self.resolve_key()
+        # WA-038: per-lane object key + column projection + contract. The
+        # collections path is byte-identical; origination reads its own object
+        # (``OSS_ORIGINATION_KEY``, default ``applications.parquet``) and
+        # projects/validates the RawApplications contract.
+        if lane == ORIGINATION:
+            key = os.environ.get("OSS_ORIGINATION_KEY", "applications.parquet")
+            columns, contract = _RAW_APPLICATIONS_COLUMNS, RawApplications
+        else:
+            key = self.resolve_key()
+            columns, contract = _RAW_LOANS_COLUMNS, RawLoans
         data = self._bucket.get_object(key).read()
         table = pq.read_table(BytesIO(data))
-        table = table.select(_RAW_LOANS_COLUMNS)
+        table = table.select(columns)
         if limit is not None:
             table = table.slice(0, int(limit))
-        validate_table(table, RawLoans, name=f"fetch_loans({lane})")
+        validate_table(table, contract, name=f"fetch_loans({lane})")
         return table
 
 

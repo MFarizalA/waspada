@@ -72,7 +72,7 @@ holding the gate at both layers.*
 
 **Problem Value & Impact:** real multifinance collections pain (stale manual
 work-lists → NPL losses); the society pattern generalizes to any
-score-then-contest decision (origination lane already architected). **Alibaba
+score-then-contest decision (the origination lane runs on it too — WA-033..039). **Alibaba
 Cloud native — 5 services:** OSS (portfolio store) + Function Compute (backend)
 + ApsaraDB RDS MySQL (auth) + Container Registry/ACR (image builds) + Qwen Cloud
 (reasoning) + Simple Log Service (queryable audit stream of every
@@ -515,8 +515,10 @@ specs in `backlog/WA-032..039`):**
   (`WASPADA_POLICY_FILE`); defaults preserve today's behavior byte-for-byte.
   Analysts edit policy without touching code. Land this first — it is also the
   Origination lane's action-matrix machinery.
-- **WA-033–039 — the Origination lane** (approve / refer / reject + price new
-  applications on the same engine and Agent Society). The substrate is already
+- **WA-033–039 — the Origination lane** (approve / refer / reject new
+  applications on the same engine and Agent Society) — **LANDED**, no longer a
+  stretch: `python -m waspada.agents --lane origination` runs the full society
+  end-to-end offline. The substrate was already
   lane-agnostic (config lanes, protocol, gate, the whole debate engine); the
   build is additive: application-time contract types (WA-034) → 
   `features/origination.py` with a funded-then-defaulted label (WA-035; no
@@ -525,9 +527,9 @@ specs in `backlog/WA-032..039`):**
   `insight/origination.py` decision matrix as a `RiskPolicy` + approval-rate/EL
   health (WA-037) → lane-aware data agents + OSS source (WA-038) → dashboard
   approve/refer/reject badges + origination health panel, EN/中文 (WA-039).
-  One guard is lifted (`orchestrator.plan()`'s "Origination deferred" raise);
-  the Skeptic⇄Actuary→Arbiter debate then contests the riskiest *approvals*
-  unchanged.
+  The guard (`orchestrator.plan()`'s "Origination deferred" raise) is lifted;
+  the Skeptic⇄Actuary→Arbiter debate contests the riskiest decisions unchanged
+  (an id alias keeps the whole debate machinery lane-agnostic).
 
 **Loop note (design principle, not a ticket):** the LLM agents already loop —
 native function calling *is* Think→Act→Observe (the Data Engineer, Data Analyst,

@@ -44,7 +44,7 @@ import pyarrow as pa
 
 from ..data.lakehouse import Lakehouse
 from ..data.oss import fetch_loans as _real_fetch_loans
-from ..schema import RawLoans, validate_table
+from ..schema import RawApplications, RawLoans, validate_table
 from .base import Agent
 from .llm import LLM, MockLLM
 from .protocol import AgentContext, AgentResult, Status
@@ -143,8 +143,10 @@ class DataEngineerAgent(Agent):
             )
 
         # ---- 2. Deterministic gate (the core that never gets replaced) ----
+        # WA-038: the deterministic schema gate validates the LANE's contract.
+        raw_contract = RawApplications if lane == "origination" else RawLoans
         try:
-            validate_table(raw, RawLoans, name="DataEngineerAgent(raw)")
+            validate_table(raw, raw_contract, name="DataEngineerAgent(raw)")
         except ValueError as exc:
             self.step("schema_check", status=Status.ERROR, notes=str(exc))
             return AgentResult(

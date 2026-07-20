@@ -27,10 +27,12 @@ export interface Segment {
  */
 export interface ScoredAccount {
   loan_id: string;
+  /** WA-039: origination rows carry their own id (loan_id is aliased to it). */
+  application_id?: string;
   p_default: number; // P(eventual default) ∈ [0, 1] — the MODEL's score, never rewritten
   score_band: string; // the MODEL's risk level, e.g. "Very Low".."Very High"
   segment: Segment;
-  recommended_action: "call" | "watch" | "auto-cure";
+  recommended_action: "call" | "watch" | "auto-cure" | "approve" | "refer" | "reject";
   expected_loss?: number; // IDR at risk = PD × LGD(0.45) × EAD (WA-024, additive optional)
 
   /**
@@ -139,9 +141,19 @@ export interface ModelCard {
   max_psi?: number;
 }
 
+/** WA-039: origination-book aggregates (the origination lane's health shape). */
+export interface OriginationHealth {
+  approval_rate: number;
+  projected_default_rate: number;
+  band_mix: Record<string, number>;
+  approved_volume: number;
+}
+
 export interface DashboardPayload {
+  /** WA-039: which lane produced this payload; absent = collections. */
+  lane?: "collections" | "origination";
   work_list: ScoredAccount[];
-  portfolio_health: PortfolioHealth;
+  portfolio_health: PortfolioHealth | OriginationHealth;
   alerts: Alert[];
   agent_dialogue?: DisputeRecord[];
   model_card?: ModelCard;

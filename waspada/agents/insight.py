@@ -85,7 +85,21 @@ class InsightAgent(Agent):
         # absent (standalone insight, pre-WA-050 run) → rank() just omits the key.
         model = context.data_handles.get("risk_model")
         features = context.data_handles.get("feature_frame")
-        if pol is not None:
+        lane = context.lane
+        if lane == "origination":
+            # WA-037: the origination decision layer — approve/refer/reject
+            # matrix + book health + drift alerts. Same debate, same gate.
+            from ..insight.origination import decide, origination_alerts, origination_health
+
+            work_list = decide(scored, top_n=self.top_n)
+            health = origination_health(scored)
+            alert_list = origination_alerts(health)
+            self.step(
+                "build_insight",
+                notes=(f"lane=origination decisions={len(work_list)} alerts={len(alert_list)} "
+                       f"approval_rate={health['approval_rate']:.3f}"),
+            )
+        elif pol is not None:
             work_list = _rank(scored, top_n=self.top_n, action_by_band=pol.band_to_action,
                               model=model, features=features)
             health = _segment_health(scored, npl_buckets=pol.npl_buckets)
@@ -95,14 +109,15 @@ class InsightAgent(Agent):
             work_list = _rank(scored, top_n=self.top_n, model=model, features=features)
             health = _segment_health(scored)
             alert_list = _alerts(health)
-        self.step(
-            "build_insight",
-            notes=f"work_list={len(work_list)} alerts={len(alert_list)} npl={health['npl_ratio']:.3f}",
-        )
+        if lane != "origination":
+            self.step(
+                "build_insight",
+                notes=f"work_list={len(work_list)} alerts={len(alert_list)} npl={health['npl_ratio']:.3f}",
+            )
 
         # 4. Human approval BEFORE the work-list is released (humans in control).
         decision = self.gate.request(
-            "publish_work_list",
+            "publish_decisions" if lane == "origination" else "publish_work_list",
             rationale=f"{len(work_list)} accounts queued; top p={work_list[0]['p_default']:.2f}" if work_list else "empty work-list",
         )
         if not isinstance(decision, Approved):
@@ -140,7 +155,19 @@ class InsightAgent(Agent):
             )
 
         # 7. Assemble the payload + the always-present alert summary string.
-        payload = to_dashboard_payload(work_list, health, alert_list)
+        if lane == "origination":
+            # Same DashboardPayload envelope; lane-appropriate health keys and a
+            # ``lane`` tag so the frontend can branch (additive discipline).
+            import json as _json
+            payload = {
+                "work_list": list(work_list),
+                "portfolio_health": dict(health),
+                "alerts": list(alert_list),
+                "lane": "origination",
+            }
+            _json.dumps(payload)  # fail loud on non-JSON content
+        else:
+            payload = to_dashboard_payload(work_list, health, alert_list)
         if dialogue:
             payload["agent_dialogue"] = dialogue
         # WA-093: attach the per-run model-monitoring card (AUC, Brier, observed

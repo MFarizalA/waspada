@@ -46,7 +46,7 @@ import pyarrow.compute as pc
 
 from ..data.lakehouse import Lakehouse
 from ..features.collections import assert_no_nulls, build_features
-from ..schema import FeatureFrame
+from ..schema import ApplicationFeatureFrame, FeatureFrame
 from .base import Agent
 from .llm import LLM, MockLLM
 from .protocol import AgentContext, AgentResult, Status
@@ -145,18 +145,32 @@ class DataAnalystAgent(Agent):
             )
 
         # ---- 2. Deterministic FeatureFrame core (never replaced) ----
-        self.step("build_features", notes=f"as_of={self.as_of.isoformat()} rows={raw.num_rows}")
+        # WA-038: the feature recipe + contract are selected by lane. The frame
+        # is ALWAYS the deterministic builder's output (the WA-030 rule holds
+        # per lane); the LLM loop only explores it.
+        if context.lane == "origination":
+            from ..features.origination import build_features as _build_features
+            frame_contract = ApplicationFeatureFrame
+        else:
+            _build_features = build_features
+            frame_contract = FeatureFrame
+        self.step("build_features", notes=f"lane={context.lane} as_of={self.as_of.isoformat()} rows={raw.num_rows}")
         try:
-            frame = build_features(raw, self.as_of)
-            assert_no_nulls(frame, FeatureFrame)
+            frame = _build_features(raw, self.as_of)
+            assert_no_nulls(frame, frame_contract)
         except Exception as exc:
             self.step("build_features", status=Status.ERROR, notes=str(exc))
             return AgentResult(status=Status.ERROR, agent=self.name, notes=f"features failed: {exc}")
+        if context.lane == "origination":
+            # Alias the id so the debate machinery (auditor lookups, dispute
+            # records, adjudication write-back) runs verbatim on either lane.
+            # Additive superset — the contract stays untouched.
+            frame = frame.append_column("loan_id", frame.column("application_id"))
 
         # Surface a null-rate summary (same acceptance as AnalyticsAgent).
         null_total = sum(
             int(pc.sum(pc.is_null(frame.column(f.name))).as_py())
-            for f in dataclasses.fields(FeatureFrame)
+            for f in dataclasses.fields(frame_contract)
         )
         self.step(
             "null_rate_check", notes=f"feature-null total = {null_total} (all contract fields non-null)",
