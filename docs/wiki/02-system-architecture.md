@@ -5,23 +5,29 @@
 
 ## 1. The big picture
 
-```
-                          ┌──────────────────────────────────────────────┐
-   Browser  ◀── SSE ────▶ │  FastAPI (api/main.py)  — Function Compute     │
-   (React SPA)  HTTP      │  /api/run · /api/run/stream · /api/auth · /    │
-                          └───────────────┬──────────────────────────────┘
-                                          │ builds + runs
-                                 ┌────────▼─────────┐
-                                 │   Orchestrator   │  deterministic spine
-                                 └────────┬─────────┘
-        ┌───────────────┬────────────────┼────────────────┬───────────────┐
-        ▼               ▼                 ▼                ▼               ▼
-  Data Engineer   Data Analyst        Actuary          Skeptic         Insight
-  (flash)         (plus)              (sklearn)        (flash)         (payload)
-        │               │                 │                │ opens         │
-        └── OSS/DuckDB ──┴── features ─────┴── scores ──────┤ disputes      │
-                                                            ▼               │
-                                                    Arbiter (max)  ── Approval Gate (human)
+```mermaid
+flowchart TB
+    subgraph CLIENT["Browser — React SPA"]
+        UI["dashboard: work-list · debate · health · matrix"]
+    end
+    subgraph FC["Alibaba Function Compute"]
+        API["FastAPI (api/main.py)<br/>/api/run · /api/run/stream (SSE) · /api/auth · /"]
+        ORCH["Orchestrator — deterministic spine"]
+        subgraph SOCIETY["The six-agent society"]
+            DE["Data Engineer<br/><i>flash</i>"] --> DA["Data Analyst<br/><i>plus</i>"]
+            DA --> RM["Actuary<br/><i>sklearn + plus</i>"]
+            RM --> SK["Skeptic<br/><i>flash</i>"]
+            SK -. "opens disputes" .-> ARB["Arbiter<br/><i>max</i>"]
+            SK --> IN["Insight<br/><i>payload</i>"]
+            ARB -. "escalates" .-> GATE["Approval Gate<br/><b>human</b>"]
+        end
+    end
+    OSS[("OSS<br/>loan book")] --> DE
+    UI <-->|"HTTP + SSE"| API
+    API --> ORCH --> DE
+    IN --> GATE --> API
+    style GATE fill:#fdeecb,stroke:#b8860b
+    style ARB fill:#e8f8f0,stroke:#00784f
 ```
 
 ## 2. The six-agent society

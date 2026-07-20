@@ -7,21 +7,21 @@
 
 ## 1. Topology
 
-```
-                 Internet
-                    │  (custom domain via DNS → FC)
-              ┌─────▼─────────────────────────────────────┐
-              │  Function Compute v3  (custom container)   │
-              │  FastAPI · uvicorn · port 8080 · /api/*    │
-              │  image ◀── ACR                             │
-              └───┬───────────────┬───────────────┬───────┘
-        RAM STS   │               │               │
-          ┌───────▼──────┐  ┌─────▼──────┐  ┌─────▼──────┐
-          │ OSS          │  │ RDS MySQL  │  │ SLS        │
-          │ raw/staging/ │  │ (auth)     │  │ (audit)    │
-          │ mart buckets │  └────────────┘  └────────────┘
-          └──────────────┘
-   all inside a VPC (2 vSwitches) + security group
+```mermaid
+flowchart TB
+    NET(("Internet")) -- "custom domain (DNS)" --> FC
+    subgraph VPC["VPC · 2 vSwitches · security group"]
+        FC["Function Compute v3<br/>custom container · uvicorn :8080<br/>FastAPI /api/*"]
+        RDS[("ApsaraDB RDS<br/>MySQL 8.0 — auth")]
+    end
+    ACR["Container Registry (ACR)<br/>api image :sha"] -- "pull (RAM STS)" --> FC
+    GH["GitHub Actions<br/>build on release → main"] -- "push linux/amd64" --> ACR
+    FC -- "RAM STS" --> OSS[("OSS · 3 buckets<br/>raw / staging / mart")]
+    FC --> RDS
+    FC -- "audit stream (fail-safe)" --> SLS[("Simple Log Service")]
+    QW["Qwen — DashScope<br/>(egress allow-listed)"] <-->|"debate calls (opt-in)"| FC
+    style FC fill:#eaf2ff,stroke:#0052d9
+    style OSS fill:#fdeecb,stroke:#b8860b
 ```
 
 ## 2. Services (from the IaC)

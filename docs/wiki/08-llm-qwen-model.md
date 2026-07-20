@@ -32,6 +32,24 @@ most practical route since agent tooling already assumes an OpenAI-shaped client
 
 ## 3. Model tiering — cognitive load (`flash` / `plus` / `max`)
 
+```mermaid
+flowchart LR
+    subgraph FLASH["qwen-flash — cheap triage"]
+        DE["Data Engineer"] ~~~ SK["Skeptic (K audits)"]
+    end
+    subgraph PLUS["qwen-plus — mid"]
+        DA["Data Analyst"] ~~~ AC["Actuary rebuttal"]
+    end
+    subgraph MAX["qwen-max — top tier"]
+        AR["Arbiter ruling (≤ K)"]
+    end
+    FLASH --> PLUS --> MAX
+    style FLASH fill:#e8f8f0,stroke:#00a870
+    style PLUS fill:#fdeecb,stroke:#b8860b
+    style MAX fill:#eaf2ff,stroke:#0052d9
+```
+
+
 Different agents need different horsepower, so brains are **tiered by cognitive
 load** and only pay for what each step needs:
 

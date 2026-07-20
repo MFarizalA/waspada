@@ -52,11 +52,17 @@ no-op label, on `QwenLLM` it clones the client onto a different model id. See
 
 Agents that reason (Data Engineer, Data Analyst, Skeptic) run a **bounded tool-loop**:
 
-```
-prompt ─▶ chat(tools) ─▶ tool_calls? ──yes──▶ execute tools ─▶ feed results back ─┐
-                              │no                                                 │
-                              ▼                                          (≤ N turns)
-                        final JSON answer ◀───────────────────────────────────────┘
+```mermaid
+flowchart LR
+    P["prompt"] --> C["llm.chat(tools, messages)"]
+    C --> Q{"tool_calls?"}
+    Q -- "yes (≤ N turns)" --> X["execute tools<br/>(registry / MCP)"]
+    X -- "tool results → messages" --> C
+    Q -- "no" --> F["final JSON answer<br/>(parsed, validated)"]
+    Q -- "budget exhausted" --> F
+    F -.->|"unparseable → skip, never crash"| D["graceful degrade"]
+    style F fill:#e8f8f0,stroke:#00a870
+    style D fill:#fdeecb,stroke:#b8860b
 ```
 
 The loop is **bounded** (`_MAX_TOOL_TURNS`) so cost is deterministic, and it

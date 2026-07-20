@@ -11,9 +11,17 @@ the API between every layer. They never change shape non-additively — a new co
 is fine, a renamed/removed one is a breaking change nobody is allowed to make
 unilaterally.
 
-```
-RawLoans  ──build_features──▶  FeatureFrame  ──model.predict──▶  ScoredAccounts  ──insight──▶  DashboardPayload
- (source)                       (leakage-safe)                    (p_default+band)              (work-list+health+alerts)
+```mermaid
+flowchart LR
+    RL["RawLoans<br/><i>one row per loan</i>"] -- "build_features(as_of)" --> FF["FeatureFrame<br/><i>leakage-safe + label</i>"]
+    FF -- "model.predict" --> SA["ScoredAccounts<br/><i>p_default + band</i>"]
+    SA -- "insight (rank · health · alerts)" --> DP["DashboardPayload<br/><i>work-list + health + alerts</i>"]
+    RA["RawApplications<br/><i>origination lane</i>"] -- "features.origination" --> AF["ApplicationFeatureFrame"]
+    AF -- "model.predict (LaneSpec)" --> SP["ScoredApplications<br/><i>approve/refer/reject</i>"]
+    SP -- "insight.origination" --> DP
+    style RL fill:#eaf2ff,stroke:#0052d9
+    style RA fill:#eaf2ff,stroke:#0052d9
+    style DP fill:#e8f8f0,stroke:#00a870
 ```
 
 | Shape | Role | Key fields |
@@ -37,6 +45,19 @@ explicitly excluded (`LEAKAGE_EXCLUDED`) and pinned by a test. See
 [ML Governance](09-ml-governance.md).
 
 ## 2. The medallion lakehouse (OSS)
+
+```mermaid
+flowchart LR
+    SRC["Sources<br/>Synthetic · Lending Club (CC0)"] -- "producer<br/>loans/dt=YYYYMMDD/" --> B[("Bronze · raw<br/>RawLoans parquet")]
+    B -- "dlt merge load<br/>(lineage)" --> DUCK["DuckDB lakehouse<br/><i>in-process</i>"]
+    DUCK --> AGENTS["Data Engineer / Analyst<br/>quality + features"]
+    AGENTS -- "FeatureFrame + aggregates" --> S[("Silver · staging")]
+    AGENTS --> MODEL["model + debate + insight"]
+    MODEL -- "DashboardPayload" --> G[("Gold · mart")]
+    style B fill:#fdeecb,stroke:#b8860b
+    style S fill:#f2f5fa,stroke:#86909c
+    style G fill:#fff8dc,stroke:#d4a017
+```
 
 Three OSS buckets, the classic **Bronze / Silver / Gold** tiers:
 
