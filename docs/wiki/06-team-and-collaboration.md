@@ -15,7 +15,7 @@ blocks the other.
 | Focus | real data, agents, model, cloud, governance | the demo, presentation, frontend polish, storytelling |
 | Owns | `waspada/` (agents, model, data), `api/`, `deploy/iac/` | dashboard experience, demo scenarios, submission narrative |
 | Priority | *"focus on real production"* since week one | a compelling, judge-ready walkthrough |
-| Brain | Qwen (DashScope) | Kimi K3 (their own model quota) |
+| Brain | Qwen (DashScope) | Kimi K3 (the team's own model quota) |
 
 The **frozen contract** (`RawLoans → FeatureFrame → ScoredAccounts →
 DashboardPayload`) is the interface between the lanes: the backend guarantees the
@@ -31,7 +31,7 @@ sees and the story that frames them. In practice that has meant:
 - Owning the **demo scenarios** and the submission narrative.
 - Driving **frontend/UX** direction and the dashboard's demo-readiness.
 - Coordinating the **presentation** (deck, walkthrough, video framing).
-- Running on **Kimi K3** for their own LLM-assisted work (separate quota from the
+- Running on **Kimi K3** for the team's own LLM-assisted work (separate quota from the
   production lane's Qwen usage), with availability windows around quota resets.
 
 Because both lanes touch the same repo, the collaboration relies on clear ownership,
@@ -82,8 +82,8 @@ editing at once, they're in **separate worktrees**.
 
 ---
 
-*This page documents roles and process, not org structure. Where pronouns for a
-teammate aren't established, this wiki uses they/them.*
+*This page documents roles and process, not org structure. Teammates are referred
+to by name.*
 
 **Related:** [System Architecture](02-system-architecture.md) ·
 [Data Architecture](01-data-architecture.md) · [Tech Stack](05-techstack.md)
