@@ -15,6 +15,14 @@ from waspada.agents.data_engineer import DataEngineerAgent, _use_dlt
 from waspada.agents.__main__ import _sample_raw_table
 from waspada.data.lakehouse import Lakehouse, load_via_dlt
 
+import importlib.util
+# dlt is an OPT-IN load engine, not in the deploy manifest (api/requirements.txt) — so the
+# CI pytest gate + the FC image run without it and take the in-memory fallback. Tests that
+# exercise the dlt-present branch skip when it's absent; the fallback/flag tests still run
+# (they ARE the production path).
+_HAS_DLT = importlib.util.find_spec("dlt") is not None
+_needs_dlt = pytest.mark.skipif(not _HAS_DLT, reason="dlt not installed (opt-in load engine)")
+
 
 def _stub_fetch(table: pa.Table):
     def _fetch(*, lane="collections", limit=None):
@@ -25,6 +33,7 @@ def _stub_fetch(table: pa.Table):
 # --------------------------------------------------------------------------- #
 # load_via_dlt — the engine.
 # --------------------------------------------------------------------------- #
+@_needs_dlt
 def test_load_via_dlt_returns_queryable_lakehouse_with_lineage():
     lh = load_via_dlt(_sample_raw_table(n=200, seed=3), table="raw_loans")
     assert isinstance(lh, Lakehouse)
@@ -38,6 +47,7 @@ def test_load_via_dlt_returns_queryable_lakehouse_with_lineage():
     assert lin["load_id"] and lin["primary_key"] == "loan_id"
 
 
+@_needs_dlt
 def test_load_via_dlt_merge_dedups_on_loan_id(tmp_path):
     book = _sample_raw_table(n=300, seed=9)
     d = str(tmp_path / "pipe")
@@ -61,6 +71,7 @@ def test_use_dlt_flag(monkeypatch):
     assert _use_dlt() is True
 
 
+@_needs_dlt
 def test_data_engineer_uses_dlt_when_opted_in(monkeypatch):
     monkeypatch.setenv("WASPADA_USE_DLT", "1")
     raw = _sample_raw_table(n=150, seed=4)
