@@ -73,7 +73,16 @@ def reset_store() -> None:
 
 
 def seed_default_user() -> None:
-    """Idempotently create the demo analyst (so judges can log straight in)."""
+    """Seed the demo analyst — DEV / LOCAL ONLY.
+
+    Gated to non-prod so the PUBLIC deploy carries no known-password backdoor
+    account: on prod (``WASPADA_ENV=prod``) this is a no-op and every user must
+    register via the sign-up form. Local development and the test suite
+    (``WASPADA_ENV`` unset → dev) still get the convenience login.
+    """
+    if not _is_dev_env():
+        log.info("Demo-user seed skipped on non-dev env — register to sign in.")
+        return
     db = _db()
     if db.get_user(DEFAULT_ANALYST_EMAIL) is None:
         db.insert_user(
@@ -82,7 +91,7 @@ def seed_default_user() -> None:
             _now_iso(),
         )
         log.warning(
-            "WASPADA demo analyst seeded — login with %s / %s",
+            "WASPADA demo analyst seeded (dev only) — login with %s / %s",
             DEFAULT_ANALYST_EMAIL, DEFAULT_ANALYST_PASSWORD,
         )
 

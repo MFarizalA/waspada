@@ -237,10 +237,12 @@ class QwenLLM(LLM):
     DEFAULT_BASE_URL = "https://dashscope-intl.aliyuncs.com/compatible-mode/v1"
 
     # WA-045 egress control — the only domains QwenLLM is ever allowed to call.
-    # Both the intl (dashscope-intl) and CN (dashscope) variants are valid.
+    # All are Alibaba Cloud Model Studio / DashScope endpoints; the guard keeps
+    # loan data from being sent anywhere else.
     _ALLOWED_BASE_DOMAINS = (
         "dashscope.aliyuncs.com",       # CN endpoint
         "dashscope-intl.aliyuncs.com",  # international endpoint
+        "maas.aliyuncs.com",            # Model-as-a-Service (token-plan) endpoint
     )
 
     def __init__(

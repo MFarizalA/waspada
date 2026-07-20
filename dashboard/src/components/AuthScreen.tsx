@@ -1,8 +1,6 @@
 import { useState } from "react";
 import {
   AuthError,
-  DEMO_EMAIL,
-  DEMO_PASSWORD,
   forgotPassword,
   resetPassword,
   useAuth,
@@ -21,8 +19,6 @@ interface AuthScreenProps {
  * Auth screen — login / register / forgot-password / reset-password. One
  * component, four modes, same a11y & styling baseline as the rest of the app.
  *
- * - Login shows the demo analyst credentials as a one-click fill hint so judges
- *   don't have to look them up.
  * - Every field is labelled; errors render in role="alert"; the submit button
  *   shows a pending state and is disabled while a request is in flight.
  * - Mode switches are plain buttons (not links) so keyboard focus stays in the
@@ -140,12 +136,6 @@ function LoginForm({ onSwitch }: { onSwitch: (m: Mode) => void }) {
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const fillDemo = () => {
-    setEmail(DEMO_EMAIL);
-    setPassword(DEMO_PASSWORD);
-    setError(null);
-  };
-
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
@@ -185,18 +175,6 @@ function LoginForm({ onSwitch }: { onSwitch: (m: Mode) => void }) {
         autoComplete="current-password"
         minLength={8}
       />
-
-      <button
-        type="button"
-        className={styles.demoHint}
-        onClick={fillDemo}
-        aria-label={t("auth.fillDemo")}
-      >
-        <span className={styles.demoLabel}>{t("auth.demo")}</span>
-        <span className={styles.demoCreds}>
-          {DEMO_EMAIL} · {DEMO_PASSWORD}
-        </span>
-      </button>
 
       <SubmitButton label={t("auth.signIn")} pending={pending} />
 

@@ -394,6 +394,9 @@ resource "alicloud_fcv3_function" "api" {
     # WA-018: runtime credentials for the FC function
     WASPADA_ENV           = "prod"
     DASHSCOPE_API_KEY     = var.dashscope_api_key
+    # Qwen (Model Studio, token-plan MaaS endpoint). Allow-listed in QwenLLM
+    # (WA-045). Without this the code falls back to the intl DashScope default.
+    DASHSCOPE_BASE_URL    = "https://token-plan.ap-southeast-1.maas.aliyuncs.com/compatible-mode/v1"
     WASPADA_JWT_SECRET    = var.waspada_jwt_secret
     OSS_RAW_BUCKET        = "${local.name_prefix}-raw"
     OSS_STAGING_BUCKET    = "${local.name_prefix}-staging"
