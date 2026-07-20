@@ -197,10 +197,7 @@ def test_insight_agent_produces_payload_and_summary(raw_table, as_of):
     assert r4.ok
     assert r4.artifact_ref == "dashboard_payload"
     payload = ctx.data_handles["dashboard_payload"]
-    # Required contract keys always present; additive optional keys
-    # (agent_dialogue, model_card — WA-093) may accompany them.
-    assert {"work_list", "portfolio_health", "alerts"} <= set(payload.keys())
-    assert set(payload.keys()) <= {"work_list", "portfolio_health", "alerts", "agent_dialogue", "model_card", "policy_card"}
+    assert set(payload.keys()) == {"work_list", "portfolio_health", "alerts"}
     # Always emits ≥1 human-readable alert summary string.
     summary = ctx.data_handles["alert_summary"]
     assert isinstance(summary, str) and summary

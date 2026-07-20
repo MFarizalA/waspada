@@ -39,32 +39,6 @@ def _clean_env(monkeypatch):
     yield
 
 
-@pytest.fixture(autouse=True)
-def _mock_oss_probe_in_tests(monkeypatch):
-    """Tests run without OSS credentials; force the startup probe to pass.
-
-    Each test that hits ``/api/run`` or ``/api/run/stream`` is responsible for
-    injecting its own data stub via the DataEngineerAgent tool registry. The
-    probe only ensures the endpoint returns 200 instead of 503 at the gate.
-    """
-    import api.main as main_mod
-    monkeypatch.setattr(main_mod, "_probe_oss", lambda: (True, "mock-probe-ok"))
-    yield
-
-
-@pytest.fixture(autouse=True)
-def _set_dummy_oss_creds_in_tests(monkeypatch):
-    """Provide dummy OSS credentials so :class:`OSSClient` can instantiate in
-    tests that patch the underlying bucket; the startup probe is also patched
-    so real network calls are not attempted."""
-    monkeypatch.setenv("OSS_RAW_BUCKET", "waspada-test-raw")
-    monkeypatch.setenv("OSS_ENDPOINT", "oss-test.aliyuncs.com")
-    monkeypatch.setenv("OSS_KEY", "loans.parquet")
-    monkeypatch.setenv("OSS_ACCESS_KEY_ID", "AK-test")
-    monkeypatch.setenv("OSS_ACCESS_KEY_SECRET", "SK-test")
-    yield
-
-
 @pytest.fixture
 def as_of() -> str:
     """Canonical snapshot date used across feature/payload tests."""
