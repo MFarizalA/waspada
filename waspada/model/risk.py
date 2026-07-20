@@ -44,21 +44,12 @@ import pandas as pd
 import pyarrow as pa
 import pyarrow.compute as pc
 from sklearn.compose import ColumnTransformer
-from sklearn.isotonic import IsotonicRegression
 from sklearn.linear_model import LogisticRegression
-from sklearn.metrics import brier_score_loss, roc_auc_score
+from sklearn.metrics import roc_auc_score
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
 
-from ..schema import (
-    RISK_LEVELS,
-    ApplicationFeatureFrame,
-    FeatureFrame,
-    ScoredAccounts,
-    ScoredApplications,
-    schema_from_dataclass,
-    validate_table,
-)
+from ..schema import RISK_LEVELS, FeatureFrame, ScoredAccounts, schema_from_dataclass, validate_table
 
 __all__ = [
     "FEATURE_COLUMNS",
@@ -98,69 +89,6 @@ LEAKAGE_EXCLUDED: Tuple[str, ...] = (
 
 # Default vintage split: fraction of (older) vintages used for training.
 DEFAULT_TRAIN_FRACTION = 0.7
-
-
-# --------------------------------------------------------------------------- #
-# WA-036 — per-lane feature spec. The sklearn pipeline is structurally
-# lane-agnostic; only the feature lists, contracts, id column, and cohort axis
-# differ. Collections defaults keep every existing call byte-identical.
-# --------------------------------------------------------------------------- #
-@__import__("dataclasses").dataclass(frozen=True)
-class LaneSpec:
-    """Everything the model layer needs to know about a lane."""
-
-    lane: str
-    numeric: Tuple[str, ...]
-    categorical: Tuple[str, ...]
-    leakage_excluded: Tuple[str, ...]
-    id_column: str
-    frame_contract: type
-    scored_contract: type
-    cohort: str                    # "loan_age" (reconstruct issue year) | "application_date"
-
-    @property
-    def feature_columns(self) -> List[str]:
-        return list(self.numeric + self.categorical)
-
-
-COLLECTIONS_SPEC = LaneSpec(
-    lane="collections",
-    numeric=NUMERIC_FEATURES,
-    categorical=CATEGORICAL_FEATURES,
-    leakage_excluded=LEAKAGE_EXCLUDED,
-    id_column="loan_id",
-    frame_contract=FeatureFrame,
-    scored_contract=ScoredAccounts,
-    cohort="loan_age",
-)
-
-# Origination (WA-035/036): application-time features only. The outcome columns
-# (funded / funded_default) and the label never enter the matrix; the cohort
-# axis is application_date (no loan_age exists at application time).
-ORIGINATION_NUMERIC: Tuple[str, ...] = (
-    "amount", "term", "requested_rate", "annual_income", "dti",
-    "loan_to_income", "employment_length",
-)
-ORIGINATION_CATEGORICAL: Tuple[str, ...] = ("grade", "purpose", "region")
-ORIGINATION_LEAKAGE_EXCLUDED: Tuple[str, ...] = (
-    "application_id",    # identifier
-    "funded",            # outcome
-    "funded_default",    # outcome
-    "label_default",     # the label
-    "application_date",  # cohort metadata, not predictive
-    "as_of_date",        # snapshot metadata
-)
-
-ORIGINATION_SPEC = LaneSpec(
-    lane="origination",
-    numeric=ORIGINATION_NUMERIC,
-    categorical=ORIGINATION_CATEGORICAL,
-    leakage_excluded=ORIGINATION_LEAKAGE_EXCLUDED,
-    id_column="application_id",
-    frame_contract=ApplicationFeatureFrame,
-    scored_contract=ScoredApplications,
-    cohort="application_date",
-)
 
 
 # --------------------------------------------------------------------------- #
@@ -244,111 +172,15 @@ def _vintage_split(frame: pa.Table, train_fraction: float) -> Tuple[np.ndarray, 
     }
 
 
-def _application_cohort_split(frame: pa.Table, train_fraction: float) -> Tuple[np.ndarray, np.ndarray, Dict]:
-    """Out-of-time split by application_date year (WA-036, origination lane).
-
-    Same discipline as the collections vintage split — train on OLDER
-    application cohorts, test on newer — but the cohort axis is the frame's own
-    ``application_date`` (an application has no ``loan_age`` to reconstruct
-    from). Degenerates to the same seeded-shuffle fallback on a single cohort.
-    """
-    years = [d.year for d in frame.column("application_date").to_pylist()]
-    years_arr = np.asarray(years, dtype=np.int64)
-    n = len(years_arr)
-    unique_years = sorted(set(years_arr.tolist()))
-
-    if len(unique_years) <= 1:
-        rng = np.random.default_rng(42)
-        perm = rng.permutation(n)
-        cut = int(n * train_fraction)
-        return np.sort(perm[:cut]), np.sort(perm[cut:]), {
-            "method": "shuffle_fallback",
-            "train_years": unique_years, "test_years": unique_years,
-            "note": "single application cohort; seeded shuffle split",
-        }
-
-    cut_pos = max(1, min(len(unique_years) - 1, int(np.floor(len(unique_years) * train_fraction))))
-    cutoff_year = unique_years[cut_pos]
-    train_mask = years_arr < cutoff_year
-    train_idx = np.nonzero(train_mask)[0]
-    test_idx = np.nonzero(~train_mask)[0]
-    if len(train_idx) == 0 or len(test_idx) == 0:
-        rng = np.random.default_rng(42)
-        perm = rng.permutation(n)
-        cut = int(n * train_fraction)
-        return np.sort(perm[:cut]), np.sort(perm[cut:]), {
-            "method": "shuffle_fallback",
-            "train_years": unique_years, "test_years": unique_years,
-            "note": "application cohort split degenerated; seeded shuffle split",
-        }
-    return train_idx, test_idx, {
-        "method": "application_cohort",
-        "cutoff_year": int(cutoff_year),
-        "train_years": [int(y) for y in unique_years if y < cutoff_year],
-        "test_years": [int(y) for y in unique_years if y >= cutoff_year],
-        "note": "chronological application-cohort split (older → train, newer → test)",
-    }
-
-
 # --------------------------------------------------------------------------- #
 # train — fit LogisticRegression on the leakage-safe feature subset.
 # --------------------------------------------------------------------------- #
-# WA-094: below this hold-out size, calibration is unreliable — keep the raw
-# probabilities (tiny/offline frames are then byte-identical to the pre-WA-094
-# path, so tests/CI don't move). Real books clear this easily.
-_CALIBRATION_MIN_SAMPLES = 30
-
-
-def _raw_proba(pipeline: Pipeline, X: pd.DataFrame) -> np.ndarray:
-    """The LR pipeline's raw P(default), finite and clipped to [0,1]."""
-    p = pipeline.predict_proba(X)[:, 1].astype(float)
-    return np.clip(np.nan_to_num(p, nan=0.0), 0.0, 1.0)
-
-
-def _fit_calibrator(raw_test: np.ndarray, y_test: np.ndarray):
-    """Fit an isotonic map raw_prob → calibrated_prob on the hold-out (WA-094).
-
-    ``class_weight="balanced"`` biases the LR probabilities toward 0.5; an
-    isotonic (monotone, non-parametric) fit on the held-out newer vintages
-    corrects them so ``p_default`` is a true PD. Monotone ⇒ the ranking (and
-    therefore AUC) is unchanged; only the probability *values* are corrected.
-
-    Returns the fitted :class:`IsotonicRegression` or ``None`` when the hold-out
-    is too small / single-class / degenerate (caller keeps the raw probs).
-    """
-    if len(raw_test) < _CALIBRATION_MIN_SAMPLES or len(np.unique(y_test)) < 2:
-        return None
-    try:
-        iso = IsotonicRegression(out_of_bounds="clip", y_min=0.0, y_max=1.0)
-        iso.fit(raw_test, y_test.astype(float))
-        return iso
-    except Exception:  # pragma: no cover - defensive; degrade to raw
-        return None
-
-
-def _calibrated_proba(model: Dict, X: pd.DataFrame) -> np.ndarray:
-    """Score ``X`` → calibrated P(default). Applies the model's calibrator when
-    present (WA-094), else the raw LR probability. The single scoring path both
-    ``predict`` and the band-edge computation go through, so bands are always on
-    the served probability."""
-    raw = _raw_proba(model["pipeline"], X)
-    cal = model.get("calibrator")
-    if cal is None:
-        return raw
-    try:
-        out = np.asarray(cal.predict(raw), dtype=float)
-        return np.clip(np.nan_to_num(out, nan=0.0), 0.0, 1.0)
-    except Exception:  # pragma: no cover - defensive; degrade to raw
-        return raw
-
-
-def _build_pipeline(spec: "LaneSpec" = None) -> Pipeline:
+def _build_pipeline() -> Pipeline:
     """Standardized numerics + one-hot categorics + L2 logistic regression."""
-    spec = spec or COLLECTIONS_SPEC
     pre = ColumnTransformer(
         transformers=[
-            ("num", StandardScaler(), list(spec.numeric)),
-            ("cat", OneHotEncoder(handle_unknown="ignore", sparse_output=False), list(spec.categorical)),
+            ("num", StandardScaler(), list(NUMERIC_FEATURES)),
+            ("cat", OneHotEncoder(handle_unknown="ignore", sparse_output=False), list(CATEGORICAL_FEATURES)),
         ],
         remainder="drop",
     )
@@ -356,15 +188,14 @@ def _build_pipeline(spec: "LaneSpec" = None) -> Pipeline:
     return Pipeline([("pre", pre), ("clf", clf)])
 
 
-def _X_y(frame: pa.Table, spec: "LaneSpec" = None) -> Tuple[pd.DataFrame, np.ndarray]:
-    """Pull the lane's feature matrix and the label from the frame.
+def _X_y(frame: pa.Table) -> Tuple[pd.DataFrame, np.ndarray]:
+    """Pull the feature matrix (FEATURE_COLUMNS) and the label from the frame.
 
     Returns a pandas DataFrame so sklearn's ColumnTransformer can select
     columns by string name.
     """
-    feature_columns = (spec or COLLECTIONS_SPEC).feature_columns
-    cols = {name: frame.column(name).to_pylist() for name in feature_columns}
-    df = pd.DataFrame({c: cols[c] for c in feature_columns}, columns=feature_columns)
+    cols = {name: frame.column(name).to_pylist() for name in FEATURE_COLUMNS}
+    df = pd.DataFrame({c: cols[c] for c in FEATURE_COLUMNS}, columns=FEATURE_COLUMNS)
     y = np.asarray(frame.column("label_default").to_pylist(), dtype=np.int8)
     return df, y
 
@@ -373,7 +204,6 @@ def train(
     features: pa.Table,
     *,
     train_fraction: float = DEFAULT_TRAIN_FRACTION,
-    spec: "LaneSpec" = None,
 ) -> Dict:
     """Train a LogisticRegression on ``features`` with a vintage split.
 
@@ -391,16 +221,12 @@ def train(
         the feature columns used (the leakage-safe subset), the vintage
         split metadata, and hold-out metrics (AUC when computable).
     """
-    spec = spec or COLLECTIONS_SPEC
-    validate_table(features, spec.frame_contract, name="train(features)")
+    validate_table(features, FeatureFrame, name="train(features)")
 
-    X, y = _X_y(features, spec)
-    if spec.cohort == "application_date":
-        train_idx, test_idx, split = _application_cohort_split(features, train_fraction)
-    else:
-        train_idx, test_idx, split = _vintage_split(features, train_fraction)
+    X, y = _X_y(features)
+    train_idx, test_idx, split = _vintage_split(features, train_fraction)
 
-    pipeline = _build_pipeline(spec)
+    pipeline = _build_pipeline()
     # .iloc for positional row selection (pandas 3.0 changed df[int] semantics).
     X_train = X.iloc[train_idx]
     y_train = y[train_idx]
@@ -408,23 +234,9 @@ def train(
 
     # Hold-out AUC on the newer-vintage test split (when both classes present).
     metrics: Dict[str, object] = {"n_train": int(len(train_idx)), "n_test": int(len(test_idx))}
-    # WA-094: post-hoc probability calibration. Fit an isotonic map on the
-    # hold-out so p_default is a true PD (expected_loss + the absolute bands
-    # depend on it). The LR pipeline is untouched — explain()'s coefficients and
-    # the honest linear-score decomposition are unchanged; calibration is a
-    # monotone remap of the final probability. Guarded: on too-small/single-class
-    # hold-outs the calibrator is None and scoring stays raw (offline unchanged).
-    calibrator = None
     if len(test_idx) > 0 and len(np.unique(y[test_idx])) == 2:
-        raw_test = _raw_proba(pipeline, X.iloc[test_idx])
-        metrics["auc"] = float(roc_auc_score(y[test_idx], raw_test))  # rank metric: raw == calibrated
-        calibrator = _fit_calibrator(raw_test, y[test_idx])
-        metrics["calibrated"] = calibrator is not None
-        # Brier before/after, so the calibration win is auditable (WA-093 reads it).
-        metrics["brier_raw"] = float(brier_score_loss(y[test_idx], raw_test))
-        if calibrator is not None:
-            cal_test = _calibrated_proba({"pipeline": pipeline, "calibrator": calibrator}, X.iloc[test_idx])
-            metrics["brier_calibrated"] = float(brier_score_loss(y[test_idx], cal_test))
+        probs = pipeline.predict_proba(X.iloc[test_idx])[:, 1]
+        metrics["auc"] = float(roc_auc_score(y[test_idx], probs))
 
     # WA-051: freeze the reference band edges — the [20,40,60,80] percentiles of
     # THIS book's scores — so future batches are banded on absolute PD cutoffs
@@ -432,44 +244,30 @@ def train(
     # clip as predict() so scoring the training frame reproduces the historical
     # per-batch quintiles byte-for-byte. Collapsed (constant-prob) → None, so
     # predict() falls back to the relative path and the degenerate handling.
-    # Band on the CALIBRATED score distribution (the served probability), so the
-    # frozen edges and predict() stay consistent post-calibration.
-    band_edges = _reference_band_edges(
-        _calibrated_proba({"pipeline": pipeline, "calibrator": calibrator}, X)
-    )
+    band_edges = _reference_band_edges(pipeline, X)
 
-    artifact = {
+    return {
         "pipeline": pipeline,
-        "calibrator": calibrator,  # WA-094: None when calibration was skipped
-        "lane": spec.lane,                      # WA-036: which lane fitted this
-        "id_column": spec.id_column,
-        "feature_columns": list(spec.feature_columns),
-        "leakage_excluded": list(spec.leakage_excluded),
+        "feature_columns": list(FEATURE_COLUMNS),
+        "leakage_excluded": list(LEAKAGE_EXCLUDED),
         "split": split,
         "metrics": metrics,
         "band_edges": band_edges,
         "trained_at": dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z"),
     }
-    # WA-082: stamp a deterministic version id so every run can cite the exact
-    # model that scored it (the registry recomputes the same id on publish/load).
-    try:
-        from .registry import model_id as _model_id
-        artifact["model_id"] = _model_id(artifact)
-    except Exception:  # pragma: no cover - defensive; id is audit metadata
-        pass
-    return artifact
 
 
-def _reference_band_edges(probs: np.ndarray) -> Optional[List[float]]:
+def _reference_band_edges(pipeline: Pipeline, X: pd.DataFrame) -> Optional[List[float]]:
     """The four absolute PD cutoffs to band future batches against (WA-051).
 
-    The reference distribution is the whole training book's (WA-094: calibrated)
-    scores; its ``[20,40,60,80]`` percentiles become the frozen cutoffs. Because
-    predict() scores through the same calibrated path, ``predict(model,
-    same_frame)`` reproduces these quintiles. Returns ``None`` when the cutoffs
-    collapse (constant probabilities) so predict() degrades to the relative path.
+    The reference distribution is the whole training book's scores; its
+    ``[20,40,60,80]`` percentiles become the frozen cutoffs. Matches predict()'s
+    clip so ``predict(model, same_frame)`` is byte-identical to the old
+    per-batch quintile output. Returns ``None`` when the cutoffs collapse
+    (constant probabilities) so predict() degrades to the relative path.
     """
-    probs = np.clip(np.nan_to_num(np.asarray(probs, dtype=float), nan=0.0), 0.0, 1.0)
+    probs = pipeline.predict_proba(X)[:, 1].astype(float)
+    probs = np.clip(np.nan_to_num(probs, nan=0.0), 0.0, 1.0)
     qs = np.percentile(probs, [20, 40, 60, 80])
     if len(set(qs.tolist())) == 1:
         return None
@@ -554,15 +352,9 @@ def predict(model: Dict, features: pa.Table) -> pa.Table:
     ``label_default`` (observed cohort default rate — a monitoring metric,
     never a model feature).
     """
-    # WA-036: the artifact remembers its lane; score against that lane's
-    # contracts. Old artifacts without the key default to collections.
-    lane = model.get("lane", "collections")
-    spec = ORIGINATION_SPEC if lane == "origination" else COLLECTIONS_SPEC
-    validate_table(features, spec.frame_contract, name="predict(features)")
-    X, _ = _X_y(features, spec)
-    # WA-094: score through the calibrated path (raw LR probability remapped by
-    # the isotonic calibrator when the artifact carries one; raw otherwise).
-    probs = _calibrated_proba(model, X)
+    validate_table(features, FeatureFrame, name="predict(features)")
+    X, _ = _X_y(features)
+    probs = model["pipeline"].predict_proba(X)[:, 1].astype(float)
 
     # Guard: probabilities must be finite and in [0,1] (clip tiny float drift).
     probs = np.clip(np.nan_to_num(probs, nan=0.0), 0.0, 1.0)
@@ -572,8 +364,8 @@ def predict(model: Dict, features: pa.Table) -> pa.Table:
     # (back-compat). On the training frame the two are identical by construction.
     bands = _risk_level_bands(probs, edges=model.get("band_edges"))
 
-    # Segment struct per the lane's frozen scored contract.
-    seg_type = schema_from_dataclass(spec.scored_contract).field("segment").type
+    # Segment struct per the frozen ScoredAccounts contract.
+    seg_type = schema_from_dataclass(ScoredAccounts).field("segment").type
     purposes = features.column("purpose").to_pylist()
     regions = features.column("region").to_pylist()
     segment_arr = pa.array(
@@ -583,42 +375,29 @@ def predict(model: Dict, features: pa.Table) -> pa.Table:
 
     base = pa.table(
         {
-            spec.id_column: features.column(spec.id_column),
+            "loan_id": features.column("loan_id"),
             "p_default": pa.array(probs.tolist(), type=pa.float64()),
             "score_band": pa.array(bands, type=pa.string()),
             "segment": segment_arr,
-            # Empty here — the ranking/decision layer fills recommended_action.
+            # Empty here — the ranking layer fills recommended_action.
             "recommended_action": pa.array([""] * features.num_rows, type=pa.string()),
         },
-        schema=schema_from_dataclass(spec.scored_contract),
+        schema=schema_from_dataclass(ScoredAccounts),
     )
 
-    # Carry-forward columns for the insight layer (NOT contract fields) —
-    # lane-aware (WA-036): the collections monitoring aids need a seasoned book.
-    if lane == "origination":
-        app_years = pa.array(
-            [d.year for d in features.column("application_date").to_pylist()],
-            type=pa.int64(),
-        )
-        scored = (
-            base
-            .append_column("application_year", app_years)
-            .append_column("label_default", features.column("label_default"))
-            .append_column("amount", features.column("amount"))
-        )
-    else:
-        scored = (
-            base
-            .append_column("issue_year", issue_year_from_frame(features))
-            .append_column("delinquency_status", features.column("delinquency_status"))
-            .append_column("label_default", features.column("label_default"))
-        )
-        # WA-024: carry forward outstanding_principal for Expected Loss computation.
-        # Reconstructed from outstanding_ratio × amount if both are present.
-        op = _try_outstanding_principal(features)
-        if op is not None:
-            scored = scored.append_column("outstanding_principal", op)
-    validate_table(scored, spec.scored_contract, name="predict(scored)")
+    # Carry-forward columns for the insight layer (NOT contract fields).
+    scored = (
+        base
+        .append_column("issue_year", issue_year_from_frame(features))
+        .append_column("delinquency_status", features.column("delinquency_status"))
+        .append_column("label_default", features.column("label_default"))
+    )
+    # WA-024: carry forward outstanding_principal for Expected Loss computation.
+    # Reconstructed from outstanding_ratio × amount if both are present.
+    op = _try_outstanding_principal(features)
+    if op is not None:
+        scored = scored.append_column("outstanding_principal", op)
+    validate_table(scored, ScoredAccounts, name="predict(scored)")
     return scored
 
 
@@ -685,17 +464,15 @@ def explain(
         return []
 
     # Locate the account's raw feature row.
-    feature_columns = list(model.get("feature_columns") or FEATURE_COLUMNS)
-    id_column = model.get("id_column", "loan_id")
-    ids = features.column(id_column).to_pylist()
+    ids = features.column("loan_id").to_pylist()
     try:
         pos = ids.index(str(loan_id))
     except ValueError:
         return []
     raw_row = pd.Series(
-        {c: features.column(c)[pos].as_py() for c in feature_columns}
+        {c: features.column(c)[pos].as_py() for c in FEATURE_COLUMNS}
     )
-    X_row = pd.DataFrame([raw_row], columns=feature_columns)
+    X_row = pd.DataFrame([raw_row], columns=FEATURE_COLUMNS)
 
     try:
         xt = np.asarray(pre.transform(X_row), dtype=float)[0]

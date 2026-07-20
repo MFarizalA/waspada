@@ -18,10 +18,10 @@ feature  ─────●/           ●───────/           ●�
 
 | Branch | Purpose | Merges into | Who merges |
 |---|---|---|---|
-| `main` | Production — always deployable | — | Stefanie only |
-| `develop` | Integration — all features land here first | `main` | Stefanie only |
-| `feature/*` | Ticket work | `develop` | Stefanie |
-| `fix/*` | Hotfixes | `main` (emergency) or `develop` (normal) | Stefanie |
+| `main` | Production — always deployable | — | Steffi only |
+| `develop` | Integration — all features land here first | `main` | Steffi only |
+| `feature/*` | Ticket work | `develop` | Steffi |
+| `fix/*` | Hotfixes | `main` (emergency) or `develop` (normal) | Steffi |
 
 ## Branch naming
 
@@ -62,7 +62,7 @@ feature/wa-<ticket>-<short-description>
 | `test` | Test-only changes |
 | `docs` | Documentation only |
 | `chore` | Tooling, deps, config |
-| `merge` | Merge commit (Stefanie creates these) |
+| `merge` | Merge commit (Steffi creates these) |
 
 Examples:
 ```
@@ -80,7 +80,7 @@ refactor: remove GeminiLLM — dead surface area
 
 ## Merging
 
-### Feature → develop (Stefanie's gate)
+### Feature → develop (Steffi's gate)
 
 Before merging any feature branch to `develop`:
 
@@ -127,7 +127,7 @@ git push origin --delete feature/wa-XXX-desc  # remote
 | Rule | Why |
 |---|---|
 | Jal pushes directly to `develop` for doc/ticket edits | He owns the repo, knows what he's doing |
-| Jal coordinates cred uploads with Stefanie | She handles the `.env` / `secrets.tfvars` placement |
+| Jal coordinates cred uploads with Steffi | She handles the `.env` / `secrets.tfvars` placement |
 | Jal is the final sign-off for develop → main releases | The gate is sacred — nothing ships without the owner |
 
 ## Hotfix flow (emergency)
@@ -142,8 +142,8 @@ main ─────────────────────────
 
 1. Branch off `main`: `git checkout -b hotfix/description`
 2. Fix, test, commit
-3. Stefanie merges to `main` immediately
-4. Stefanie merges `main` back to `develop` to keep them in sync
+3. Steffi merges to `main` immediately
+4. Steffi merges `main` back to `develop` to keep them in sync
 
 ## Release / deploy tags
 

@@ -52,7 +52,7 @@
   flex: 0 0 160px;
   height: 10px;
   background: var(--chart-track);
-  border-radius: var(--radius-sm);
+  border-radius: 999px;
   overflow: hidden;
 }
 
@@ -60,7 +60,7 @@
   display: block;
   height: 100%;
   background: linear-gradient(90deg, var(--risk-low), var(--risk-elevated));
-  border-radius: var(--radius-sm);
+  border-radius: 999px;
 }
 
 /* Expected-loss headline card (WA-024). Mirrors the NPL card shape; the value
@@ -141,14 +141,14 @@
 .barTrack {
   height: 14px;
   background: var(--chart-track);
-  border-radius: var(--radius-sm);
+  border-radius: 4px;
   overflow: hidden;
 }
 
 .barFill {
   display: block;
   height: 100%;
-  border-radius: var(--radius-sm);
+  border-radius: 4px;
   min-width: 2px;
 }
 

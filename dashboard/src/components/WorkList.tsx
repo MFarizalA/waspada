@@ -139,17 +139,7 @@ export function WorkList({ accounts, contestedLoanIds, onSelectAccount, onJumpTo
                 <td className={styles.loanId}>{account.loan_id}</td>
                 <td className={styles.segment}>{segmentLabel(account.segment)}</td>
                 <td className={styles.score}><ScoreText account={account} /></td>
-                <td className={styles.band}>
-                  <BandCell account={account} />
-                  {account.top_driver && (
-                    <span
-                      className={styles.driver}
-                      title={t("wl.driver.title")}
-                    >
-                      {account.top_driver}
-                    </span>
-                  )}
-                </td>
+                <td className={styles.band}><BandCell account={account} /></td>
                 {showEl && (
                   <td className={styles.el}>
                     {typeof account.expected_loss === "number"

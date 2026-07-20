@@ -180,7 +180,7 @@
   justify-content: center;
   min-width: 2.5rem;
   padding: 2px var(--sp-2);
-  border-radius: var(--radius-sm);
+  border-radius: 999px;
   font-size: 0.72rem;
   font-weight: 650;
   letter-spacing: 0.02em;
@@ -197,7 +197,7 @@
   display: inline-block;
   padding: 2px 8px;
   border: 1px solid var(--sev-moderate);
-  border-radius: var(--radius-sm);
+  border-radius: 999px;
   background: color-mix(in srgb, var(--sev-moderate) 10%, transparent);
   color: var(--text);
   font-size: 0.7rem;
@@ -207,23 +207,4 @@
 }
 .contestedPill:hover {
   background: color-mix(in srgb, var(--sev-moderate) 20%, transparent);
-}
-
-/* G1 — "why this row": the model's top driver, a compact muted chip under the
-   band cell. Tabular + mono-ish so the value reads as data. */
-.driver {
-  display: inline-block;
-  margin-top: 3px;
-  max-width: 100%;
-  font-family: var(--font-mono);
-  font-size: 0.66rem;
-  line-height: 1.2;
-  color: var(--text-subtle);
-  background: var(--surface-muted);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  padding: 1px 6px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }

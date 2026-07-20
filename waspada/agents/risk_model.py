@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import json
 import re
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, List, Optional, Tuple
 
 import pyarrow as pa
 
@@ -69,41 +69,22 @@ class RiskModelAgent(Agent):
                 notes=f"FeatureFrame handle {frame_handle!r} not found",
             )
 
-        # WA-036: pick the lane's model spec (feature lists, contracts, cohort
-        # split). Collections default keeps the existing path byte-identical.
-        if context.lane == "origination":
-            from ..model.risk import ORIGINATION_SPEC as _spec
-        else:
-            _spec = None
+        self.step("train", notes=f"rows={frame.num_rows} (vintage split)")
+        try:
+            model = _train(frame)
+        except Exception as exc:
+            self.step("train", status=Status.ERROR, notes=str(exc))
+            return AgentResult(status=Status.ERROR, agent=self.name, notes=f"train failed: {exc}")
 
-        # WA-082: serve a frozen, versioned model from OSS when opted in; else
-        # train per-run (the offline / test / demo default). The registry serve
-        # is collections-only for now — origination always trains per-run.
-        model = self._load_published_model() if _spec is None else None
-        if model is None:
-            self.step("train", notes=f"lane={context.lane} rows={frame.num_rows} (out-of-time split)")
-            try:
-                model = _train(frame, spec=_spec) if _spec is not None else _train(frame)
-            except Exception as exc:
-                self.step("train", status=Status.ERROR, notes=str(exc))
-                return AgentResult(status=Status.ERROR, agent=self.name, notes=f"train failed: {exc}")
-
-            auc = model.get("metrics", {}).get("auc")
-            self.step(
-                "train_done",
-                notes=f"split={model['split']['method']} auc={auc}" if auc else f"split={model['split']['method']}",
-            )
+        auc = model.get("metrics", {}).get("auc")
+        self.step(
+            "train_done",
+            notes=f"split={model['split']['method']} auc={auc}" if auc else f"split={model['split']['method']}",
+        )
 
         try:
             scored = _predict(model, frame)
-            if context.lane == "origination":
-                from ..schema import ScoredApplications as _scored_contract
-                # Alias the id so the debate machinery (auditor, disputes,
-                # adjudication write-back, SSE events) runs verbatim per lane.
-                scored = scored.append_column("loan_id", scored.column("application_id"))
-            else:
-                _scored_contract = ScoredAccounts
-            validate_table(scored, _scored_contract, name="RiskModelAgent(scored)")
+            validate_table(scored, ScoredAccounts, name="RiskModelAgent(scored)")
         except Exception as exc:
             self.step("predict", status=Status.ERROR, notes=str(exc))
             return AgentResult(status=Status.ERROR, agent=self.name, notes=f"predict failed: {exc}")
@@ -133,36 +114,6 @@ class RiskModelAgent(Agent):
             status=Status.OK, agent=self.name, artifact_ref=handle,
             notes=f"scored {scored.num_rows} accounts; Very High={n_highest}",
         )
-
-    # ------------------------------------------------- WA-082 frozen serve
-    def _load_published_model(self) -> Optional[Dict[str, Any]]:
-        """Serve a frozen, versioned PD model from OSS when opted in.
-
-        Opt-in via ``WASPADA_PD_MODEL_SOURCE=oss`` (pin a version with
-        ``WASPADA_PD_MODEL_ID``; bucket via ``OSS_STAGING_BUCKET``). Returns the
-        loaded artifact — reproducible, auditable scoring that cites a
-        ``model_id`` — or ``None`` to fall back to per-run training. Never raises:
-        a load failure logs and degrades to training, so offline/tests/demo (no
-        env, no OSS) are unchanged.
-        """
-        import os
-
-        if os.environ.get("WASPADA_PD_MODEL_SOURCE", "").strip().lower() != "oss":
-            return None
-        try:
-            from ..data.oss import OSSClient
-            from ..model.registry import load_published_model
-
-            pinned = os.environ.get("WASPADA_PD_MODEL_ID") or None
-            bucket = os.environ.get("OSS_STAGING_BUCKET") or None
-            model = load_published_model(OSSClient(), model_id=pinned, bucket=bucket)
-            self.step("model_loaded",
-                      notes=f"served frozen model {model.get('model_id')} from OSS (no per-run fit)")
-            return model
-        except Exception as exc:
-            self.step("model_load", status=Status.ERROR,
-                      notes=f"OSS model load failed, training per-run: {exc}")
-            return None
 
     # ---------------------------------------------------- Round 2 (WA-016)
     def defend_score(

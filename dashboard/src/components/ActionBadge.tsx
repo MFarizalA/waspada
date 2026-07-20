@@ -7,11 +7,6 @@ const STYLES: Record<Action, { bg: string; fg: string }> = {
   "call":      { bg: "var(--action-call-bg)",      fg: "var(--action-call-fg)" },
   "watch":     { bg: "var(--action-watch-bg)",     fg: "var(--action-watch-fg)" },
   "auto-cure": { bg: "var(--action-autocure-bg)",  fg: "var(--action-autocure-fg)" },
-  // WA-039 — origination decisions: approve=green, refer=amber (human review),
-  // reject=red. Reuses the semantic tokens so both lanes re-theme together.
-  "approve":   { bg: "var(--action-autocure-bg)",  fg: "var(--action-autocure-fg)" },
-  "refer":     { bg: "var(--action-watch-bg)",     fg: "var(--action-watch-fg)" },
-  "reject":    { bg: "var(--action-call-bg)",      fg: "var(--action-call-fg)" },
 };
 
 /**

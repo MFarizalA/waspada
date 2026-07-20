@@ -1,36 +1,8 @@
-<div align="center">
+# WASPADA
 
-<img src="docs/brand/banner.png" alt="WASPADA — Early warning, argued" width="820">
-
-### Early Warning, Argued.
-
-会辩论的贷款风险预警系统 — 六个 AI 智能体在人做出决定前，为每一个风险评分展开辩论。<br/>
-<i>A six-agent AI society that debates every loan-risk score before a human decides.</i>
-
-<p>
-<a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/License-MIT-0052D9.svg"></a>
-<img alt="Python 3.11+" src="https://img.shields.io/badge/Python-3.11+-3776AB?logo=python&logoColor=white">
-<img alt="TypeScript 5" src="https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript&logoColor=white">
-<img alt="Alibaba Cloud" src="https://img.shields.io/badge/Alibaba%20Cloud-FF6A00?logo=alibabacloud&logoColor=white">
-<img alt="Brain: Qwen" src="https://img.shields.io/badge/Brain-Qwen%20·%20DashScope-615CED">
-<img alt="Tests: 545 passing" src="https://img.shields.io/badge/tests-545%20passing-2ea44f">
-</p>
-
-<p>
-<a href="https://waspadaprod-api-vouqzqqkiu.ap-southeast-1.fcapp.run"><b>Live Demo</b></a>
-&nbsp;·&nbsp;
-<a href="docs/wiki/Home.md"><b>Engineering Wiki</b></a>
-&nbsp;·&nbsp;
-<a href="docs/HACKATHON.md"><b>Design &amp; Rubric</b></a>
-</p>
-
-<sub><b>W</b>arning <b>&amp;</b> <b>A</b>pproval <b>S</b>ystem for <b>P</b>ortfolio <b>A</b>nd <b>D</b>efault <b>A</b>nalytics · built for the Qwen Cloud (Alibaba) hackathon</sub>
-
-<b>English</b> · <a href="README.zh-CN.md">中文</a>
-
-</div>
-
----
+**W**arning **&** **A**pproval **S**ystem for **P**ortfolio **A**nd **D**efault
+**A**nalytics — an autonomous **multi-agent risk decision-support system** for a
+multifinance lender's collections analyst.
 
 WASPADA scores a lender's loan book, has a **society of AI agents argue about
 the riskiest accounts**, resolves its own disagreements under a bounded call
@@ -41,16 +13,13 @@ debate transcript attached. Two decisions on one shared risk engine:
   roll into NPL, and how to prioritize limited collector capacity. **Built
   end-to-end** (data agents → model → debate → rank → dashboard, with a human
   approval gate).
-- **Origination** — approve / refer / reject new applications. **Built** as an
-  additive second lane on the same engine (WA-033..039): its own application-time
-  contract + features, out-of-time cohort split, and an approve/refer/reject
-  matrix the debate's rulings actually move — `python -m waspada.agents --lane
-  origination` runs the whole society end-to-end offline.
+- **Origination** — approve / reject / price new applications. Architected as an
+  additive second lane (deferred — the substrate is lane-agnostic).
 
 **Stack:** Alibaba Cloud OSS (data lake) · DuckDB (in-process query engine) ·
 Qwen models via Alibaba Cloud Model Studio/DashScope (the Agent Society brain,
 opt-in) · a multi-agent layer over a mockable LLM (**mock by default, offline**)
-· Alibaba Simple Log Service (audit stream) · ApsaraDB RDS MySQL (auth) ·
+· Alibaba Simple Log Service (audit stream) · ApsaraDB RDS PostgreSQL (auth) ·
 React/TypeScript dashboard · optional cuDF-on-GPU (WSL2) feature path.
 
 > Built by an autonomous AI software company — Stefanie (PM) · Bimo (backend) ·
@@ -95,12 +64,6 @@ audit trail" answer for a regulated lender.
 ---
 
 ## Architecture — two tiers, one engine
-
-**Cloud topology** — Qwen Cloud (DashScope tiers) · the 6-agent society on FastAPI in Function Compute · OSS medallion · RDS MySQL (auth) · SLS (audit) · ACR → FC deploy:
-
-![WASPADA architecture](docs/architecture.svg)
-
-*(The Mermaid flow below shows the agent hand-offs; the diagram above shows the Alibaba Cloud topology.)*
 
 A deliberate distinction most "multi-agent" projects blur: **the deterministic
 harness is not the society.** The reproducible plumbing that fetches, sequences,
@@ -186,7 +149,7 @@ waspada/
 ├── wsl.py                  # run_gpu() helper for the optional WSL/cuDF path
 ├── data/
 │   ├── oss.py              # Alibaba Cloud OSS client → RawLoans-shaped Arrow
-│   └── lakehouse.py        # DuckDB query layer the data agents run SQL over (OSS parquet → in-process DuckDB)
+│   └── lakehouse.py        # dlt + DuckDB query layer the data agents run SQL over
 ├── features/collections.py # deterministic cross-sectional FeatureFrame + label
 ├── model/risk.py           # sklearn model — vintage split, no-leakage guard (CPU)
 ├── insight/ranking.py      # rank + portfolio health + alerts + payload
@@ -216,29 +179,6 @@ backlog/                     # ticket specs (WA-001..WA-030)
 
 ---
 
-## Documentation
-
-The engineering wiki lives in [`docs/wiki/`](docs/wiki/Home.md):
-
-| # | Page | What it covers |
-|---|------|----------------|
-| 01 | [Data Architecture](docs/wiki/01-data-architecture.md) | The frozen data contract, the medallion (OSS Bronze/Silver/Gold), dlt + DuckDB, partitioning |
-| 02 | [System Architecture](docs/wiki/02-system-architecture.md) | The end-to-end system: agents, orchestrator, API, dashboard, cloud |
-| 03 | [Harness Architecture](docs/wiki/03-harness-architecture.md) | The agent framework — base classes, tools, the LLM surface, the approval gate |
-| 04 | [Debate Mechanism](docs/wiki/04-debate-mechanism.md) | The three-round adversarial debate, admissibility, adjudication, cost ceiling |
-| 05 | [Tech Stack](docs/wiki/05-techstack.md) | Every language, library, and service, and why |
-| 06 | [Team & Collaboration](docs/wiki/06-team-and-collaboration.md) | The two lanes, ownership boundaries, the git worktree workflow |
-| 07 | [Alibaba Cloud Infrastructure](docs/wiki/07-alibaba-cloud-infra.md) | OSS, Function Compute, RDS, ACR, SLS, RAM — the IaC |
-| 08 | [LLM / Qwen Model](docs/wiki/08-llm-qwen-model.md) | The reasoning brains, model tiering, native function calling, egress control |
-| 09 | [ML Governance](docs/wiki/09-ml-governance.md) | The PD model, calibration, drift monitoring, versioning, the parameter matrix |
-
-Other docs: [CONTRIBUTING.md](CONTRIBUTING.md) (branch/PR workflow — root) ·
-[HACKATHON.md](docs/HACKATHON.md) (the full design + judging-rubric mapping) ·
-[DEMO.md](docs/DEMO.md) · [SECURITY.md](docs/SECURITY.md) ·
-[SUBMISSION-CHECKLIST.md](docs/SUBMISSION-CHECKLIST.md).
-
----
-
 ## Quick start
 
 ### Prerequisites
@@ -250,8 +190,8 @@ Other docs: [CONTRIBUTING.md](CONTRIBUTING.md) (branch/PR workflow — root) ·
 ### Install
 ```bash
 python -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\activate
-pip install -r api/requirements.txt   # CPU-only, complete: runs the CLI, API, and tests
-# (optional) GPU feature path — RAPIDS, Linux/WSL + NVIDIA GPU only, via the NVIDIA index:
+pip install -r requirements.txt
+# GPU deps need the NVIDIA index (Linux/WSL only):
 # pip install --extra-index-url=https://pypi.nvidia.com -r requirements.txt
 ```
 
@@ -282,8 +222,7 @@ cd .. && uvicorn api.main:app --port 8080       # serves the dashboard + /api/ru
 
 ### Run the tests
 ```bash
-pip install pytest                  # test runner (not a runtime dep)
-python -m pytest tests/ -q          # 440+ tests, green offline; live-only smoke tests skip without creds
+python -m pytest tests/ -q          # 300+ tests, green offline; live-only smoke tests skip without creds
 ```
 
 ---
@@ -364,7 +303,7 @@ The image is pushed with two tags — `latest` and the commit SHA
 
 | Area | Deliverable | Status |
 |---|---|---|
-| Contract & data | Frozen schema · OSS ingest · lakehouse (DuckDB) | ✅ (Data Engineer reads OSS parquet directly via in-process DuckDB; the schema contract is the `validate_table(RawLoans)` gate) |
+| Contract & data | Frozen schema · OSS ingest · lakehouse (dlt + DuckDB) | ✅ (dlt ingestion path is a stub; DuckDB query layer live) |
 | Features & model | Deterministic FeatureFrame · sklearn model (leakage guard, vintage split) | ✅ |
 | Insight | Ranking · portfolio health · cohort alerts · payload | ✅ |
 | Agent framework | Agent base · ApprovalGate · orchestrator · CLI | ✅ |
@@ -373,13 +312,11 @@ The image is pushed with two tags — `latest` and the commit SHA
 | MCP | Real MCP server + client (`portfolio_stats`, `lookup_account`) | ✅ |
 | Dispute memory | Cross-run institutional precedent | ✅ |
 | Audit | SLS audit stream, fail-safe local fallback (WA-023) | ✅ |
-| Dashboard | Agent Society panel · **debate flow-chart** · SSE live debate · **Model Card** · **Parameter Matrix** · Human Gate · driver chips · bilingual EN/中文 · cloud-blue design system | ✅ |
-| ML governance | Probability **calibration** (WA-094) · **drift monitoring** + PSI (WA-093) · versioned **model registry** to OSS (WA-082) | ✅ |
-| Parameter matrix | Human-set policy (band→action · dispute gap · arbiter confidence · audit K) governing the run, with `policy_id` provenance (WA-095) | ✅ |
+| Dashboard | EWS dashboard · Agent Society panel · SSE live debate (WA-011/019/022) · bilingual EN/中文 + China-style UI (WA-031) | ✅ |
 | Auth | JWT sessions + bcrypt, RDS/SQLite (WA-028) | ✅ |
 | Benchmark | Society vs single-agent efficiency harness (WA-017) | ✅ |
-| Deploy | OpenTofu IaC (OSS · ACR · Function Compute · SLS · RDS) | ✅ live — `https://app.waspada.xyz` ([quirk note](#deployment)) |
-| Origination lane | Second decision lane on the same engine — approve/refer/reject, own application-time contract/features/split; debate + gate + dashboard reused verbatim | ✅ (WA-033..039) |
+| Deploy | OpenTofu IaC (OSS · ACR · Function Compute · SLS · RDS) | ✅ live — `https://waspadaprod-api-vouqzqqkiu.ap-southeast-1.fcapp.run` ([quirk note](#deployment)) |
+| Origination lane | Second lane on the same engine | 🟡 requirements drafted (WA-033..039) |
 
 ---
 

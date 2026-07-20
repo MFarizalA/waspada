@@ -30,10 +30,6 @@ python-dotenv>=1.0
 # --- Auth (WA-028): JWT sessions + bcrypt password hashing ---
 PyJWT>=2.8
 passlib[bcrypt]>=1.7
-# passlib 1.7.4 predates bcrypt's 4.1 API change and breaks on bcrypt>=4.1
-# ("module 'bcrypt' has no attribute '__about__'") — pin to the last
-# compatible line (mirrors api/requirements.txt; fatal in prod, not just CI).
-bcrypt>=4.0,<4.1
 email-validator>=2.0
 # ApsaraDB RDS MySQL driver. Only needed when DATABASE_URL points at a
 # mysql:// / mysql+pymysql:// URL; the local-dev / test path uses stdlib sqlite3.

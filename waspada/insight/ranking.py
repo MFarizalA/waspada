@@ -80,8 +80,6 @@ def rank(
     top_n: int = 50,
     *,
     action_by_band: Optional[Dict[str, str]] = None,
-    model: Optional[Dict[str, object]] = None,
-    features: Optional[pa.Table] = None,
 ) -> List[Dict[str, object]]:
     """Sort by ``p_default`` desc, attach ``recommended_action``, cap at ``top_n``.
 
@@ -128,20 +126,6 @@ def rank(
     or_col = _safe_get(scored, "override_reason")
     override_reasons = or_col.to_pylist() if or_col is not None else None
 
-    # G1 — optional per-row top driver: the model's single largest signed
-    # contribution behind this account's score (WA-050 ``explain``), so the
-    # work-list answers "why this row" at the triage surface (UX research: the
-    # reason must sit next to the alert). Additive + guarded: only when the fitted
-    # model + features are supplied; any failure degrades to no ``top_driver`` key,
-    # so the un-enriched path is byte-identical. Computed only for the top-N rows.
-    driver_fn = None
-    if model is not None and features is not None:
-        try:
-            from ..model.risk import explain as _explain
-            driver_fn = _explain
-        except Exception:  # pragma: no cover - defensive import guard
-            driver_fn = None
-
     # Sort indices by (p_default desc, loan_id asc) for determinism.
     order = sorted(range(n), key=lambda i: (-probs[i], str(loan_ids[i])))
     top = order[: max(0, int(top_n))]
@@ -172,16 +156,6 @@ def rank(
                 rec["override_reason"] = (
                     override_reasons[i] if override_reasons is not None else ""
                 ) or ""
-        # G1: the model's top driver behind this score (↑ pushed toward default,
-        # ↓ toward safe). Never breaks ranking — enrichment only.
-        if driver_fn is not None:
-            try:
-                drivers = driver_fn(model, features, str(loan_ids[i]), top_n=1)
-                if drivers:
-                    label, contribution = drivers[0]
-                    rec["top_driver"] = f"{label} {'↑' if contribution > 0 else '↓'}"
-            except Exception:  # pragma: no cover - defensive; driver is optional
-                pass
         out.append(rec)
     return out
 

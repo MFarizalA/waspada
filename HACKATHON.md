@@ -58,10 +58,8 @@ holding the gate at both layers.*
   what exists: function calling, MCP, JSON mode, tiering, streaming.
 
 **Innovation & AI Creativity (architecture quality):**
-- Adversarial **debate protocol with a deterministic cost ceiling** (≤ K×3
-  debate *rounds*, K=8 default; the challenge round is itself a bounded native
-  tool-calling loop, so ≤ K×6 LLM calls worst case) — negotiation without
-  unbounded agent chatter.
+- Adversarial **debate protocol with a deterministic cost ceiling** (≤ K×3 LLM
+  calls, K=8 default) — negotiation without unbounded agent chatter.
 - **Evidence-grounded claims** — a debate turn must cite feature values /
   portfolio stats (pulled via MCP) or it's discounted; claims are data, not vibes.
 - `DISPUTED` as a **first-class pipeline state** (alongside ok/blocked/error) —
@@ -72,10 +70,9 @@ holding the gate at both layers.*
 
 **Problem Value & Impact:** real multifinance collections pain (stale manual
 work-lists → NPL losses); the society pattern generalizes to any
-score-then-contest decision (the origination lane runs on it too — WA-033..039). **Alibaba
-Cloud native — 5 services:** OSS (portfolio store) + Function Compute (backend)
-+ ApsaraDB RDS MySQL (auth) + Container Registry/ACR (image builds) + Qwen Cloud
-(reasoning) + Simple Log Service (queryable audit stream of every
+score-then-contest decision (origination lane already architected). **Alibaba
+Cloud native — 4 services:** OSS (portfolio store) + Function Compute (backend)
++ Qwen Cloud (reasoning) + Simple Log Service (queryable audit stream of every
 agent turn — the "show me the audit trail" answer for a regulated lender).
 
 **Presentation & Documentation:** the dashboard's **Agent Society panel**
@@ -140,7 +137,7 @@ the scores).
 
 | Participant | Role | Brain | Capability | On failure |
 |---|---|---|---|---|
-| `data_engineer` | ✅ · **The Data Engineer** — validates, profiles, and quality-checks the freshly-loaded book before anyone trusts it | **LLM** (`qwen3.6-flash`) + **function-calling loop** over a deterministic DuckDB check core | tools: `validate_schema`, `null_rates`, `profile_column`, `detect_anomalies` | dirty data → `blocked`; unparsable tool step → run the default check set (validation never skipped) |
+| `data_engineer` | ✅ · **The Data Engineer** — validates, profiles, and quality-checks the freshly-loaded book before anyone trusts it | **LLM** (`qwen3.6-flash`) + **function-calling loop** over a deterministic dlt/DuckDB check core | tools: `validate_schema`, `null_rates`, `profile_column`, `detect_anomalies` | dirty data → `blocked`; unparsable tool step → run the default check set (validation never skipped) |
 | `data_analyst` | 🟡 (planned, WA-030 — analytics is deterministic today) · **The Data Analyst** — builds features and explores the book for the aggregates the debate later cites | **LLM** (`qwen3.7-plus`) + **function-calling loop** over DuckDB SQL | tools: `query`, `correlation`, `distribution`, `build_feature`; backs the MCP evidence base | tool/parse failure → fall back to the fixed, deterministic feature recipe |
 | `risk_model` (score) | ✅ · **The Defendant + Counsel** — a classical-ML score, defended by an LLM when challenged | **classical ML** (sklearn LogisticRegression) as the score; `qwen3.7-plus` as its defense voice (`defend_score()`) | vintage-split training, leakage guard; uphold-or-concede rebuttal | unparsable rebuttal → auto-escalate |
 | `risk_auditor` | ✅ (note: single-shot JSON, not a loop) · **The Prosecutor (Skeptic)** — audits the top-K riskiest scores, challenges where the story doesn't match the number | **LLM** (`qwen3.6-flash`) + **native function-calling loop** | **MCP client**: `portfolio_stats`, `lookup_account`; opens `Dispute`s with cited evidence | unparsable challenge → no dispute (logged), pipeline continues |
@@ -181,10 +178,9 @@ sequenceDiagram
     end
 ```
 
-- **Cost ceiling is deterministic:** ≤ K×3 debate *rounds* (K challenge + at
-  most K rebuttals + at most K rulings). Each challenge is a bounded native
-  tool-calling loop (≤4 turns), so the worst-case LLM-call count is ≤ K×6;
-  typical runs far less. No open-ended agent chatter.
+- **Cost ceiling is deterministic:** ≤ K×3 calls worst case (K challenge + at
+  most K rebuttals + at most K rulings); typical runs far less. No open-ended
+  agent chatter.
 - Every LLM turn returns **JSON-mode** output parsed into a `DisputeRound`;
   parse failure at any round degrades safely (see skill cards).
 - The pipeline result while a dispute is live is `Status.DISPUTED`; the
@@ -269,7 +265,7 @@ flowchart TB
         ORCH -.-> DATA
         DA --> RM --> DEBATE --> INS
         DA -. "backs evidence base" .-> MCP
-        SK -- "MCP (in-process; stdio verified out-of-band)" --> MCP
+        SK -- "MCP (stdio)" --> MCP
     end
 
     subgraph QC["Qwen Cloud (dashscope-intl · compatible-mode/v1)"]
@@ -311,7 +307,7 @@ flowchart TB
 ## Lakehouse data layer (WA-029/030 · re-scoped by WA-047)
 
 **Architecture decision (2026-07-14): the lakehouse is OSS + DuckDB. Nothing
-else.** RDS MySQL is the operational **auth** store (WA-028) and is *not*
+else.** RDS PostgreSQL is the operational **auth** store (WA-028) and is *not*
 part of the lakehouse; DuckDB↔RDS federation is **descoped, not deferred**.
 
 Honest status — today this is a **data lake read**, not yet a lakehouse (no
@@ -338,7 +334,7 @@ table format, no versioning, no snapshot isolation). WA-047 closes the gap.
   Arrow table that `oss.py` bulk-reads. Genuine OSS pushdown via `httpfs` is
   future work. The schema contract that *does* exist is the Python
   `validate_table(raw, RawLoans)` gate inside the Data Engineer.
-- ✅ · **RDS MySQL — auth only** (WA-028). *Not* a lakehouse component.
+- ✅ · **RDS PostgreSQL — auth only** (WA-028). *Not* a lakehouse component.
   **Dispute memory lives in OSS**, not RDS (`memory/disputes/loan_id={id}.json`
   — see WA-046, which also fixes the bug that no entrypoint currently wires a
   persistent memory backend at all). The audit trail goes to **SLS** (WA-023),
@@ -466,7 +462,7 @@ removed · README/HACKATHON rewritten · AgentDialogue panel + types + fixture.
   labeled in the UI.
 
 **Data agents (the lakehouse upgrade — § Lakehouse data layer):**
-- **WA-029** (Bimo · P1) — **Data Engineer agent**: OSS-Parquet load into in-process DuckDB + a frozen schema
+- **WA-029** (Bimo · P1) — **Data Engineer agent**: dlt load + a frozen schema
   contract on the OSS Parquet, wrapped by a `qwen3.6-flash` function-calling loop
   over quality tools (`validate_schema`/`null_rates`/`profile_column`/
   `detect_anomalies`). Keeps the existing deterministic freshness/schema gate as
@@ -515,10 +511,8 @@ specs in `backlog/WA-032..039`):**
   (`WASPADA_POLICY_FILE`); defaults preserve today's behavior byte-for-byte.
   Analysts edit policy without touching code. Land this first — it is also the
   Origination lane's action-matrix machinery.
-- **WA-033–039 — the Origination lane** (approve / refer / reject new
-  applications on the same engine and Agent Society) — **LANDED**, no longer a
-  stretch: `python -m waspada.agents --lane origination` runs the full society
-  end-to-end offline. The substrate was already
+- **WA-033–039 — the Origination lane** (approve / refer / reject + price new
+  applications on the same engine and Agent Society). The substrate is already
   lane-agnostic (config lanes, protocol, gate, the whole debate engine); the
   build is additive: application-time contract types (WA-034) → 
   `features/origination.py` with a funded-then-defaulted label (WA-035; no
@@ -527,9 +521,9 @@ specs in `backlog/WA-032..039`):**
   `insight/origination.py` decision matrix as a `RiskPolicy` + approval-rate/EL
   health (WA-037) → lane-aware data agents + OSS source (WA-038) → dashboard
   approve/refer/reject badges + origination health panel, EN/中文 (WA-039).
-  The guard (`orchestrator.plan()`'s "Origination deferred" raise) is lifted;
-  the Skeptic⇄Actuary→Arbiter debate contests the riskiest decisions unchanged
-  (an id alias keeps the whole debate machinery lane-agnostic).
+  One guard is lifted (`orchestrator.plan()`'s "Origination deferred" raise);
+  the Skeptic⇄Actuary→Arbiter debate then contests the riskiest *approvals*
+  unchanged.
 
 **Loop note (design principle, not a ticket):** the LLM agents already loop —
 native function calling *is* Think→Act→Observe (the Data Engineer, Data Analyst,

@@ -82,12 +82,6 @@ variable "dashscope_api_key" {
   default     = ""
 }
 
-variable "oss_endpoint_internal" {
-  description = "Internal VPC endpoint for OSS (e.g. oss-ap-southeast-1-internal.aliyuncs.com). Optional; defaults to the public endpoint."
-  type        = string
-  default     = ""
-}
-
 variable "waspada_jwt_secret" {
   description = "JWT signing secret (min 32 bytes). Generate with: python -c \"import secrets; print(secrets.token_urlsafe(32))\". NEVER commit."
   type        = string

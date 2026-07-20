@@ -174,12 +174,12 @@ def test_dispute_to_dict_round_trips_through_sample_payload_keys():
     ("Low", "Medium", False), ("Very Low", "Low", False),
 ])
 def test_should_dispute_rule(band, view, opens):
-    assert RiskAuditorAgent()._should_dispute(band, view) is opens
+    assert RiskAuditorAgent._should_dispute(band, view) is opens
 
 
 def test_should_dispute_unknown_values_never_dispute():
-    assert RiskAuditorAgent()._should_dispute("??", "Low") is False
-    assert RiskAuditorAgent()._should_dispute("Very High", "??") is False
+    assert RiskAuditorAgent._should_dispute("??", "Low") is False
+    assert RiskAuditorAgent._should_dispute("Very High", "??") is False
 
 
 # --------------------------------------------------------------------------- #
