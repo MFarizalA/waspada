@@ -201,9 +201,9 @@ The engineering wiki lives in [`docs/wiki/`](docs/wiki/Home.md):
 | 08 | [LLM / Qwen Model](docs/wiki/08-llm-qwen-model.md) | The reasoning brains, model tiering, native function calling, egress control |
 | 09 | [ML Governance](docs/wiki/09-ml-governance.md) | The PD model, calibration, drift monitoring, versioning, the parameter matrix |
 
-Other docs (all under [`docs/`](docs/)): [HACKATHON.md](docs/HACKATHON.md) (the
-full design + judging-rubric mapping) · [DEMO.md](docs/DEMO.md) ·
-[CONTRIBUTING.md](docs/CONTRIBUTING.md) · [SECURITY.md](docs/SECURITY.md) ·
+Other docs: [CONTRIBUTING.md](CONTRIBUTING.md) (branch/PR workflow — root) ·
+[HACKATHON.md](docs/HACKATHON.md) (the full design + judging-rubric mapping) ·
+[DEMO.md](docs/DEMO.md) · [SECURITY.md](docs/SECURITY.md) ·
 [SUBMISSION-CHECKLIST.md](docs/SUBMISSION-CHECKLIST.md).
 
 ---
