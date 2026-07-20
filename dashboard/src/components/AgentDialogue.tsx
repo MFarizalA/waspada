@@ -307,14 +307,12 @@ export function AgentDialogue({ dialogue, accounts = [] }: AgentDialogueProps) {
         </p>
       )}
 
-      {/* Mid-run placeholder so judges aren’t staring at a static fixture while
-          the Qwen call is in flight (~15-60s), or while the SSE stream is
-          connecting before its first round lands. */}
+      {/* Mid-run placeholder: instead of a blank spinner while the Qwen call is
+          in flight (~15-60s) or the SSE stream connects, show the society SPINE
+          right away so there's real structure on screen — the debate branch
+          then streams in beneath it, node by node. */}
       {running || stream.state.status === "connecting" ? (
-        <div className={styles.runningState} aria-hidden="true">
-          <span className={styles.spinnerLarge} />
-          <p>{t("ad.debatingBody")}</p>
-        </div>
+        <DebateFlow disputes={[]} pending />
       ) : effective.length === 0 ? (
         <p className={styles.empty}>
           {active === "stream"

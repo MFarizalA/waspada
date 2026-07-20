@@ -93,6 +93,10 @@
   border-radius: var(--radius);
   box-shadow: var(--shadow-sm);
   overflow: hidden;
+  /* Chat-bubble entrance: each node mounts as its SSE round arrives (keyed by
+     round_no, so existing nodes never replay), giving a live "popping in" feel
+     instead of the whole branch snapping in at once. */
+  animation: debateBubbleIn 0.32s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 .nodeHead {
   display: flex;
@@ -161,6 +165,7 @@
   display: flex;
   flex-direction: column;
   align-items: center;
+  animation: debateBubbleIn 0.32s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 .edgeLine {
   width: 2px;
@@ -207,4 +212,56 @@
 .resMeta {
   font-size: 0.7rem;
   color: var(--text-muted);
+}
+
+/* --- chat-bubble entrance animation --------------------------------------- */
+/* Applied to each node/edge/resolution card. Because the debate branch keys
+   rounds by round_no, only newly-arrived turns mount and animate — settled
+   ones stay put. The terminal node inherits it too, so the verdict lands with
+   the same motion. Honour reduced-motion. */
+@keyframes debateBubbleIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+.resNode {
+  animation: debateBubbleIn 0.32s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .node,
+  .edge,
+  .resNode {
+    animation: none;
+  }
+}
+
+/* --- pending / convening state (spine shown while the stream connects) ----- */
+.convening {
+  margin: var(--sp-3) 0 0;
+  text-align: center;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+/* Pulse the three debate roles so the spine reads as "warming up". */
+.flow[data-pending="1"] .spineNode[data-debate="1"] {
+  animation: debatePulse 1.4s ease-in-out infinite;
+}
+@keyframes debatePulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .flow[data-pending="1"] .spineNode[data-debate="1"] {
+    animation: none;
+  }
 }
