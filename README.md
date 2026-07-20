@@ -373,11 +373,13 @@ The image is pushed with two tags — `latest` and the commit SHA
 | MCP | Real MCP server + client (`portfolio_stats`, `lookup_account`) | ✅ |
 | Dispute memory | Cross-run institutional precedent | ✅ |
 | Audit | SLS audit stream, fail-safe local fallback (WA-023) | ✅ |
-| Dashboard | EWS dashboard · Agent Society panel · SSE live debate (WA-011/019/022) · bilingual EN/中文 + China-style UI (WA-031) | ✅ |
+| Dashboard | Agent Society panel · **debate flow-chart** · SSE live debate · **Model Card** · **Parameter Matrix** · Human Gate · driver chips · bilingual EN/中文 · cloud-blue design system | ✅ |
+| ML governance | Probability **calibration** (WA-094) · **drift monitoring** + PSI (WA-093) · versioned **model registry** to OSS (WA-082) | ✅ |
+| Parameter matrix | Human-set policy (band→action · dispute gap · arbiter confidence · audit K) governing the run, with `policy_id` provenance (WA-095) | ✅ |
 | Auth | JWT sessions + bcrypt, RDS/SQLite (WA-028) | ✅ |
 | Benchmark | Society vs single-agent efficiency harness (WA-017) | ✅ |
-| Deploy | OpenTofu IaC (OSS · ACR · Function Compute · SLS · RDS) | ✅ live — `https://waspadaprod-api-vouqzqqkiu.ap-southeast-1.fcapp.run` ([quirk note](#deployment)) |
-| Origination lane | Second lane on the same engine | 🟡 requirements drafted (WA-033..039) |
+| Deploy | OpenTofu IaC (OSS · ACR · Function Compute · SLS · RDS) | ✅ live — `https://app.waspada.xyz` ([quirk note](#deployment)) |
+| Origination lane | Second decision lane on the same engine — approve/refer/reject, own application-time contract/features/split; debate + gate + dashboard reused verbatim | ✅ (WA-033..039) |
 
 ---
 
