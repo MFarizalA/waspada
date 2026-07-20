@@ -5,6 +5,8 @@ import { useLiveRun } from "@/lib/useLiveRun";
 import { useLiveDebateStream } from "@/lib/useLiveDebateStream";
 import { useI18n, type TFunc } from "@/lib/i18n";
 import { riskLevelColor, riskLevelLabel, riskLevelDisplay } from "@/lib/riskLevel";
+import { confidenceTier, CONFIDENCE_TONE, CONFIDENCE_LABEL } from "@/lib/confidence";
+import { DebateFlow } from "./DebateFlow";
 import styles from "./AgentDialogue.module.css";
 
 interface AgentDialogueProps {
@@ -54,17 +56,28 @@ function Round({ round }: { round: DisputeRound }) {
         </span>
         <span className={styles.agentName}>{round.speaker}</span>
         {round.model && <span className={styles.modelTag}>{round.model}</span>}
-        {round.confidence !== null && (
-          <span className={styles.confidence}>
-            <span className={styles.confidenceTrack} aria-hidden="true">
-              <span
-                className={styles.confidenceFill}
-                style={{ width: `${Math.round(round.confidence * 100)}%`, background: color }}
-              />
+        {round.confidence !== null && (() => {
+          const tier = confidenceTier(round.confidence);
+          return (
+            <span className={styles.confidence}>
+              {tier && (
+                <span
+                  className={styles.confTier}
+                  style={{ background: CONFIDENCE_TONE[tier] }}
+                  title={t(CONFIDENCE_LABEL[tier])}
+                  aria-label={t(CONFIDENCE_LABEL[tier])}
+                />
+              )}
+              <span className={styles.confidenceTrack} aria-hidden="true">
+                <span
+                  className={styles.confidenceFill}
+                  style={{ width: `${Math.round(round.confidence * 100)}%`, background: color }}
+                />
+              </span>
+              {Math.round(round.confidence * 100)}%
             </span>
-            {Math.round(round.confidence * 100)}%
-          </span>
-        )}
+          );
+        })()}
       </div>
       <p className={styles.claim}>{round.claim}</p>
       {round.evidence.length > 0 && (
@@ -313,7 +326,12 @@ export function AgentDialogue({ dialogue, accounts = [] }: AgentDialogueProps) {
               : t("ad.empty.fixture")}
         </p>
       ) : (
-        <ul className={styles.disputeList} role="list">
+        <>
+          {/* WA-091: node-graph view of the society + the selected dispute's
+              debate branch, above the transcript. Same `effective` data, so it
+              animates live as SSE rounds arrive. */}
+          <DebateFlow disputes={effective} />
+          <ul className={styles.disputeList} role="list">
           {effective.map((dispute) => (
             <DisputeCard
               key={dispute.loan_id}
@@ -329,7 +347,8 @@ export function AgentDialogue({ dialogue, accounts = [] }: AgentDialogueProps) {
               {t("ad.streamingMore")}
             </li>
           )}
-        </ul>
+          </ul>
+        </>
       )}
     </section>
   );

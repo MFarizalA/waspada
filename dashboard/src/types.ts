@@ -27,10 +27,12 @@ export interface Segment {
  */
 export interface ScoredAccount {
   loan_id: string;
+  /** WA-039: origination rows carry their own id (loan_id is aliased to it). */
+  application_id?: string;
   p_default: number; // P(eventual default) ∈ [0, 1] — the MODEL's score, never rewritten
   score_band: string; // the MODEL's risk level, e.g. "Very Low".."Very High"
   segment: Segment;
-  recommended_action: "call" | "watch" | "auto-cure";
+  recommended_action: "call" | "watch" | "auto-cure" | "approve" | "refer" | "reject";
   expected_loss?: number; // IDR at risk = PD × LGD(0.45) × EAD (WA-024, additive optional)
 
   /**
@@ -43,6 +45,14 @@ export interface ScoredAccount {
   final_band?: string;
   /** Why the society moved the band (present only when final_band ≠ score_band). */
   override_reason?: string;
+
+  /**
+   * G1: the model's single largest signed driver behind this score, e.g.
+   * `"dti=31.20 ↑"` (↑ pushed toward default, ↓ toward safe). Additive optional —
+   * present only when the run supplied the fitted model + features (WA-050
+   * `explain`); absent on older payloads. Shown as a "why this row" chip.
+   */
+  top_driver?: string;
 }
 
 /** Portfolio-level cross-sectional aggregates (PortfolioHealth TypedDict). */
@@ -108,11 +118,45 @@ export interface DisputeRecord {
  * `agent_dialogue` is an ADDITIVE optional key (Qwen-pivot, HACKATHON.md):
  * absent on older payloads, so the guard below does not require it.
  */
+/**
+ * WA-093: per-run model-monitoring card (additive optional). Present only when
+ * the run scored with a fitted model; older payloads omit it.
+ */
+export interface ModelCard {
+  model_id?: string | null;
+  auc?: number | null;
+  brier_raw?: number | null;
+  brier_calibrated?: number | null;
+  calibrated?: boolean;
+  n_train?: number | null;
+  n_test?: number | null;
+  split_method?: string | null;
+  n_scored?: number;
+  observed_default_rate?: number | null;
+  band_distribution?: Record<string, number>;
+  trained_at?: string | null;
+  psi?: Record<string, number>;
+  drift_flags?: string[];
+  drift_significant?: string[];
+  max_psi?: number;
+}
+
+/** WA-039: origination-book aggregates (the origination lane's health shape). */
+export interface OriginationHealth {
+  approval_rate: number;
+  projected_default_rate: number;
+  band_mix: Record<string, number>;
+  approved_volume: number;
+}
+
 export interface DashboardPayload {
+  /** WA-039: which lane produced this payload; absent = collections. */
+  lane?: "collections" | "origination";
   work_list: ScoredAccount[];
-  portfolio_health: PortfolioHealth;
+  portfolio_health: PortfolioHealth | OriginationHealth;
   alerts: Alert[];
   agent_dialogue?: DisputeRecord[];
+  model_card?: ModelCard;
 }
 
 /** Narrowing guard so a malformed fixture fails loudly at load, not in render. */

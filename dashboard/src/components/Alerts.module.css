@@ -25,7 +25,7 @@
   font-size: 0.75rem;
   font-weight: 600;
   padding: 2px var(--sp-2);
-  border-radius: 999px;
+  border-radius: var(--radius-sm);
   background: rgba(185, 28, 28, 0.12);
   color: var(--sev-critical);
 }
@@ -68,7 +68,7 @@
   display: inline-flex;
   align-items: center;
   padding: 1px var(--sp-2);
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   font-size: 0.68rem;
   font-weight: 700;
   letter-spacing: 0.04em;

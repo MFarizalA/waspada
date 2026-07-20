@@ -1,0 +1,210 @@
+/* WA-091 — debate flow-chart (node graph). Dotted-grid canvas + node cards +
+   labeled edges, all token-driven so it re-themes with the palette. */
+
+.flow {
+  margin-bottom: var(--sp-5);
+  padding: var(--sp-5) var(--sp-4);
+  background-color: var(--surface-muted);
+  /* faint dotted grid, like the reference canvas */
+  background-image: radial-gradient(
+    color-mix(in srgb, var(--border-strong) 70%, transparent) 1px,
+    transparent 1px
+  );
+  background-size: 16px 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow-x: auto;
+}
+
+/* --- Layer 1: society spine ------------------------------------------------ */
+.spine {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--sp-1);
+  margin-bottom: var(--sp-4);
+}
+
+.spineNode {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  white-space: nowrap;
+}
+.spineNode[data-debate="1"] {
+  color: var(--cn-red-700);
+  background: var(--surface-tint);
+  border-color: color-mix(in srgb, var(--cn-red-600) 45%, transparent);
+}
+.spineArrow {
+  color: var(--text-subtle);
+  font-weight: 700;
+}
+
+/* --- Dispute selector tabs ------------------------------------------------- */
+.tabs {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--sp-1);
+  margin-bottom: var(--sp-3);
+}
+.tab {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  padding: 3px 10px;
+  color: var(--text-muted);
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s, border-color 0.12s;
+}
+.tab:hover {
+  border-color: var(--cn-red-600);
+  color: var(--cn-red-700);
+}
+.tab[data-on="1"] {
+  color: var(--on-brand);
+  background: var(--cn-red-600);
+  border-color: var(--cn-red-600);
+}
+
+/* --- Layer 2: debate branch ------------------------------------------------ */
+.branch {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.node {
+  width: min(340px, 100%);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--tone, var(--border-strong));
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
+}
+.nodeHead {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-2) var(--sp-3);
+  background: color-mix(in srgb, var(--tone, var(--text-subtle)) 12%, var(--surface));
+  border-bottom: 1px solid var(--border);
+}
+/* small tone-coloured status dot (replaces per-speaker icons) */
+.dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: var(--tone, var(--text-subtle));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--tone, var(--text-subtle)) 18%, transparent);
+}
+.nodeTitle {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--text);
+}
+.nodeBadge {
+  margin-left: auto;
+  font-size: 0.66rem;
+  font-weight: 700;
+  color: var(--tone, var(--text-muted));
+  background: color-mix(in srgb, var(--tone, var(--text-subtle)) 16%, transparent);
+  padding: 1px 8px;
+  border-radius: var(--radius-sm);
+  white-space: nowrap;
+}
+.nodeBody {
+  margin: 0;
+  padding: var(--sp-2) var(--sp-3);
+  font-size: 0.8rem;
+  line-height: 1.45;
+  color: var(--text-muted);
+}
+.nodeMeta {
+  display: flex;
+  gap: var(--sp-3);
+  padding: 0 var(--sp-3) var(--sp-2);
+  font-size: 0.68rem;
+  color: var(--text-subtle);
+}
+.nodeModel {
+  font-family: var(--font-mono);
+}
+/* G2 — confidence tier (green/amber/red) beside the numeric confidence */
+.confMeta {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.confDot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+/* --- edges (vertical connector + pill label) ------------------------------- */
+.edge {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.edgeLine {
+  width: 2px;
+  height: 12px;
+  background: var(--border-strong);
+}
+.edgePill {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  padding: 2px 12px;
+  text-transform: capitalize;
+}
+.edgeSub {
+  font-style: normal;
+  font-size: 0.64rem;
+  font-weight: 500;
+  color: var(--text-subtle);
+  text-transform: none;
+}
+
+/* --- terminal resolution node ---------------------------------------------- */
+.resNode {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-2) var(--sp-4);
+  background: color-mix(in srgb, var(--tone, var(--text-subtle)) 14%, var(--surface));
+  border: 1px solid var(--tone, var(--border-strong));
+  border-radius: var(--radius-sm);
+}
+.resTitle {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--tone, var(--text));
+}
+.resMeta {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+}

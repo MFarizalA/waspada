@@ -33,6 +33,7 @@ NOT self-improvement.
 """
 from __future__ import annotations
 
+import os
 from typing import Any, Callable, Dict, List, Optional
 
 import pyarrow as pa
@@ -63,6 +64,9 @@ __all__ = ["Orchestrator", "COLLECTIONS_STEP_ORDER"]
 # BEFORE insight packages the payload — it audits the top-K riskiest accounts
 # and opens Disputes where its view diverges from the model's band.
 COLLECTIONS_STEP_ORDER = ("data_engineer", "data_analyst", "risk_model", "risk_auditor", "insight")
+# WA-033: the Origination lane walks the SAME society — score-then-contest
+# applies identically to an application PD; agents branch on context.lane.
+ORIGINATION_STEP_ORDER = ("data_engineer", "data_analyst", "risk_model", "risk_auditor", "insight")
 
 
 class Orchestrator(Agent):
@@ -77,9 +81,10 @@ class Orchestrator(Agent):
         *,
         gate: Optional[ApprovalGate] = None,
         as_of=None,
-        top_n: int = 50,
+        top_n: Optional[int] = None,
         ingest_limit: Optional[int] = None,
-        audit_k: int = 8,
+        audit_k: Optional[int] = None,
+        audit_workers: Optional[int] = None,
         arbiter: Optional[ArbiterAgent] = None,
         enable_arbiter: bool = True,
         memory: Optional[DisputeMemory] = None,
@@ -91,12 +96,45 @@ class Orchestrator(Agent):
         super().__init__(llm=llm)
         self.gate = gate or ApprovalGate()
         self.as_of = as_of
-        self.top_n = top_n
-        # WA-032: the decision matrix the insight agent applies. ``None`` keeps
-        # the module-constant defaults (behaviour unchanged).
+        # WA-032/WA-095: the parameter matrix the run applies. ``None`` keeps the
+        # module-constant defaults (behaviour unchanged).
         self.policy = policy
         self.ingest_limit = ingest_limit
-        self.audit_k = audit_k  # Skeptic audits top-K riskiest accounts
+        # WA-095: precedence for the governance knobs is EXPLICIT ARG > POLICY >
+        # DEFAULT — an explicit top_n/audit_k (CLI --top-n, a test) is the most
+        # specific intent and wins; otherwise a submitted matrix drives the run;
+        # otherwise the module default. dispute_gap / arbiter_confidence have no
+        # explicit arg, so they're POLICY > DEFAULT.
+        from .arbiter import ARBITER_CONFIDENCE_THRESHOLD as _DEF_ARB
+        from .risk_auditor import DISPUTE_GAP as _DEF_GAP
+        self.top_n = (
+            int(top_n) if top_n is not None
+            else int(policy.top_n) if policy is not None else 50
+        )
+        self.audit_k = (
+            int(audit_k) if audit_k is not None
+            else int(policy.audit_k) if policy is not None else 8
+        )
+        self.dispute_gap = int(policy.dispute_gap) if policy is not None else int(_DEF_GAP)
+        self.arbiter_confidence = (
+            float(policy.arbiter_confidence) if policy is not None else float(_DEF_ARB)
+        )
+        # WA-080: how many accounts the Skeptic audits concurrently. The audit is
+        # the dominant cost of a live-Qwen run; parallelising it is what lets the
+        # debate finish inside the FC invocation timeout. Resolution order:
+        #   explicit arg  ->  WASPADA_AUDIT_WORKERS env  ->  brain auto-detect.
+        # Auto-detect keeps mock/scripted runs sequential (workers=1, so the
+        # non-thread-safe scripted MockLLM stays deterministic and every existing
+        # test is byte-for-byte unchanged) while the live Qwen brain -- a
+        # thread-safe OpenAI client -- parallelises with no wiring from the API.
+        if audit_workers is not None:
+            self.audit_workers = max(1, int(audit_workers))
+        else:
+            _env = os.environ.get("WASPADA_AUDIT_WORKERS", "").strip()
+            if _env:
+                self.audit_workers = max(1, int(_env))
+            else:
+                self.audit_workers = 8 if getattr(self.llm, "name", "") == "qwen" else 1
         # The Arbiter (Round 3). Defaults to an ArbiterAgent sharing this
         # orchestrator's brain (the orchestrator tiers it to qwen3.7-max
         # via with_model). Pass ``arbiter=`` to inject a custom one for tests.
@@ -158,16 +196,16 @@ class Orchestrator(Agent):
     def plan(self, lane: str = COLLECTIONS) -> List[str]:
         """Return the ordered agent-name sequence for ``lane``.
 
-        Only the Collections lane is wired (Origination is deferred per the
-        HACKATHON sequencing). An unknown lane raises ``ValueError``.
+        Both lanes are wired (WA-033): the same five-step society runs on
+        either — the agents themselves branch on ``context.lane`` for their
+        lane-appropriate contracts / feature recipes / decision matrices. An
+        unknown lane raises ``ValueError``.
         """
         if lane not in LANES:
             raise ValueError(f"lane={lane!r} invalid; must be one of {LANES}")
-        if lane != COLLECTIONS:
-            raise ValueError(
-                f"lane={lane!r} orchestrator not implemented yet (Origination deferred)."
-            )
-        self._steps_order = list(COLLECTIONS_STEP_ORDER)
+        self._steps_order = list(
+            COLLECTIONS_STEP_ORDER if lane == COLLECTIONS else ORIGINATION_STEP_ORDER
+        )
         self.step("plan", notes=f"lane={lane} steps={self._steps_order}")
         return list(self._steps_order)
 
@@ -202,14 +240,15 @@ class Orchestrator(Agent):
         if self.arbiter is not None:
             self._arbiter_agent = self.arbiter
         elif self.enable_arbiter:
-            self._arbiter_agent = ArbiterAgent(self.llm)
+            self._arbiter_agent = ArbiterAgent(self.llm, threshold=self.arbiter_confidence)
         else:
             self._arbiter_agent = None
         return [
             DataEngineerAgent(de_brain, limit=self.ingest_limit),
             DataAnalystAgent(da_brain, as_of=self.as_of),
             risk_model,
-            RiskAuditorAgent(auditor_brain, k=self.audit_k),
+            RiskAuditorAgent(auditor_brain, k=self.audit_k, max_workers=self.audit_workers,
+                             dispute_gap=self.dispute_gap),
             InsightAgent(self.llm, gate=self.gate, top_n=self.top_n, policy=self.policy),
         ]
 
@@ -313,6 +352,9 @@ class Orchestrator(Agent):
         else:
             self.step("memory_persisted",
                       notes=f"dispute memory now holds {self.memory.size} account(s)")
+        # WA-090: land the Silver/Gold medallion tiers (guarded, best-effort -- no-op
+        # offline / when OSS or the target bucket isn't configured).
+        self._write_medallion(ctx)
         # Terminal status mirrors the last agent's: DISPUTED if disputes were
         # opened, OK otherwise. Both are completions (a payload exists).
         terminal = last.status if last is not None else Status.OK
@@ -722,6 +764,28 @@ class Orchestrator(Agent):
         tbl = ctx.data_handles.get(handle)
         return tbl if isinstance(tbl, pa.Table) else None
 
+    def _write_medallion(self, ctx: AgentContext) -> None:
+        """WA-090: land the Silver (features) + Gold (payload) OSS tiers. Guarded +
+        best-effort -- no-op offline / when OSS or the target bucket isn't configured, and
+        never fails the run (a failed cache write is not a correctness dependency)."""
+        try:
+            from ..data.medallion import MedallionWriter
+            as_of = self.as_of.strftime("%Y%m%d") if hasattr(self.as_of, "strftime") else None
+            writer = MedallionWriter(as_of=as_of)
+            ff = self._table(ctx, "feature_frame")
+            if ff is not None:
+                key = writer.write_silver(ff, ctx.data_handles.get("analyst_aggregates"))
+                if key:
+                    self.step("medallion_silver", notes=f"features -> oss staging {key}")
+            payload = ctx.data_handles.get("dashboard_payload")
+            if payload is not None:
+                key = writer.write_gold(payload)
+                if key:
+                    self.step("medallion_gold", notes=f"payload -> oss mart {key}")
+        except Exception as exc:  # best-effort: never fail the run for a cache write
+            self.step("medallion_write", status=Status.ERROR,
+                      notes=f"medallion write skipped: {exc}")
+
     # --------------------------------------------------------------- report
     def report(self, payload: Dict[str, Any]) -> str:
         """Plain-language analyst summary (top risks, health, alert count)."""
@@ -733,9 +797,23 @@ class Orchestrator(Agent):
 
         top = work_list[:3] if work_list else []
         top_desc = ", ".join(
-            f"{r.get('loan_id', '?')} (p={float(r.get('p_default', 0.0)):.2f}, {r.get('recommended_action', '?')})"
+            f"{r.get('loan_id', r.get('application_id', '?'))} "
+            f"(p={float(r.get('p_default', 0.0)):.2f}, {r.get('recommended_action', '?')})"
             for r in top
         ) or "none"
+
+        # WA-033: lane-aware wording — an origination payload carries
+        # approval-rate health instead of NPL/vintage.
+        if payload.get("lane") == "origination" or "approval_rate" in health:
+            ar = float(health.get("approval_rate", 0.0))
+            pdr = float(health.get("projected_default_rate", 0.0))
+            lines = [
+                f"WASPADA Origination run — {len(work_list)} applications decided.",
+                f"Top risks: {top_desc}.",
+                f"Approval rate: {ar:.1%}; projected default of approved book: {pdr:.1%}.",
+                f"Alerts: {len(alert_list)}.",
+            ]
+            return " ".join(lines)
 
         # Worst vintage by default rate (if any).
         worst_vintage = ""

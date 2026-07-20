@@ -361,13 +361,10 @@ resource "alicloud_fcv3_function" "api" {
     image   = local.fc_image
     command = ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8080"]
     port    = 8080 # matches Dockerfile EXPOSE + CAPort env
-    # WA-018: pull the standard image directly instead of FC's "accelerated"
-    # (RAFS) image. Acceleration builds a separate snapshot per image digest and,
-    # when a mutable tag (:v2) is re-pushed, FC keeps serving the old snapshot and
-    # returns "PullImageFailed: accelerated image not ready" until redeployed.
-    # Disabling it trades a little cold-start latency for a deploy that just works
-    # on every image push. Flip back to "Default" only if cold starts matter.
-    acceleration_type = "None"
+    # NB: `acceleration_type` was removed — the provider marks it deprecated/
+    # "Obsolete", so it never converges (state can't echo it back) and produced a
+    # perpetual no-op diff. The real PullImageFailed fix was the linux/amd64 image
+    # stamp (build-image.yml), not this flag. The function is unaffected.
     health_check_config {
       http_get_url = "/api/health"
     }
@@ -401,7 +398,10 @@ resource "alicloud_fcv3_function" "api" {
     OSS_RAW_BUCKET        = "${local.name_prefix}-raw"
     OSS_STAGING_BUCKET    = "${local.name_prefix}-staging"
     OSS_MART_BUCKET       = "${local.name_prefix}-mart"
-    OSS_ENDPOINT          = "oss-ap-southeast-1.aliyuncs.com"
+    # OSS endpoint: prefer the internal VPC endpoint when set, otherwise fall
+    # back to the public endpoint. FC in a VPC should use the internal endpoint
+    # to avoid data-transfer charges and public egress.
+    OSS_ENDPOINT          = coalesce(var.oss_endpoint_internal, "oss-ap-southeast-1.aliyuncs.com")
     OSS_KEY               = "loans.parquet"
     OSS_ACCESS_KEY_ID     = var.access_key
     OSS_ACCESS_KEY_SECRET = var.secret_key

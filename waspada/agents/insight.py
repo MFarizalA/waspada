@@ -80,23 +80,44 @@ class InsightAgent(Agent):
         # WA-032: apply the RiskPolicy when one is wired; otherwise the calls use
         # their module-constant defaults (byte-identical to the pre-policy path).
         pol = self.policy
-        if pol is not None:
-            work_list = _rank(scored, top_n=self.top_n, action_by_band=pol.band_to_action)
+        # G1: hand rank() the fitted model + features so it can attach the top
+        # driver per work-list row ("why this row"). Both are additive/optional —
+        # absent (standalone insight, pre-WA-050 run) → rank() just omits the key.
+        model = context.data_handles.get("risk_model")
+        features = context.data_handles.get("feature_frame")
+        lane = context.lane
+        if lane == "origination":
+            # WA-037: the origination decision layer — approve/refer/reject
+            # matrix + book health + drift alerts. Same debate, same gate.
+            from ..insight.origination import decide, origination_alerts, origination_health
+
+            work_list = decide(scored, top_n=self.top_n)
+            health = origination_health(scored)
+            alert_list = origination_alerts(health)
+            self.step(
+                "build_insight",
+                notes=(f"lane=origination decisions={len(work_list)} alerts={len(alert_list)} "
+                       f"approval_rate={health['approval_rate']:.3f}"),
+            )
+        elif pol is not None:
+            work_list = _rank(scored, top_n=self.top_n, action_by_band=pol.band_to_action,
+                              model=model, features=features)
             health = _segment_health(scored, npl_buckets=pol.npl_buckets)
             alert_list = _alerts(health, npl_threshold=pol.npl_threshold,
                                  vintage_threshold=pol.vintage_threshold)
         else:
-            work_list = _rank(scored, top_n=self.top_n)
+            work_list = _rank(scored, top_n=self.top_n, model=model, features=features)
             health = _segment_health(scored)
             alert_list = _alerts(health)
-        self.step(
-            "build_insight",
-            notes=f"work_list={len(work_list)} alerts={len(alert_list)} npl={health['npl_ratio']:.3f}",
-        )
+        if lane != "origination":
+            self.step(
+                "build_insight",
+                notes=f"work_list={len(work_list)} alerts={len(alert_list)} npl={health['npl_ratio']:.3f}",
+            )
 
         # 4. Human approval BEFORE the work-list is released (humans in control).
         decision = self.gate.request(
-            "publish_work_list",
+            "publish_decisions" if lane == "origination" else "publish_work_list",
             rationale=f"{len(work_list)} accounts queued; top p={work_list[0]['p_default']:.2f}" if work_list else "empty work-list",
         )
         if not isinstance(decision, Approved):
@@ -134,9 +155,49 @@ class InsightAgent(Agent):
             )
 
         # 7. Assemble the payload + the always-present alert summary string.
-        payload = to_dashboard_payload(work_list, health, alert_list)
+        if lane == "origination":
+            # Same DashboardPayload envelope; lane-appropriate health keys and a
+            # ``lane`` tag so the frontend can branch (additive discipline).
+            import json as _json
+            payload = {
+                "work_list": list(work_list),
+                "portfolio_health": dict(health),
+                "alerts": list(alert_list),
+                "lane": "origination",
+            }
+            _json.dumps(payload)  # fail loud on non-JSON content
+        else:
+            payload = to_dashboard_payload(work_list, health, alert_list)
         if dialogue:
             payload["agent_dialogue"] = dialogue
+        # WA-093: attach the per-run model-monitoring card (AUC, Brier, observed
+        # default rate, band distribution, + PSI vs a reference when configured).
+        # Additive/guarded — any failure leaves the payload untouched. A stored
+        # reference cohort (OSS baseline) can be wired later; absent it, drift is
+        # simply not measured this run.
+        if model is not None:
+            try:
+                from ..model.monitoring import build_monitor_record
+                card = build_monitor_record(model, scored, features)
+                payload["model_card"] = card
+                self.step(
+                    "model_card",
+                    notes=(f"auc={card.get('auc')} default_rate={card.get('observed_default_rate')} "
+                           f"calibrated={card.get('calibrated')} bands={card.get('band_distribution')}"),
+                )
+            except Exception as exc:  # pragma: no cover - defensive; monitoring is enrichment
+                self.step("model_card", status=Status.ERROR, notes=f"monitor record failed: {exc}")
+        # WA-095: stamp the governing parameter matrix + its id, so every decision
+        # is traceable to the exact policy that produced it. Additive/guarded.
+        if pol is not None:
+            try:
+                payload["policy_card"] = {"policy_id": pol.policy_id(), **pol.to_dict()}
+                self.step("policy_card",
+                          notes=(f"policy={pol.policy_id()} audit_k={pol.audit_k} "
+                                 f"top_n={pol.top_n} gap={pol.dispute_gap} "
+                                 f"arbiter_conf={pol.arbiter_confidence}"))
+            except Exception as exc:  # pragma: no cover - defensive
+                self.step("policy_card", status=Status.ERROR, notes=f"policy card failed: {exc}")
         summary = summarize_alerts(alert_list)
         self.step("payload_assembled", notes=f"alerts_summary='{summary[:60]}' disputes={len(disputes)}")
 

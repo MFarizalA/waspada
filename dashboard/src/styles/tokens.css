@@ -1,134 +1,135 @@
 /**
- * WASPADA design tokens — a China-inspired visual language.
+ * WASPADA design tokens — a Tencent Cloud–inspired visual language.
  *
- * Imperial red (中国红) as the brand, imperial gold (金) as the accent, jade
- * green (碧) for "resolved/positive", over a warm porcelain ground. Chinese web
- * design leans on information density, vibrant colour, and decorative accents
- * (gold hairlines, gradient banners) rather than the italics/bold hierarchy that
- * CJK type resists — so hierarchy here comes from colour, weight, size, and rule
- * lines, and the layout runs dense with an integrated "megamenu" top bar.
+ * Cloud blue (#0052D9 / bright #006EFF) as the brand, a sky-blue accent for
+ * hairlines and highlights, over cool blue-grey neutrals with generous white.
+ * The Tencent Cloud / TDesign look is clean and information-dense: hierarchy
+ * comes from a crisp blue primary, cool greys, weight and rule lines rather than
+ * decorative flourishes. Semantic red/amber/green are reserved for risk and
+ * status only, so the blue brand never competes with a warning.
  *
- * Token *names* are stable across the redesign (e.g. `--pasar-teal-*` now maps
- * to jade) so components never need to change to re-theme. Components reference
- * tokens, never raw hex.
+ * Token *names* are stable across re-themes (the legacy `--cn-*` / `--pasar-*`
+ * names now map to blue) so components never change to re-theme — components
+ * reference tokens, never raw hex.
  */
 
 :root {
-  /* Brand — imperial red + gold */
-  --cn-red-50:   #fdeef0;
-  --cn-red-100:  #f9d2d8;
-  --cn-red-500:  #d81e34;
-  --cn-red-600:  #c8102e;   /* 中国红 — primary brand */
-  --cn-red-700:  #9e0c24;
-  --cn-red-800:  #7a091b;
-  --cn-gold-300: #f3d98b;
-  --cn-gold-400: #e9c463;
-  --cn-gold-500: #d4af37;   /* imperial gold — accent + hairlines */
-  --cn-gold-600: #b8912a;
-  --cn-ink:      #1a1410;   /* warm near-black ink */
+  /* Brand — cloud blue (TDesign primary ramp) */
+  --cn-red-50:   #eaf2ff;
+  --cn-red-100:  #d4e4fe;
+  --cn-red-500:  #2b6fee;
+  --cn-red-600:  #0052d9;   /* cloud blue — primary brand */
+  --cn-red-700:  #003cb3;
+  --cn-red-800:  #002a86;
+  --cn-gold-300: #9fd0fe;
+  --cn-gold-400: #5aaefb;
+  --cn-gold-500: #00a3ff;   /* sky-blue accent + hairlines */
+  --cn-gold-600: #0086d6;
+  --cn-ink:      #12161f;   /* cool near-black ink */
 
-  /* Header banner gradient (red → deep red) with a gold seam */
-  --cn-banner:   linear-gradient(120deg, #c8102e 0%, #a50d24 55%, #7a091b 100%);
+  /* Header banner gradient (bright → deep cloud blue) with a sky-blue seam */
+  --cn-banner:   linear-gradient(120deg, #006eff 0%, #0052d9 55%, #003cb3 100%);
   --cn-gold-seam: linear-gradient(90deg, transparent, var(--cn-gold-500), transparent);
 
-  /* Jade accent (kept under the legacy teal names so components resolve) */
-  --pasar-teal-50:  #eefaf3;
-  --pasar-teal-100: #cdeedd;
-  --pasar-teal-500: #0f9d68;
-  --pasar-teal-600: #0c855a;
-  --pasar-teal-700: #0a6b49;   /* jade — "Credit Arbiter" / resolved-upheld */
+  /* Green accent for "resolved/positive" (kept under the legacy teal names) */
+  --pasar-teal-50:  #e8f8f0;
+  --pasar-teal-100: #c3ecd8;
+  --pasar-teal-500: #00a870;
+  --pasar-teal-600: #008f5f;
+  --pasar-teal-700: #00784f;   /* success green — "Credit Arbiter" / resolved-upheld */
 
-  /* Risk band ramp — low→high, vibrant but still legible (jade→gold→orange→red) */
-  --risk-low:      #0f9d68;   /* Q1-Q2 */
-  --risk-moderate: #d4af37;   /* Q3 */
-  --risk-elevated: #e8720c;   /* Q4 */
-  --risk-high:     #c8102e;   /* Q5 */
+  /* Risk band ramp — low→high, semantic (green→amber→orange→red), TDesign hues */
+  --risk-low:      #00a870;   /* Q1-Q2 */
+  --risk-moderate: #f5a623;   /* Q3 */
+  --risk-elevated: #ed7b2f;   /* Q4 */
+  --risk-high:     #d54941;   /* Q5 */
 
   /* Alert severity (derived; severity.ts) */
-  --sev-critical:  #c8102e;
-  --sev-high:      #e8530c;
-  --sev-moderate:  #c98a12;
-  --sev-low:       #0c855a;
-  --sev-info:      #6b5e4a;
+  --sev-critical:  #d54941;
+  --sev-high:      #ed7b2f;
+  --sev-moderate:  #e6a23c;
+  --sev-low:       #008f5f;
+  --sev-info:      #5b6b84;
 
-  /* Action badge palette */
-  --action-call-fg:       #fff5e1;
-  --action-call-bg:       #c8102e;
-  --action-watch-fg:      #4a3a12;
-  --action-watch-bg:      #f7e4a6;
-  --action-autocure-fg:   #eefaf3;
-  --action-autocure-bg:   #0c855a;
+  /* Action badge palette — call = urgent (semantic red), primary CTAs are blue */
+  --action-call-fg:       #ffffff;
+  --action-call-bg:       #d54941;
+  --action-watch-fg:      #664a12;
+  --action-watch-bg:      #fdeecb;
+  --action-autocure-fg:   #e8f8f0;
+  --action-autocure-bg:   #008f5f;
 
-  /* Neutrals (light — warm porcelain) */
-  --bg:               #fbf6ef;
+  /* Neutrals (light — cool blue-grey / white) */
+  --bg:               #f1f4f9;
   --surface:          #ffffff;
-  --surface-muted:    #f6efe3;
-  --surface-tint:     #fdeef0;   /* faint red wash for emphasis rows */
-  --border:           #ece0cf;
-  --border-strong:    #d9c8ac;
-  --text:             #221a12;
-  --text-muted:       #6a5c48;
-  --text-subtle:      #8c7d66;
-  --on-brand:         #fff5e1;   /* text on the red banner */
-  --on-brand-dim:     #f3d0b8;
+  --surface-muted:    #f2f5fa;
+  --surface-tint:     #eaf2ff;   /* faint blue wash for emphasis rows */
+  --border:           #e3e8f0;
+  --border-strong:    #ccd5e3;
+  --text:             #1d2129;
+  --text-muted:       #4e5969;
+  --text-subtle:      #86909c;
+  --on-brand:         #ffffff;   /* text on the blue banner */
+  --on-brand-dim:     #cfe0ff;
 
   /* Chart */
-  --chart-bar:        #c8102e;
-  --chart-bar-trend:  #7a091b;
-  --chart-track:      #efe6d6;
+  --chart-bar:        #0052d9;
+  --chart-bar-trend:  #003cb3;
+  --chart-track:      #e3e8f0;
 
-  /* Shape — slightly tighter/crisper for density */
-  --radius-sm: 5px;
-  --radius:    8px;
-  --radius-lg: 12px;
+  /* Shape — SHARP. The 2026 fintech register: hard rectangles, precision over
+     softness. A minimal 2px on controls keeps them reading as *designed*
+     (absolute-zero corners on inputs/chips read as unstyled wireframes);
+     only genuinely circular elements (dots, spinners) stay round. */
+  --radius-sm: 2px;
+  --radius:    4px;
+  --radius-lg: 6px;
 
-  /* Type — CJK-aware. Display serif (Song/Ming feel) for headings/brand;
-     humanist sans for body. CJK families appended so 简体中文 renders natively. */
+  /* Type — clean humanist sans throughout (Tencent Cloud drops serif display).
+     CJK families appended so 简体中文 renders natively. */
   --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
                "Helvetica Neue", Arial, "PingFang SC", "Microsoft YaHei",
                "Hiragino Sans GB", "Noto Sans SC", "Source Han Sans SC", sans-serif;
-  --font-display: "Georgia", "Songti SC", "Noto Serif SC", "Source Han Serif SC",
-               "STSong", var(--font-sans);
+  --font-display: var(--font-sans);
   --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
 
   /* Spacing scale (4px base) */
   --sp-1: 4px;  --sp-2: 8px;  --sp-3: 12px;
   --sp-4: 16px; --sp-5: 20px; --sp-6: 24px; --sp-8: 32px;
 
-  /* Focus ring — gold, visible on any bg */
-  --focus-ring: 0 0 0 3px rgba(212, 175, 55, 0.55);
+  /* Focus ring — cloud blue, visible on any bg */
+  --focus-ring: 0 0 0 3px rgba(0, 82, 217, 0.35);
 
-  /* Elevation */
-  --shadow-sm: 0 1px 2px rgba(122, 9, 27, 0.06);
-  --shadow:    0 6px 20px rgba(122, 9, 27, 0.10);
+  /* Elevation — soft, cool neutral (Tencent Cloud cards float on a light ground) */
+  --shadow-sm: 0 1px 2px rgba(0, 30, 84, 0.06);
+  --shadow:    0 6px 20px rgba(0, 30, 84, 0.10);
 }
 
 /* Denser CJK line-height when the UI is in Chinese (set on <html data-lang>). */
 :root[data-lang="zh"] {
-  --font-display: "Songti SC", "Noto Serif SC", "Source Han Serif SC", "STSong",
-               Georgia, var(--font-sans);
+  --font-display: var(--font-sans);
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --cn-banner:   linear-gradient(120deg, #7a091b 0%, #5c0714 60%, #3d0a12 100%);
+    --cn-banner:   linear-gradient(120deg, #003cb3 0%, #002a86 60%, #001f5c 100%);
 
-    --bg:            #171012;
-    --surface:       #201619;
-    --surface-muted: #281b1e;
-    --surface-tint:  #2c171b;
-    --border:        #3a262b;
-    --border-strong: #52343b;
-    --text:          #f3e7d8;
-    --text-muted:    #cdb9a6;
-    --text-subtle:   #a9917d;
-    --on-brand:      #fff5e1;
-    --on-brand-dim:  #e9c9b6;
+    --bg:            #0e1420;
+    --surface:       #161d2b;
+    --surface-muted: #1c2537;
+    --surface-tint:  #16233f;
+    --border:        #2a3446;
+    --border-strong: #3a4761;
+    --text:          #e6eaf2;
+    --text-muted:    #aab4c5;
+    --text-subtle:   #7d8799;
+    --on-brand:      #ffffff;
+    --on-brand-dim:  #cfe0ff;
 
-    --action-watch-fg: #f7e4a6;
+    --action-watch-fg: #fdeecb;
     --action-watch-bg: #4a3a12;
 
-    --chart-track: #3a262b;
+    --chart-track: #2a3446;
     --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
     --shadow:    0 8px 24px rgba(0, 0, 0, 0.5);
   }
@@ -152,6 +153,9 @@ body {
   line-height: 1.55;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
+  /* Finance rule: numbers are the product. Tabular figures app-wide so every
+     p_default / EL / rate column aligns on the decimal (typography research). */
+  font-variant-numeric: tabular-nums;
 }
 
 /* Chinese runs a touch looser vertically for legibility. */
