@@ -111,6 +111,10 @@ export interface DisputeRecord {
   revised_band?: string;
   /** WA-048: whether that ruling actually reached the work-list (see the direction rule). */
   applied?: boolean;
+  /** Client-only (usePacedReveal): true while the debate is still revealing and
+   *  the outcome hasn't been reached yet — consumers hide the resolution/rationale
+   *  so the reveal doesn't spoil its own ending. Absent = show the outcome. */
+  pendingResolution?: boolean;
 }
 
 /**
