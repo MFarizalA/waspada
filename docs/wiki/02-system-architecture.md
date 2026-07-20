@@ -5,23 +5,29 @@
 
 ## 1. The big picture
 
-```
-                          ┌──────────────────────────────────────────────┐
-   Browser  ◀── SSE ────▶ │  FastAPI (api/main.py)  — Function Compute     │
-   (React SPA)  HTTP      │  /api/run · /api/run/stream · /api/auth · /    │
-                          └───────────────┬──────────────────────────────┘
-                                          │ builds + runs
-                                 ┌────────▼─────────┐
-                                 │   Orchestrator   │  deterministic spine
-                                 └────────┬─────────┘
-        ┌───────────────┬────────────────┼────────────────┬───────────────┐
-        ▼               ▼                 ▼                ▼               ▼
-  Data Engineer   Data Analyst        Actuary          Skeptic         Insight
-  (flash)         (plus)              (sklearn)        (flash)         (payload)
-        │               │                 │                │ opens         │
-        └── OSS/DuckDB ──┴── features ─────┴── scores ──────┤ disputes      │
-                                                            ▼               │
-                                                    Arbiter (max)  ── Approval Gate (human)
+```mermaid
+flowchart TB
+    subgraph CLIENT["Browser — React SPA"]
+        UI["dashboard: work-list · debate · health · matrix"]
+    end
+    subgraph FC["Alibaba Function Compute"]
+        API["FastAPI (api/main.py)<br/>/api/run · /api/run/stream (SSE) · /api/auth · /"]
+        ORCH["Orchestrator — deterministic spine"]
+        subgraph SOCIETY["The six-agent society"]
+            DE["Data Engineer<br/><i>flash</i>"] --> DA["Data Analyst<br/><i>plus</i>"]
+            DA --> RM["Actuary<br/><i>sklearn + plus</i>"]
+            RM --> SK["Skeptic<br/><i>flash</i>"]
+            SK -. "opens disputes" .-> ARB["Arbiter<br/><i>max</i>"]
+            SK --> IN["Insight<br/><i>payload</i>"]
+            ARB -. "escalates" .-> GATE["Approval Gate<br/><b>human</b>"]
+        end
+    end
+    OSS[("OSS<br/>loan book")] --> DE
+    UI <-->|"HTTP + SSE"| API
+    API --> ORCH --> DE
+    IN --> GATE --> API
+    style GATE fill:#fdeecb,stroke:#b8860b
+    style ARB fill:#e8f8f0,stroke:#00784f
 ```
 
 ## 2. The six-agent society
@@ -64,8 +70,16 @@ the flow between them is code.
 ## 4. Two lanes
 
 - **Collections** (built): the early-warning / work-list lane this wiki documents.
-- **Origination** (designed, `WA-033…039`): a second lane (approve/refer/reject at
-  application time) sharing the same harness + contract. Post-hackathon scope.
+- **Origination** (built, `WA-033…039`): the second lane — approve/refer/reject
+  new applications on the **same engine and society**. Its own application-time
+  contract (`RawApplications` → `ApplicationFeatureFrame` → `ScoredApplications`),
+  feature recipe, out-of-time application-cohort model split, and an
+  approve/refer/reject decision matrix the debate's rulings actually move — while
+  the orchestrator, debate, gate, and dashboard machinery run **verbatim** (an id
+  alias keeps them lane-agnostic). `python -m waspada.agents --lane origination`
+  runs the whole society end-to-end offline. Label honesty: the source has funded
+  loans only, so the label is *funded-then-defaulted* — no reject-inference is
+  claimed.
 
 ## 5. The API layer
 

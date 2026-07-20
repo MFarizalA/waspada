@@ -44,13 +44,30 @@ Short strata spill their quota to `riskiest`, so the audit always spends its bud
 
 For each admissible dispute, the orchestrator runs a bounded debate:
 
-```
-Round 1 · Skeptic  challenge  ──"opens dispute"──▶  cites evidence, states a view + confidence
-Round 2 · Actuary  rebuttal   ──"uphold|concede"─▶  defends the band from the model's OWN drivers
-Round 3 · Arbiter  ruling      ──"uphold|override|escalate"─▶  reads both, rules with confidence
-                                                    │
-                                                    ▼
-                                            terminal resolution
+```mermaid
+sequenceDiagram
+    autonumber
+    participant M as Memory (WA-026)
+    participant S as Skeptic (flash)
+    participant A as Actuary (plus)
+    participant J as Arbiter (max)
+    participant H as Human Gate
+    Note over M: prior HUMAN ruling on this loan?<br/>yes → reuse, debate skipped
+    S->>S: tool-loop: portfolio_stats · lookup_account (≤4 turns)
+    S->>A: Round 1 — challenge (view + confidence + cited evidence)
+    A->>A: reads its OWN drivers (explain, WA-050)
+    alt concedes
+        A-->>S: CONCEDE → resolution: overridden (band → Skeptic's view)
+    else upholds
+        A->>J: Round 2 — UPHOLD (rationale + evidence)
+        alt confident ruling
+            J-->>S: Round 3 — uphold / override (+ names the revised band)
+        else confidence < threshold
+            J->>H: escalate — the human decides
+            H-->>S: escalated_approved / escalated_rejected
+        end
+    end
+    Note over S,H: ruling applied to the work-list as final_band (WA-048)<br/>de-escalations need the human; escalations auto-apply
 ```
 
 - **Round 1 — Skeptic (challenge).** Runs the native tool-loop, pulling

@@ -1,8 +1,36 @@
-# WASPADA
+<div align="center">
 
-**W**arning **&** **A**pproval **S**ystem for **P**ortfolio **A**nd **D**efault
-**A**nalytics — an autonomous **multi-agent risk decision-support system** for a
-multifinance lender's collections analyst.
+<img src="docs/brand/banner.png" alt="WASPADA — Early warning, argued" width="820">
+
+### Early Warning, Argued.
+
+会辩论的贷款风险预警系统 — 六个 AI 智能体在人做出决定前，为每一个风险评分展开辩论。<br/>
+<i>A six-agent AI society that debates every loan-risk score before a human decides.</i>
+
+<p>
+<a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/License-MIT-0052D9.svg"></a>
+<img alt="Python 3.11+" src="https://img.shields.io/badge/Python-3.11+-3776AB?logo=python&logoColor=white">
+<img alt="TypeScript 5" src="https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript&logoColor=white">
+<img alt="Alibaba Cloud" src="https://img.shields.io/badge/Alibaba%20Cloud-FF6A00?logo=alibabacloud&logoColor=white">
+<img alt="Brain: Qwen" src="https://img.shields.io/badge/Brain-Qwen%20·%20DashScope-615CED">
+<img alt="Tests: 545 passing" src="https://img.shields.io/badge/tests-545%20passing-2ea44f">
+</p>
+
+<p>
+<a href="https://waspadaprod-api-vouqzqqkiu.ap-southeast-1.fcapp.run"><b>Live Demo</b></a>
+&nbsp;·&nbsp;
+<a href="docs/wiki/Home.md"><b>Engineering Wiki</b></a>
+&nbsp;·&nbsp;
+<a href="docs/HACKATHON.md"><b>Design &amp; Rubric</b></a>
+</p>
+
+<sub><b>W</b>arning <b>&amp;</b> <b>A</b>pproval <b>S</b>ystem for <b>P</b>ortfolio <b>A</b>nd <b>D</b>efault <b>A</b>nalytics · built for the Qwen Cloud (Alibaba) hackathon</sub>
+
+<b>English</b> · <a href="README.zh-CN.md">中文</a>
+
+</div>
+
+---
 
 WASPADA scores a lender's loan book, has a **society of AI agents argue about
 the riskiest accounts**, resolves its own disagreements under a bounded call
@@ -14,11 +42,10 @@ debate transcript attached. Two decisions on one shared risk engine:
   end-to-end** (data agents → model → debate → rank → dashboard, with a human
   approval gate).
 - **Origination** — approve / refer / reject new applications. **Built** as an
-  additive second lane on the same engine (WA-033..039): application-time
-  contract + features, out-of-time application-cohort model split, an
-  approve/refer/reject decision matrix the debate's rulings actually move, and
-  a dashboard surface — `python -m waspada.agents --lane origination` runs the
-  whole society end-to-end offline.
+  additive second lane on the same engine (WA-033..039): its own application-time
+  contract + features, out-of-time cohort split, and an approve/refer/reject
+  matrix the debate's rulings actually move — `python -m waspada.agents --lane
+  origination` runs the whole society end-to-end offline.
 
 **Stack:** Alibaba Cloud OSS (data lake) · DuckDB (in-process query engine) ·
 Qwen models via Alibaba Cloud Model Studio/DashScope (the Agent Society brain,
@@ -350,7 +377,7 @@ The image is pushed with two tags — `latest` and the commit SHA
 | Auth | JWT sessions + bcrypt, RDS/SQLite (WA-028) | ✅ |
 | Benchmark | Society vs single-agent efficiency harness (WA-017) | ✅ |
 | Deploy | OpenTofu IaC (OSS · ACR · Function Compute · SLS · RDS) | ✅ live — `https://waspadaprod-api-vouqzqqkiu.ap-southeast-1.fcapp.run` ([quirk note](#deployment)) |
-| Origination lane | Second lane on the same engine — approve/refer/reject, own contract/features/split, debate + gate reused verbatim | ✅ (WA-033..039) |
+| Origination lane | Second lane on the same engine | 🟡 requirements drafted (WA-033..039) |
 
 ---
 
