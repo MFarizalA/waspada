@@ -418,10 +418,18 @@ async def run_stream(brain: str = "mock", _user: dict = Depends(current_user_ws)
 
 @app.get("/api/payload")
 async def get_payload():
-    """Return the pre-baked payload (the real 1M-loan run)."""
+    """Return the pre-baked payload (the frozen real run).
+
+    ``Cache-Control: no-store`` so a redeploy that swaps the fixture is picked up
+    on the next load — browsers heuristically cache header-less JSON, which made
+    a stale (synthetic) payload survive a redeploy and even a normal refresh.
+    """
     fixture = _REPO / "dashboard" / "fixtures" / "sample-payload.json"
     if fixture.exists():
-        return json.loads(fixture.read_text(encoding="utf-8"))
+        return JSONResponse(
+            json.loads(fixture.read_text(encoding="utf-8")),
+            headers={"Cache-Control": "no-store"},
+        )
     return JSONResponse({"error": "No payload available"}, status_code=404)
 
 
