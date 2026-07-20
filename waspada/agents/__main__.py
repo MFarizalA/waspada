@@ -27,7 +27,7 @@ import pyarrow as pa
 
 from ..config import COLLECTIONS, LANES
 from ..policy import load_policy
-from ..schema import RawLoans, schema_from_dataclass
+from ..schema import RawApplications, RawLoans, schema_from_dataclass
 from .dispute_memory import get_memory_backend
 from .llm import get_llm
 from .orchestrator import Orchestrator
@@ -79,6 +79,52 @@ def _sample_raw_table(n: int = 200, seed: int = 11) -> pa.Table:
     return pa.table(cols, schema=schema_from_dataclass(RawLoans))
 
 
+def _sample_raw_applications(n: int = 200, seed: int = 13) -> pa.Table:
+    """A small synthetic RawApplications table for the offline Origination run.
+
+    Application-time fields only; ``funded``/``funded_default`` are the outcome
+    columns the label is built from (funded-then-defaulted — WA-034 honesty
+    note). Two risk classes across multiple application cohorts so the
+    out-of-time split trains.
+    """
+    import numpy as np
+
+    rng = np.random.default_rng(seed)
+    app_years = [2019, 2020, 2021, 2022, 2023]
+    rows = []
+    for i in range(n):
+        ay = int(app_years[i % len(app_years)])
+        am = int(rng.integers(1, 13))
+        risky = rng.random() < 0.5
+        if risky:
+            rate = float(rng.uniform(18, 28)); dti = float(rng.uniform(22, 35)); grade = "E"
+            default = rng.random() < 0.75
+        else:
+            rate = float(rng.uniform(4, 10)); dti = float(rng.uniform(2, 12)); grade = "A"
+            default = rng.random() < 0.05
+        funded = bool(rng.random() < 0.85)  # most applications in the snapshot funded
+        rows.append(dict(
+            application_id=f"AP{i:08d}",
+            amount=float(rng.uniform(2000, 25000)),
+            term=int(rng.choice([36, 60])),
+            requested_rate=rate, grade=grade,
+            annual_income=float(rng.uniform(30000, 120000)),
+            dti=dti,
+            application_date=dt.date(ay, am, 1),
+            purpose=str(rng.choice(["credit_card", "debt_consolidation", "car", "medical"])),
+            region=str(rng.choice(["DKI Jakarta", "Jawa Barat", "Jawa Timur", "Banten"])),
+            employment_length=int(rng.integers(0, 20)),
+            funded=funded,
+            funded_default=bool(funded and default),
+        ))
+    import dataclasses
+    cols = {f.name: [] for f in dataclasses.fields(RawApplications)}
+    for r in rows:
+        for name in cols:
+            cols[name].append(r[name])
+    return pa.table(cols, schema=schema_from_dataclass(RawApplications))
+
+
 def _oss_configured() -> bool:
     return bool(
         os.environ.get("OSS_BUCKET")
@@ -125,7 +171,9 @@ def main(argv: Optional[list[str]] = None) -> int:
     # OSS isn't configured, so the CLI runs end-to-end without network.
     if not _oss_configured():
         from .data_engineer import DataEngineerAgent  # local import to avoid cycle
-        sample = _sample_raw_table()
+        sample = (
+            _sample_raw_applications() if args.lane == "origination" else _sample_raw_table()
+        )
         # The orchestrator builds its own agents; register the stub on the
         # data-engineer agent via a tool-injection hook before run().
         # (DataEngineerAgent reads tools["fetch"] for the raw snapshot.)

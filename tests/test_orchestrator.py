@@ -102,11 +102,12 @@ def test_plan_rejects_unknown_lane():
         orch.plan("bogus")
 
 
-def test_plan_rejects_origination_not_implemented():
-    """Origination is deferred; orchestrator raises rather than guess."""
+def test_plan_accepts_origination_lane():
+    """WA-033 lifted the guard: origination plans the same five-step society.
+    (This test previously pinned the raise; the lane is now implemented.)"""
     orch = Orchestrator(MockLLM())
-    with pytest.raises(ValueError, match="origination"):
-        orch.plan("origination")
+    steps = orch.plan("origination")
+    assert steps == ["data_engineer", "data_analyst", "risk_model", "risk_auditor", "insight"]
 
 
 # --------------------------------------------------------------------------- #

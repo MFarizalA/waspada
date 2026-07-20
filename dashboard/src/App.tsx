@@ -10,6 +10,7 @@ import { Alerts } from "@/components/Alerts";
 import { AgentDialogue } from "@/components/AgentDialogue";
 import { Escalations } from "@/components/Escalations";
 import { ModelCard } from "@/components/ModelCard";
+import { OriginationHealthPanel } from "@/components/OriginationHealthPanel";
 import { ParameterMatrix } from "@/components/ParameterMatrix";
 import { AccountDrawer } from "@/components/AccountDrawer";
 import { AuthScreen } from "@/components/AuthScreen";
@@ -173,7 +174,15 @@ function Dashboard() {
                 />
               </div>
               <div className={styles.colSide}>
-                <PortfolioHealth health={state.payload.portfolio_health} />
+                {state.payload.lane === "origination" ? (
+                  <OriginationHealthPanel
+                    health={state.payload.portfolio_health as import("@/types").OriginationHealth}
+                  />
+                ) : (
+                  <PortfolioHealth
+                    health={state.payload.portfolio_health as import("@/types").PortfolioHealth}
+                  />
+                )}
                 <ModelCard card={state.payload.model_card} />
                 <Alerts alerts={state.payload.alerts} />
               </div>

@@ -69,13 +69,21 @@ class RiskModelAgent(Agent):
                 notes=f"FeatureFrame handle {frame_handle!r} not found",
             )
 
+        # WA-036: pick the lane's model spec (feature lists, contracts, cohort
+        # split). Collections default keeps the existing path byte-identical.
+        if context.lane == "origination":
+            from ..model.risk import ORIGINATION_SPEC as _spec
+        else:
+            _spec = None
+
         # WA-082: serve a frozen, versioned model from OSS when opted in; else
-        # train per-run (the offline / test / demo default).
-        model = self._load_published_model()
+        # train per-run (the offline / test / demo default). The registry serve
+        # is collections-only for now — origination always trains per-run.
+        model = self._load_published_model() if _spec is None else None
         if model is None:
-            self.step("train", notes=f"rows={frame.num_rows} (vintage split)")
+            self.step("train", notes=f"lane={context.lane} rows={frame.num_rows} (out-of-time split)")
             try:
-                model = _train(frame)
+                model = _train(frame, spec=_spec) if _spec is not None else _train(frame)
             except Exception as exc:
                 self.step("train", status=Status.ERROR, notes=str(exc))
                 return AgentResult(status=Status.ERROR, agent=self.name, notes=f"train failed: {exc}")
@@ -88,7 +96,14 @@ class RiskModelAgent(Agent):
 
         try:
             scored = _predict(model, frame)
-            validate_table(scored, ScoredAccounts, name="RiskModelAgent(scored)")
+            if context.lane == "origination":
+                from ..schema import ScoredApplications as _scored_contract
+                # Alias the id so the debate machinery (auditor, disputes,
+                # adjudication write-back, SSE events) runs verbatim per lane.
+                scored = scored.append_column("loan_id", scored.column("application_id"))
+            else:
+                _scored_contract = ScoredAccounts
+            validate_table(scored, _scored_contract, name="RiskModelAgent(scored)")
         except Exception as exc:
             self.step("predict", status=Status.ERROR, notes=str(exc))
             return AgentResult(status=Status.ERROR, agent=self.name, notes=f"predict failed: {exc}")

@@ -64,6 +64,9 @@ __all__ = ["Orchestrator", "COLLECTIONS_STEP_ORDER"]
 # BEFORE insight packages the payload — it audits the top-K riskiest accounts
 # and opens Disputes where its view diverges from the model's band.
 COLLECTIONS_STEP_ORDER = ("data_engineer", "data_analyst", "risk_model", "risk_auditor", "insight")
+# WA-033: the Origination lane walks the SAME society — score-then-contest
+# applies identically to an application PD; agents branch on context.lane.
+ORIGINATION_STEP_ORDER = ("data_engineer", "data_analyst", "risk_model", "risk_auditor", "insight")
 
 
 class Orchestrator(Agent):
@@ -193,16 +196,16 @@ class Orchestrator(Agent):
     def plan(self, lane: str = COLLECTIONS) -> List[str]:
         """Return the ordered agent-name sequence for ``lane``.
 
-        Only the Collections lane is wired (Origination is deferred per the
-        HACKATHON sequencing). An unknown lane raises ``ValueError``.
+        Both lanes are wired (WA-033): the same five-step society runs on
+        either — the agents themselves branch on ``context.lane`` for their
+        lane-appropriate contracts / feature recipes / decision matrices. An
+        unknown lane raises ``ValueError``.
         """
         if lane not in LANES:
             raise ValueError(f"lane={lane!r} invalid; must be one of {LANES}")
-        if lane != COLLECTIONS:
-            raise ValueError(
-                f"lane={lane!r} orchestrator not implemented yet (Origination deferred)."
-            )
-        self._steps_order = list(COLLECTIONS_STEP_ORDER)
+        self._steps_order = list(
+            COLLECTIONS_STEP_ORDER if lane == COLLECTIONS else ORIGINATION_STEP_ORDER
+        )
         self.step("plan", notes=f"lane={lane} steps={self._steps_order}")
         return list(self._steps_order)
 
@@ -794,9 +797,23 @@ class Orchestrator(Agent):
 
         top = work_list[:3] if work_list else []
         top_desc = ", ".join(
-            f"{r.get('loan_id', '?')} (p={float(r.get('p_default', 0.0)):.2f}, {r.get('recommended_action', '?')})"
+            f"{r.get('loan_id', r.get('application_id', '?'))} "
+            f"(p={float(r.get('p_default', 0.0)):.2f}, {r.get('recommended_action', '?')})"
             for r in top
         ) or "none"
+
+        # WA-033: lane-aware wording — an origination payload carries
+        # approval-rate health instead of NPL/vintage.
+        if payload.get("lane") == "origination" or "approval_rate" in health:
+            ar = float(health.get("approval_rate", 0.0))
+            pdr = float(health.get("projected_default_rate", 0.0))
+            lines = [
+                f"WASPADA Origination run — {len(work_list)} applications decided.",
+                f"Top risks: {top_desc}.",
+                f"Approval rate: {ar:.1%}; projected default of approved book: {pdr:.1%}.",
+                f"Alerts: {len(alert_list)}.",
+            ]
+            return " ".join(lines)
 
         # Worst vintage by default rate (if any).
         worst_vintage = ""
