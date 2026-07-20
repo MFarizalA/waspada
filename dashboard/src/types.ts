@@ -21,7 +21,7 @@ export interface Segment {
  *
  * `recommended_action` ∈ {"call", "watch", "auto-cure"} (schema.py L116).
  *
- * `expected_loss` is an ADDITIVE optional key (WA-024): Expected Loss in IDR =
+ * `expected_loss` is an ADDITIVE optional key (WA-024): Expected Loss in USD =
  * p_default × LGD(0.45) × EAD(outstanding_principal). Absent on older payloads
  * — the work-list renders it only when present (graceful absence).
  */
@@ -33,7 +33,7 @@ export interface ScoredAccount {
   score_band: string; // the MODEL's risk level, e.g. "Very Low".."Very High"
   segment: Segment;
   recommended_action: "call" | "watch" | "auto-cure" | "approve" | "refer" | "reject";
-  expected_loss?: number; // IDR at risk = PD × LGD(0.45) × EAD (WA-024, additive optional)
+  expected_loss?: number; // USD at risk = PD × LGD(0.45) × EAD (WA-024, additive optional)
 
   /**
    * The risk level AFTER the Agent Society's debate (WA-048, additive optional).
@@ -60,7 +60,7 @@ export interface PortfolioHealth {
   npl_ratio: number; // fraction of accounts in delinquent/default status
   vintage_default_rate: Record<string, number>; // default rate keyed by issue_date cohort
   status_mix: Record<string, number>; // proportion of accounts per current_status value
-  /** Sum of per-account Expected Loss in IDR (WA-024, additive optional). */
+  /** Sum of per-account Expected Loss in USD (WA-024, additive optional). */
   total_expected_loss?: number;
 }
 

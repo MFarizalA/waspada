@@ -1,5 +1,5 @@
 import type { PortfolioHealth } from "@/types";
-import { pct, sortCohorts, idr } from "@/lib/format";
+import { pct, sortCohorts, usd } from "@/lib/format";
 import { useI18n } from "@/lib/i18n";
 import styles from "./PortfolioHealth.module.css";
 
@@ -55,12 +55,12 @@ export function PortfolioHealth({ health }: PortfolioHealthProps) {
         </div>
       </div>
 
-      {/* Expected-loss headline (WA-024, additive optional). Rupiah at risk
+      {/* Expected-loss headline (WA-024, additive optional). Dollars at risk
           across the portfolio — the number a risk committee ranks work by. */}
       {typeof health.total_expected_loss === "number" && (
         <div className={styles.elCard}>
           <p className={styles.elLabel}>{t("ph.el.label")}</p>
-          <p className={styles.elValue}>{idr(health.total_expected_loss)}</p>
+          <p className={styles.elValue}>{usd(health.total_expected_loss)}</p>
           <p className={styles.elAssumptions}>{t("ph.el.assumptions")}</p>
         </div>
       )}

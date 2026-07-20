@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import type { ScoredAccount } from "@/types";
-import { segmentLabel, idr } from "@/lib/format";
+import { segmentLabel, usd } from "@/lib/format";
 import { useI18n } from "@/lib/i18n";
 import { ActionBadge } from "@/components/ActionBadge";
 import { BandCell, ScoreText } from "@/components/BandBadge";
@@ -153,7 +153,7 @@ export function WorkList({ accounts, contestedLoanIds, onSelectAccount, onJumpTo
                 {showEl && (
                   <td className={styles.el}>
                     {typeof account.expected_loss === "number"
-                      ? idr(account.expected_loss)
+                      ? usd(account.expected_loss)
                       : <span className={styles.elMissing}>—</span>}
                   </td>
                 )}
