@@ -104,16 +104,32 @@ class TestDashboardPayloadAgainstFixture:
         total = sum(sm.values())
         assert abs(total - 1.0) < 1e-6, f"status_mix sums to {total}, not 1.0"
 
-    def test_fixture_all_one_band_is_a_real_run_not_placeholder(self, fixture_payload):
-        """F-PI-03 (documented): the fixture's work_list is all Very High / 'call' with
-        p_default in a tight [0.97,0.98] band. This is the top-N of a real
-        scoring run (rank() sorts p_default desc), NOT the old placeholder
-        (which was p_default=1.0 for every row). Assert the old placeholder
-        shape is gone."""
+    def test_fixture_is_a_real_run_not_placeholder(self, fixture_payload):
+        """F-PI-03: the fixture must be the OUTPUT of a real scoring+debate run, not
+        a hand-written placeholder.
+
+        The earlier heuristic asserted ``not all(p == 1.0)`` — but the fixture is
+        now regenerated from a real ``brain=qwen`` collections run over the raw
+        Lending Club book, whose top-N by ``p_default`` legitimately surfaces
+        terminal (Charged Off / Default) accounts that the model scores at exactly
+        1.0. An all-1.0 top-N is therefore a *real* run here, so p<1.0 is the wrong
+        signal. Instead assert the run's provenance artifacts — a fitted, versioned
+        model card and a live debate transcript — which the old placeholder lacked.
+        """
         probs = [r["p_default"] for r in fixture_payload["work_list"]]
-        assert not all(p == 1.0 for p in probs), "fixture reverted to p=1.0 placeholder"
-        # Sorted descending within a believable band.
+        # 1. rank() invariant: sorted by p_default desc — a real ordering.
         assert probs == sorted(probs, reverse=True), "work_list not sorted by p_default desc"
+        # 2. Real model provenance: a fitted, versioned PD model scored this run.
+        mc = fixture_payload.get("model_card") or {}
+        assert isinstance(mc.get("model_id"), str) and mc["model_id"].startswith("pd-lr-"), (
+            f"model_card.model_id {mc.get('model_id')!r} is not a fitted pd-lr-<sha> "
+            "id — the placeholder had no model behind it"
+        )
+        assert 0.5 < float(mc.get("auc", 0.0)) <= 1.0, f"implausible AUC {mc.get('auc')!r}"
+        # 3. A real debate happened: a non-empty transcript with actual rounds.
+        dialogue = fixture_payload.get("agent_dialogue") or []
+        assert dialogue, "no agent_dialogue — a placeholder or a run with no disputes"
+        assert any(d.get("rounds") for d in dialogue), "disputes carry no debate rounds"
 
     @pytest.mark.xfail(
         reason="F-PI-04 (minor finding): vintage_default_rate cohort keys include "
