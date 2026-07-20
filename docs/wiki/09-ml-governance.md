@@ -5,6 +5,25 @@
 > governed model a society can argue with beats a black box — this page is the
 > governance half of that.
 
+## 0. The governance loop at a glance
+
+```mermaid
+flowchart LR
+    T["train()<br/>vintage / cohort OOT split"] --> CAL["isotonic calibration<br/>(WA-094)"]
+    CAL --> ART["artifact<br/>pd-lr-&lt;sha&gt; · band edges · metrics"]
+    ART -- "publish (WA-082)" --> REG[("OSS registry<br/>models/pd/*.pkl + latest.json")]
+    REG -. "opt-in frozen serve" .-> SCORE
+    ART --> SCORE["predict()<br/>calibrated · absolute bands"]
+    SCORE --> XPL["explain()<br/>signed drivers (WA-050)"]
+    XPL --> DEB["the debate cites them"]
+    SCORE --> MON["monitoring (WA-093)<br/>AUC · Brier · default rate · PSI"]
+    MON --> CARD["model_card on the payload"]
+    POL["parameter matrix (WA-095)<br/><b>human-set policy</b>"] --> RUN["the run"]
+    RUN --> CARD2["policy_card on the payload"]
+    style POL fill:#fdeecb,stroke:#b8860b
+    style REG fill:#eaf2ff,stroke:#0052d9
+```
+
 ## 1. The PD model
 
 The **Actuary** is a scikit-learn `LogisticRegression`
