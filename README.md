@@ -13,8 +13,12 @@ debate transcript attached. Two decisions on one shared risk engine:
   roll into NPL, and how to prioritize limited collector capacity. **Built
   end-to-end** (data agents → model → debate → rank → dashboard, with a human
   approval gate).
-- **Origination** — approve / reject / price new applications. Architected as an
-  additive second lane (deferred — the substrate is lane-agnostic).
+- **Origination** — approve / refer / reject new applications. **Built** as an
+  additive second lane on the same engine (WA-033..039): application-time
+  contract + features, out-of-time application-cohort model split, an
+  approve/refer/reject decision matrix the debate's rulings actually move, and
+  a dashboard surface — `python -m waspada.agents --lane origination` runs the
+  whole society end-to-end offline.
 
 **Stack:** Alibaba Cloud OSS (data lake) · DuckDB (in-process query engine) ·
 Qwen models via Alibaba Cloud Model Studio/DashScope (the Agent Society brain,
@@ -323,7 +327,7 @@ The image is pushed with two tags — `latest` and the commit SHA
 | Auth | JWT sessions + bcrypt, RDS/SQLite (WA-028) | ✅ |
 | Benchmark | Society vs single-agent efficiency harness (WA-017) | ✅ |
 | Deploy | OpenTofu IaC (OSS · ACR · Function Compute · SLS · RDS) | ✅ live — `https://waspadaprod-api-vouqzqqkiu.ap-southeast-1.fcapp.run` ([quirk note](#deployment)) |
-| Origination lane | Second lane on the same engine | 🟡 requirements drafted (WA-033..039) |
+| Origination lane | Second lane on the same engine — approve/refer/reject, own contract/features/split, debate + gate reused verbatim | ✅ (WA-033..039) |
 
 ---
 
