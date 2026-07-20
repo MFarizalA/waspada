@@ -126,6 +126,21 @@ async def dashboard():
     return JSONResponse({"error": "Dashboard not built. Run: cd dashboard && npx vite build"}, status_code=404)
 
 
+@app.get("/favicon.svg", include_in_schema=False)
+async def favicon():
+    """Serve the beacon favicon from the dist root.
+
+    Vite emits ``dashboard/dist/favicon.svg`` (from ``public/``), but only
+    ``/assets`` is mounted — the dist *root* isn't — so both the tab icon
+    (``index.html`` ``<link href="/favicon.svg">``) and the in-app brand mark
+    (``App.tsx`` ``<img src="favicon.svg">``) 404'd. This route closes that gap.
+    """
+    icon = _DASHBOARD_DIST / "favicon.svg"
+    if icon.exists():
+        return FileResponse(str(icon), media_type="image/svg+xml")
+    return JSONResponse({"error": "favicon not built"}, status_code=404)
+
+
 @app.get("/api/health")
 async def health():
     detail = getattr(app.state, "oss_detail", "")
