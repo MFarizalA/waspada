@@ -1,306 +1,717 @@
 {
   "work_list": [
     {
-      "loan_id": "LN00573558",
-      "p_default": 0.9814913260039355,
+      "loan_id": "lc-000000026",
+      "p_default": 1.0,
       "score_band": "Very High",
       "segment": {
         "product": "debt_consolidation",
-        "region": "Bali"
+        "region": "NY"
       },
       "recommended_action": "call",
-      "expected_loss": 37542043.22,
-      "final_band": "Very High"
+      "expected_loss": 0.0,
+      "final_band": "Very High",
+      "top_driver": "payment_ratio=0.00 \u2191"
     },
     {
-      "loan_id": "LN00961668",
-      "p_default": 0.9771443715137839,
+      "loan_id": "lc-000000027",
+      "p_default": 1.0,
       "score_band": "Very High",
       "segment": {
-        "product": "medical",
-        "region": "Banten"
+        "product": "other",
+        "region": "PA"
       },
       "recommended_action": "call",
-      "expected_loss": 5496437.09,
-      "final_band": "Very High"
+      "expected_loss": 0.0,
+      "final_band": "Very High",
+      "top_driver": "payment_ratio=0.32 \u2191"
     },
     {
-      "loan_id": "LN00321200",
-      "p_default": 0.9750162059454546,
+      "loan_id": "lc-000000066",
+      "p_default": 1.0,
       "score_band": "Very High",
       "segment": {
         "product": "debt_consolidation",
-        "region": "DKI Jakarta"
+        "region": "MN"
       },
       "recommended_action": "call",
-      "expected_loss": 20621592.76,
-      "final_band": "Very High"
+      "expected_loss": 0.0,
+      "final_band": "Very High",
+      "top_driver": "payment_ratio=0.45 \u2191"
     },
     {
-      "loan_id": "LN00999998",
-      "p_default": 0.9748930673065872,
-      "score_band": "Very High",
-      "segment": {
-        "product": "credit_card",
-        "region": "Sulawesi Selatan"
-      },
-      "recommended_action": "auto-cure",
-      "expected_loss": 49134.61,
-      "final_band": "Very Low",
-      "override_reason": "The Actuary conceded: near-settled balance contradicts the banding \u2014 flagged for data-quality review instead of a collector call."
-    },
-    {
-      "loan_id": "LN00416177",
-      "p_default": 0.974737894241782,
-      "score_band": "Very High",
-      "segment": {
-        "product": "credit_card",
-        "region": "DKI Jakarta"
-      },
-      "recommended_action": "call",
-      "expected_loss": 9649905.15,
-      "final_band": "Very High"
-    },
-    {
-      "loan_id": "LN00187484",
-      "p_default": 0.9745581623405406,
-      "score_band": "Very High",
-      "segment": {
-        "product": "medical",
-        "region": "Bali"
-      },
-      "recommended_action": "call",
-      "final_band": "Very High"
-    },
-    {
-      "loan_id": "LN00123339",
-      "p_default": 0.974476339921674,
-      "score_band": "Very High",
-      "segment": {
-        "product": "medical",
-        "region": "Kalimantan Timur"
-      },
-      "recommended_action": "call",
-      "final_band": "Very High"
-    },
-    {
-      "loan_id": "LN00531515",
-      "p_default": 0.9743831114833076,
-      "score_band": "Very High",
-      "segment": {
-        "product": "major_purchase",
-        "region": "Sumatera Utara"
-      },
-      "recommended_action": "call",
-      "final_band": "Very High"
-    },
-    {
-      "loan_id": "LN00573356",
-      "p_default": 0.9741853521233661,
+      "loan_id": "lc-000000068",
+      "p_default": 1.0,
       "score_band": "Very High",
       "segment": {
         "product": "small_business",
-        "region": "Other"
+        "region": "CA"
       },
       "recommended_action": "call",
-      "final_band": "Very High"
+      "expected_loss": 0.0,
+      "final_band": "Very High",
+      "top_driver": "payment_ratio=0.51 \u2191"
     },
     {
-      "loan_id": "LN00808576",
-      "p_default": 0.9740299500962659,
+      "loan_id": "lc-000000097",
+      "p_default": 1.0,
+      "score_band": "Very High",
+      "segment": {
+        "product": "credit_card",
+        "region": "WA"
+      },
+      "recommended_action": "call",
+      "expected_loss": 0.0,
+      "final_band": "Very High",
+      "top_driver": "payment_ratio=0.57 \u2191"
+    },
+    {
+      "loan_id": "lc-000000100",
+      "p_default": 1.0,
       "score_band": "Very High",
       "segment": {
         "product": "debt_consolidation",
-        "region": "Jawa Tengah"
+        "region": "CA"
       },
       "recommended_action": "call",
-      "final_band": "Very High"
+      "expected_loss": 0.0,
+      "final_band": "Very High",
+      "top_driver": "payment_ratio=0.40 \u2191"
     },
     {
-      "loan_id": "LN00881010",
-      "p_default": 0.9728552880302722,
-      "score_band": "Very High",
-      "segment": {
-        "product": "medical",
-        "region": "Jawa Timur"
-      },
-      "recommended_action": "call",
-      "final_band": "Very High"
-    },
-    {
-      "loan_id": "LN00769308",
-      "p_default": 0.9727004687172922,
-      "score_band": "Very High",
-      "segment": {
-        "product": "medical",
-        "region": "Sumatera Utara"
-      },
-      "recommended_action": "call",
-      "final_band": "Very High"
-    },
-    {
-      "loan_id": "LN00420209",
-      "p_default": 0.9725868945266047,
+      "loan_id": "lc-000000124",
+      "p_default": 1.0,
       "score_band": "Very High",
       "segment": {
         "product": "debt_consolidation",
-        "region": "Kalimantan Timur"
+        "region": "TX"
       },
       "recommended_action": "call",
-      "final_band": "Very High"
+      "expected_loss": 0.0,
+      "final_band": "Very High",
+      "top_driver": "payment_ratio=0.44 \u2191"
     },
     {
-      "loan_id": "LN00723520",
-      "p_default": 0.9722228999706343,
+      "loan_id": "lc-000000155",
+      "p_default": 1.0,
+      "score_band": "Very High",
+      "segment": {
+        "product": "debt_consolidation",
+        "region": "AZ"
+      },
+      "recommended_action": "call",
+      "expected_loss": 0.0,
+      "final_band": "Very High",
+      "top_driver": "payment_ratio=0.24 \u2191"
+    },
+    {
+      "loan_id": "lc-000000204",
+      "p_default": 1.0,
+      "score_band": "Very High",
+      "segment": {
+        "product": "debt_consolidation",
+        "region": "CA"
+      },
+      "recommended_action": "call",
+      "expected_loss": 0.0,
+      "final_band": "Very High",
+      "top_driver": "payment_ratio=0.21 \u2191"
+    },
+    {
+      "loan_id": "lc-000000225",
+      "p_default": 1.0,
       "score_band": "Very High",
       "segment": {
         "product": "home_improvement",
-        "region": "Jawa Barat"
+        "region": "NC"
       },
       "recommended_action": "call",
-      "expected_loss": 4287502.99,
-      "final_band": "Very High"
+      "expected_loss": 0.0,
+      "final_band": "Very High",
+      "top_driver": "payment_ratio=0.37 \u2191"
     },
     {
-      "loan_id": "LN00486480",
-      "p_default": 0.9719997280288267,
+      "loan_id": "lc-000000251",
+      "p_default": 1.0,
+      "score_band": "Very High",
+      "segment": {
+        "product": "debt_consolidation",
+        "region": "CO"
+      },
+      "recommended_action": "call",
+      "expected_loss": 0.0,
+      "final_band": "Very High",
+      "top_driver": "payment_ratio=0.51 \u2191"
+    },
+    {
+      "loan_id": "lc-000000299",
+      "p_default": 1.0,
       "score_band": "Very High",
       "segment": {
         "product": "credit_card",
-        "region": "DKI Jakarta"
+        "region": "NV"
       },
       "recommended_action": "call",
-      "final_band": "Very High"
+      "expected_loss": 0.0,
+      "final_band": "Very High",
+      "top_driver": "payment_ratio=0.57 \u2191"
     },
     {
-      "loan_id": "LN00327111",
-      "p_default": 0.9718975251140364,
+      "loan_id": "lc-000000339",
+      "p_default": 1.0,
+      "score_band": "Very High",
+      "segment": {
+        "product": "credit_card",
+        "region": "FL"
+      },
+      "recommended_action": "call",
+      "expected_loss": 0.0,
+      "final_band": "Very High",
+      "top_driver": "payment_ratio=0.20 \u2191"
+    },
+    {
+      "loan_id": "lc-000000365",
+      "p_default": 1.0,
+      "score_band": "Very High",
+      "segment": {
+        "product": "debt_consolidation",
+        "region": "PA"
+      },
+      "recommended_action": "call",
+      "expected_loss": 0.0,
+      "final_band": "Very High",
+      "top_driver": "payment_ratio=0.23 \u2191"
+    },
+    {
+      "loan_id": "lc-000000414",
+      "p_default": 1.0,
+      "score_band": "Very High",
+      "segment": {
+        "product": "debt_consolidation",
+        "region": "CA"
+      },
+      "recommended_action": "call",
+      "expected_loss": 0.0,
+      "final_band": "Very High",
+      "top_driver": "payment_ratio=0.18 \u2191"
+    },
+    {
+      "loan_id": "lc-000000422",
+      "p_default": 1.0,
       "score_band": "Very High",
       "segment": {
         "product": "major_purchase",
-        "region": "Bali"
+        "region": "NJ"
       },
       "recommended_action": "call",
-      "final_band": "Very High"
+      "expected_loss": 0.0,
+      "final_band": "Very High",
+      "top_driver": "payment_ratio=0.09 \u2191"
     },
     {
-      "loan_id": "LN00388125",
-      "p_default": 0.9718781332069403,
+      "loan_id": "lc-000000424",
+      "p_default": 1.0,
       "score_band": "Very High",
       "segment": {
         "product": "debt_consolidation",
-        "region": "Sulawesi Selatan"
+        "region": "PA"
       },
       "recommended_action": "call",
-      "final_band": "Very High"
+      "expected_loss": 0.0,
+      "final_band": "Very High",
+      "top_driver": "payment_ratio=0.29 \u2191"
     },
     {
-      "loan_id": "LN00304066",
-      "p_default": 0.9715791696734505,
+      "loan_id": "lc-000000496",
+      "p_default": 1.0,
       "score_band": "Very High",
       "segment": {
         "product": "debt_consolidation",
-        "region": "Bali"
+        "region": "FL"
       },
       "recommended_action": "call",
-      "final_band": "Very High"
+      "expected_loss": 0.0,
+      "final_band": "Very High",
+      "top_driver": "payment_ratio=0.09 \u2191"
     },
     {
-      "loan_id": "LN00679649",
-      "p_default": 0.9711692402601046,
+      "loan_id": "lc-000000523",
+      "p_default": 1.0,
       "score_band": "Very High",
       "segment": {
-        "product": "small_business",
-        "region": "Bali"
+        "product": "debt_consolidation",
+        "region": "NY"
       },
       "recommended_action": "call",
-      "final_band": "Very High"
+      "expected_loss": 0.0,
+      "final_band": "Very High",
+      "top_driver": "payment_ratio=0.43 \u2191"
     },
     {
-      "loan_id": "LN00176593",
-      "p_default": 0.9711243813336077,
+      "loan_id": "lc-000000569",
+      "p_default": 1.0,
+      "score_band": "Very High",
+      "segment": {
+        "product": "debt_consolidation",
+        "region": "FL"
+      },
+      "recommended_action": "call",
+      "expected_loss": 0.0,
+      "final_band": "Very High",
+      "top_driver": "payment_ratio=0.54 \u2191"
+    },
+    {
+      "loan_id": "lc-000000594",
+      "p_default": 1.0,
       "score_band": "Very High",
       "segment": {
         "product": "credit_card",
-        "region": "Jawa Timur"
+        "region": "NJ"
       },
       "recommended_action": "call",
-      "final_band": "Very High"
+      "expected_loss": 0.0,
+      "final_band": "Very High",
+      "top_driver": "payment_ratio=0.16 \u2191"
+    },
+    {
+      "loan_id": "lc-000000809",
+      "p_default": 1.0,
+      "score_band": "Very High",
+      "segment": {
+        "product": "debt_consolidation",
+        "region": "MO"
+      },
+      "recommended_action": "call",
+      "expected_loss": 0.0,
+      "final_band": "Very High",
+      "top_driver": "payment_ratio=0.45 \u2191"
+    },
+    {
+      "loan_id": "lc-000000821",
+      "p_default": 1.0,
+      "score_band": "Very High",
+      "segment": {
+        "product": "credit_card",
+        "region": "CA"
+      },
+      "recommended_action": "call",
+      "expected_loss": 0.0,
+      "final_band": "Very High",
+      "top_driver": "payment_ratio=0.37 \u2191"
+    },
+    {
+      "loan_id": "lc-000000830",
+      "p_default": 1.0,
+      "score_band": "Very High",
+      "segment": {
+        "product": "credit_card",
+        "region": "FL"
+      },
+      "recommended_action": "call",
+      "expected_loss": 0.0,
+      "final_band": "Very High",
+      "top_driver": "payment_ratio=0.61 \u2191"
+    },
+    {
+      "loan_id": "lc-000000834",
+      "p_default": 1.0,
+      "score_band": "Very High",
+      "segment": {
+        "product": "debt_consolidation",
+        "region": "CA"
+      },
+      "recommended_action": "call",
+      "expected_loss": 0.0,
+      "final_band": "Very High",
+      "top_driver": "payment_ratio=0.02 \u2191"
+    },
+    {
+      "loan_id": "lc-000000845",
+      "p_default": 1.0,
+      "score_band": "Very High",
+      "segment": {
+        "product": "credit_card",
+        "region": "VA"
+      },
+      "recommended_action": "call",
+      "expected_loss": 0.0,
+      "final_band": "Very High",
+      "top_driver": "payment_ratio=0.60 \u2191"
+    },
+    {
+      "loan_id": "lc-000000916",
+      "p_default": 1.0,
+      "score_band": "Very High",
+      "segment": {
+        "product": "debt_consolidation",
+        "region": "VT"
+      },
+      "recommended_action": "call",
+      "expected_loss": 0.0,
+      "final_band": "Very High",
+      "top_driver": "payment_ratio=0.32 \u2191"
+    },
+    {
+      "loan_id": "lc-000000948",
+      "p_default": 1.0,
+      "score_band": "Very High",
+      "segment": {
+        "product": "credit_card",
+        "region": "NJ"
+      },
+      "recommended_action": "call",
+      "expected_loss": 0.0,
+      "final_band": "Very High",
+      "top_driver": "payment_ratio=0.61 \u2191"
+    },
+    {
+      "loan_id": "lc-000000963",
+      "p_default": 1.0,
+      "score_band": "Very High",
+      "segment": {
+        "product": "debt_consolidation",
+        "region": "FL"
+      },
+      "recommended_action": "call",
+      "expected_loss": 0.0,
+      "final_band": "Very High",
+      "top_driver": "payment_ratio=0.42 \u2191"
+    },
+    {
+      "loan_id": "lc-000000986",
+      "p_default": 1.0,
+      "score_band": "Very High",
+      "segment": {
+        "product": "credit_card",
+        "region": "RI"
+      },
+      "recommended_action": "call",
+      "expected_loss": 0.0,
+      "final_band": "Very High",
+      "top_driver": "payment_ratio=0.27 \u2191"
+    },
+    {
+      "loan_id": "lc-000001008",
+      "p_default": 1.0,
+      "score_band": "Very High",
+      "segment": {
+        "product": "home_improvement",
+        "region": "GA"
+      },
+      "recommended_action": "call",
+      "expected_loss": 0.0,
+      "final_band": "Very High",
+      "top_driver": "payment_ratio=0.35 \u2191"
+    },
+    {
+      "loan_id": "lc-000001050",
+      "p_default": 1.0,
+      "score_band": "Very High",
+      "segment": {
+        "product": "debt_consolidation",
+        "region": "NY"
+      },
+      "recommended_action": "call",
+      "expected_loss": 0.0,
+      "final_band": "Very High",
+      "top_driver": "payment_ratio=0.27 \u2191"
+    },
+    {
+      "loan_id": "lc-000001115",
+      "p_default": 1.0,
+      "score_band": "Very High",
+      "segment": {
+        "product": "debt_consolidation",
+        "region": "NY"
+      },
+      "recommended_action": "call",
+      "expected_loss": 0.0,
+      "final_band": "Very High",
+      "top_driver": "payment_ratio=0.46 \u2191"
+    },
+    {
+      "loan_id": "lc-000001154",
+      "p_default": 1.0,
+      "score_band": "Very High",
+      "segment": {
+        "product": "medical",
+        "region": "MI"
+      },
+      "recommended_action": "call",
+      "expected_loss": 0.0,
+      "final_band": "Very High",
+      "top_driver": "payment_ratio=0.16 \u2191"
+    },
+    {
+      "loan_id": "lc-000001168",
+      "p_default": 1.0,
+      "score_band": "Very High",
+      "segment": {
+        "product": "other",
+        "region": "UT"
+      },
+      "recommended_action": "call",
+      "expected_loss": 0.0,
+      "final_band": "Very High",
+      "top_driver": "payment_ratio=0.15 \u2191"
+    },
+    {
+      "loan_id": "lc-000001276",
+      "p_default": 1.0,
+      "score_band": "Very High",
+      "segment": {
+        "product": "other",
+        "region": "LA"
+      },
+      "recommended_action": "call",
+      "expected_loss": 0.0,
+      "final_band": "Very High",
+      "top_driver": "payment_ratio=0.18 \u2191"
+    },
+    {
+      "loan_id": "lc-000001323",
+      "p_default": 1.0,
+      "score_band": "Very High",
+      "segment": {
+        "product": "small_business",
+        "region": "IL"
+      },
+      "recommended_action": "call",
+      "expected_loss": 0.0,
+      "final_band": "Very High",
+      "top_driver": "payment_ratio=0.40 \u2191"
+    },
+    {
+      "loan_id": "lc-000001354",
+      "p_default": 1.0,
+      "score_band": "Very High",
+      "segment": {
+        "product": "debt_consolidation",
+        "region": "MN"
+      },
+      "recommended_action": "call",
+      "expected_loss": 0.0,
+      "final_band": "Very High",
+      "top_driver": "payment_ratio=0.31 \u2191"
+    },
+    {
+      "loan_id": "lc-000001379",
+      "p_default": 1.0,
+      "score_band": "Very High",
+      "segment": {
+        "product": "other",
+        "region": "MD"
+      },
+      "recommended_action": "call",
+      "expected_loss": 0.0,
+      "final_band": "Very High",
+      "top_driver": "payment_ratio=0.37 \u2191"
+    },
+    {
+      "loan_id": "lc-000001402",
+      "p_default": 1.0,
+      "score_band": "Very High",
+      "segment": {
+        "product": "debt_consolidation",
+        "region": "TX"
+      },
+      "recommended_action": "call",
+      "expected_loss": 0.0,
+      "final_band": "Very High",
+      "top_driver": "payment_ratio=0.43 \u2191"
+    },
+    {
+      "loan_id": "lc-000001550",
+      "p_default": 1.0,
+      "score_band": "Very High",
+      "segment": {
+        "product": "debt_consolidation",
+        "region": "CA"
+      },
+      "recommended_action": "call",
+      "expected_loss": 0.0,
+      "final_band": "Very High",
+      "top_driver": "payment_ratio=0.31 \u2191"
+    },
+    {
+      "loan_id": "lc-000001571",
+      "p_default": 1.0,
+      "score_band": "Very High",
+      "segment": {
+        "product": "credit_card",
+        "region": "CA"
+      },
+      "recommended_action": "call",
+      "expected_loss": 0.0,
+      "final_band": "Very High",
+      "top_driver": "payment_ratio=0.20 \u2191"
+    },
+    {
+      "loan_id": "lc-000001576",
+      "p_default": 1.0,
+      "score_band": "Very High",
+      "segment": {
+        "product": "car",
+        "region": "NV"
+      },
+      "recommended_action": "call",
+      "expected_loss": 0.0,
+      "final_band": "Very High",
+      "top_driver": "payment_ratio=0.27 \u2191"
+    },
+    {
+      "loan_id": "lc-000001587",
+      "p_default": 1.0,
+      "score_band": "Very High",
+      "segment": {
+        "product": "other",
+        "region": "KY"
+      },
+      "recommended_action": "call",
+      "expected_loss": 0.0,
+      "final_band": "Very High",
+      "top_driver": "payment_ratio=0.22 \u2191"
+    },
+    {
+      "loan_id": "lc-000001605",
+      "p_default": 1.0,
+      "score_band": "Very High",
+      "segment": {
+        "product": "debt_consolidation",
+        "region": "FL"
+      },
+      "recommended_action": "call",
+      "expected_loss": 0.0,
+      "final_band": "Very High",
+      "top_driver": "payment_ratio=0.14 \u2191"
+    },
+    {
+      "loan_id": "lc-000001611",
+      "p_default": 1.0,
+      "score_band": "Very High",
+      "segment": {
+        "product": "small_business",
+        "region": "OH"
+      },
+      "recommended_action": "call",
+      "expected_loss": 0.0,
+      "final_band": "Very High",
+      "top_driver": "payment_ratio=0.32 \u2191"
+    },
+    {
+      "loan_id": "lc-000001678",
+      "p_default": 1.0,
+      "score_band": "Very High",
+      "segment": {
+        "product": "debt_consolidation",
+        "region": "CA"
+      },
+      "recommended_action": "call",
+      "expected_loss": 0.0,
+      "final_band": "Very High",
+      "top_driver": "payment_ratio=0.41 \u2191"
+    },
+    {
+      "loan_id": "lc-000001784",
+      "p_default": 1.0,
+      "score_band": "Very High",
+      "segment": {
+        "product": "credit_card",
+        "region": "NY"
+      },
+      "recommended_action": "call",
+      "expected_loss": 0.0,
+      "final_band": "Very High",
+      "top_driver": "payment_ratio=0.12 \u2191"
+    },
+    {
+      "loan_id": "lc-000001837",
+      "p_default": 1.0,
+      "score_band": "Very High",
+      "segment": {
+        "product": "debt_consolidation",
+        "region": "NV"
+      },
+      "recommended_action": "call",
+      "expected_loss": 0.0,
+      "final_band": "Very High",
+      "top_driver": "payment_ratio=0.62 \u2191"
+    },
+    {
+      "loan_id": "lc-000001886",
+      "p_default": 1.0,
+      "score_band": "Very High",
+      "segment": {
+        "product": "debt_consolidation",
+        "region": "NC"
+      },
+      "recommended_action": "call",
+      "expected_loss": 0.0,
+      "final_band": "Very High",
+      "top_driver": "payment_ratio=0.67 \u2191"
     }
   ],
   "portfolio_health": {
-    "npl_ratio": 0.218537,
+    "npl_ratio": 0.13064,
     "vintage_default_rate": {
-      "2021": 0.1429020408965016,
-      "2022": 0.14248689880925566,
-      "2023": 0.14210963729264114,
-      "2024": 0.1399759394239615
+      "2012": 0.1975642760487145,
+      "2011": 0.15039975863629507,
+      "2010": 0.14058283864004317,
+      "2009": 0.14167725540025414,
+      "2008": 0.21755725190839695,
+      "2007": 0.28169014084507044,
+      "2019": 0.11827366571491324
     },
     "status_mix": {
-      "0": 0.781463,
-      "Default": 0.142417,
-      "16-30": 0.02203,
-      "31-120": 0.05409
+      "0": 0.8672,
+      "Default": 0.12812,
+      "1-30": 0.00216,
+      "31-120": 0.00182,
+      "16-30": 0.0007
     },
-    "total_expected_loss": 77646615.82
+    "total_expected_loss": 1672282.3359255716
   },
   "alerts": [
     {
-      "metric": "npl_ratio",
-      "value": 0.218537,
-      "threshold": 0.2,
-      "message": "Portfolio NPL ratio 21.9% \u2265 threshold 20.0%",
-      "segment": null
+      "metric": "vintage_default_rate",
+      "value": 0.28169014084507044,
+      "threshold": 0.15,
+      "message": "Vintage 2007 default rate 28.2% \u2265 15.0% (portfolio baseline 13.1%)",
+      "segment": {
+        "vintage": "2007"
+      }
+    },
+    {
+      "metric": "vintage_default_rate",
+      "value": 0.21755725190839695,
+      "threshold": 0.15,
+      "message": "Vintage 2008 default rate 21.8% \u2265 15.0% (portfolio baseline 13.1%)",
+      "segment": {
+        "vintage": "2008"
+      }
+    },
+    {
+      "metric": "vintage_default_rate",
+      "value": 0.15039975863629507,
+      "threshold": 0.15,
+      "message": "Vintage 2011 default rate 15.0% \u2265 15.0% (portfolio baseline 13.1%)",
+      "segment": {
+        "vintage": "2011"
+      }
+    },
+    {
+      "metric": "vintage_default_rate",
+      "value": 0.1975642760487145,
+      "threshold": 0.15,
+      "message": "Vintage 2012 default rate 19.8% \u2265 15.0% (portfolio baseline 13.1%)",
+      "segment": {
+        "vintage": "2012"
+      }
     }
   ],
   "agent_dialogue": [
     {
-      "loan_id": "LN00961668",
-      "opened_by": "risk_auditor",
-      "model_band": "Very High",
-      "auditor_view": "Medium",
-      "rounds": [
-        {
-          "round_no": 1,
-          "speaker": "risk_auditor",
-          "model": "qwen3.6-flash",
-          "claim": "The score reads like a payment-behavior outlier, not a doomed account: this borrower has already repaid over half the principal and the medical segment in Banten is performing better than the book.",
-          "confidence": 0.72,
-          "evidence": [
-            "payment_ratio=0.61 vs Very High median 0.18",
-            "portfolio_stats: medical\u00b7Banten npl=12.4% vs book 21.9%",
-            "loan_age=31mo of 36mo term"
-          ]
-        },
-        {
-          "round_no": 2,
-          "speaker": "risk_model",
-          "model": "qwen3.7-plus",
-          "claim": "Uphold. The repayment history is real but stale: the account went 31-120 DPD in the last cycle and DTI sits at the portfolio's 95th percentile \u2014 late-tenure delinquency after strong early payments is the classic charge-off shape in this book.",
-          "confidence": 0.84,
-          "evidence": [
-            "delinquency_status=31-120",
-            "dti=31.4 (p95)",
-            "vintage 2021 default_rate=14.3%"
-          ]
-        },
-        {
-          "round_no": 3,
-          "speaker": "arbiter",
-          "model": "qwen3.7-max",
-          "claim": "The Actuary's late-tenure delinquency signal outweighs the historical payment ratio; the Risk Auditor's segment argument is portfolio-level, not account-level. Score stands.",
-          "confidence": 0.9,
-          "evidence": []
-        }
-      ],
-      "resolution": "upheld",
-      "resolved_by": "arbiter",
-      "rationale": "Active 31-120 DPD plus p95 DTI dominates the strong early payment history; keep band Very High and the call action.",
-      "revised_band": "",
-      "applied": false
-    },
-    {
-      "loan_id": "LN00999998",
+      "loan_id": "lc-000000066",
       "opened_by": "risk_auditor",
       "model_band": "Very High",
       "auditor_view": "Low",
@@ -309,105 +720,168 @@
           "round_no": 1,
           "speaker": "risk_auditor",
           "model": "qwen3.6-flash",
-          "claim": "This account has effectively paid the loan off \u2014 total paid is within a rounding error of the full amount and nothing is outstanding. A 0.97 default probability on a settled balance looks like a data artifact, not risk.",
-          "confidence": 0.88,
+          "claim": "Despite the recorded Default status, the outstanding_ratio of 0.00 indicates the principal balance is fully extinguished, rendering the forward-looking probability of default negligible.",
+          "confidence": 0.9,
           "evidence": [
-            "payment_ratio=0.99",
-            "outstanding_ratio=0.01",
-            "lookup_account: last status transition 0-DPD"
+            "Feature 'outstanding_ratio' is explicitly 0.00, signaling zero current exposure.",
+            "Feature 'delinquency_status' is set to 'Default', confirming the asset is non-performing but likely resolved or charged off.",
+            "Feature 'loan_age' (156 months) significantly exceeds the 'term' (60 months), suggesting the loan has passed through its lifecycle."
           ]
         },
         {
           "round_no": 2,
           "speaker": "risk_model",
           "model": "qwen3.7-plus",
-          "claim": "Concede. The features the score leans on are dominated by segment and rate; the near-zero outstanding balance was not decisive in training and this row's risk is overstated. Recommend re-banding pending a data-quality check on the status field.",
-          "confidence": 0.81,
-          "evidence": [
-            "outstanding_principal=112 of amount=11,900"
-          ]
-        }
-      ],
-      "resolution": "overridden",
-      "resolved_by": "risk_model",
-      "rationale": "The Actuary conceded: near-settled balance contradicts the banding \u2014 flagged for data-quality review instead of a collector call.",
-      "revised_band": "Very Low",
-      "applied": true
-    },
-    {
-      "loan_id": "LN00187484",
-      "opened_by": "risk_auditor",
-      "model_band": "Very High",
-      "auditor_view": "Medium",
-      "rounds": [
-        {
-          "round_no": 1,
-          "speaker": "risk_auditor",
-          "model": "qwen3.6-flash",
-          "claim": "Medical loans in Bali are curing at an unusually high rate this quarter and this account's delinquency is shallow (16-30 DPD). A watch action may recover it without spending collector capacity.",
-          "confidence": 0.61,
-          "evidence": [
-            "portfolio_stats: medical\u00b7Bali cure_rate up 3.1pt QoQ",
-            "delinquency_status=16-30"
-          ]
-        },
-        {
-          "round_no": 2,
-          "speaker": "risk_model",
-          "model": "qwen3.7-plus",
-          "claim": "Uphold. The cure-rate trend is real but thin (small segment); the account's payment ratio has been deteriorating three cycles straight, which this model weights heavily for good reason.",
-          "confidence": 0.74,
-          "evidence": [
-            "payment_ratio trend -0.09/cycle over 3 cycles",
-            "segment n=412 accounts"
-          ]
-        },
-        {
-          "round_no": 3,
-          "speaker": "arbiter",
-          "model": "qwen3.7-max",
-          "claim": "Both arguments are credible and the confidence gap is narrow \u2014 this is a judgment call about collector capacity, which belongs to the analyst. Escalating.",
-          "confidence": 0.55,
+          "claim": "UNPARSABLE: rebuttal brain unreachable",
+          "confidence": null,
           "evidence": []
         }
       ],
       "resolution": "escalated_approved",
       "resolved_by": "human",
-      "rationale": "Analyst kept the call action: collector capacity is available this cycle and the deteriorating payment trend is the safer read.",
+      "rationale": " escalated; gate escalated_approved.",
+      "revised_band": "",
+      "applied": false
+    },
+    {
+      "loan_id": "lc-000009192",
+      "opened_by": "risk_auditor",
+      "model_band": "Very Low",
+      "auditor_view": "High",
+      "rounds": [
+        {
+          "round_no": 1,
+          "speaker": "risk_auditor",
+          "model": "qwen3.6-flash",
+          "claim": "The account's explicit Default status overrides any algorithmic probability forecast, making its actual credit risk maximum.",
+          "confidence": 0.95,
+          "evidence": [
+            "delinquency_status=Default confirms the borrower has already ceased payments and entered loss recovery",
+            "loan_age=160 months far exceeds the 60-month contractual term, verifying long-term non-performance",
+            "forward-looking PD models cannot meaningfully assign a 0.2% risk to an account that is already classified as defaulted"
+          ]
+        },
+        {
+          "round_no": 2,
+          "speaker": "risk_model",
+          "model": "qwen3.7-plus",
+          "claim": "UNPARSABLE: rebuttal brain unreachable",
+          "confidence": null,
+          "evidence": []
+        }
+      ],
+      "resolution": "escalated_approved",
+      "resolved_by": "human",
+      "rationale": " escalated; gate escalated_approved.",
+      "revised_band": "",
+      "applied": false
+    },
+    {
+      "loan_id": "lc-000020645",
+      "opened_by": "risk_auditor",
+      "model_band": "Very Low",
+      "auditor_view": "High",
+      "rounds": [
+        {
+          "round_no": 1,
+          "speaker": "risk_auditor",
+          "model": "qwen3.6-flash",
+          "claim": "A documented Default status fundamentally overrides favorable payment and leverage metrics, making the model's 0.002 probability of default dangerously inaccurate.",
+          "confidence": 0.95,
+          "evidence": [
+            "Account explicitly shows delinquency_status=Default, which typically implies near-certain future loss.",
+            "The model's feature importance omits the critical delinquency flag, instead over-weighting historical metrics like payment_ratio=1.45 and dti=9.69.",
+            "Current default classification directly contradicts the Very Low band threshold, signaling severe model misalignment with actual portfolio risk."
+          ]
+        },
+        {
+          "round_no": 2,
+          "speaker": "risk_model",
+          "model": "qwen3.7-plus",
+          "claim": "UNPARSABLE: rebuttal brain unreachable",
+          "confidence": null,
+          "evidence": []
+        }
+      ],
+      "resolution": "escalated_approved",
+      "resolved_by": "human",
+      "rationale": " escalated; gate escalated_approved.",
+      "revised_band": "",
+      "applied": false
+    },
+    {
+      "loan_id": "lc-000027054",
+      "opened_by": "risk_auditor",
+      "model_band": "Very Low",
+      "auditor_view": "High",
+      "rounds": [
+        {
+          "round_no": 1,
+          "speaker": "risk_auditor",
+          "model": "qwen3.6-flash",
+          "claim": "The account is explicitly flagged as Default, which inherently constitutes extreme risk and invalidates the model's low PD prediction.",
+          "confidence": 0.98,
+          "evidence": [
+            "delinquency_status is explicitly Default",
+            "outstanding_ratio is 0.00, suggesting a charged-off or settled account",
+            "the model omitted delinquency status from its input features, causing a critical blind spot in risk assessment"
+          ]
+        },
+        {
+          "round_no": 2,
+          "speaker": "risk_model",
+          "model": "qwen3.7-plus",
+          "claim": "UNPARSABLE: rebuttal brain unreachable",
+          "confidence": null,
+          "evidence": []
+        }
+      ],
+      "resolution": "escalated_approved",
+      "resolved_by": "human",
+      "rationale": " escalated; gate escalated_approved.",
       "revised_band": "",
       "applied": false
     }
   ],
   "model_card": {
-    "model_id": "pd-lr-9c1f4a7b2e08",
-    "auc": 0.883,
-    "brier_raw": 0.171,
-    "brier_calibrated": 0.142,
+    "model_id": "pd-lr-5a7fcfb987d3",
+    "auc": 0.9673487905371713,
+    "brier_raw": 0.08743192513651801,
+    "brier_calibrated": 0.028464321373166103,
     "calibrated": true,
-    "n_train": 34210,
-    "n_test": 15788,
+    "n_train": 6208,
+    "n_test": 43792,
     "split_method": "vintage",
     "n_scored": 50000,
-    "observed_default_rate": 0.1836,
+    "observed_default_rate": 0.1281,
     "band_distribution": {
-      "Very Low": 0.2,
-      "Low": 0.2,
-      "Medium": 0.2,
-      "High": 0.2,
-      "Very High": 0.2
+      "Very Low": 0.2536,
+      "Low": 0.2447,
+      "Medium": 0.1331,
+      "High": 0.1784,
+      "Very High": 0.1902
     },
-    "trained_at": "2026-07-20T00:00:00Z",
-    "psi": {
-      "dti": 0.08,
-      "rate": 0.27,
-      "grade": 0.05
+    "trained_at": "2026-07-20T13:09:26Z"
+  },
+  "policy_card": {
+    "policy_id": "policy-a9d90ea0",
+    "band_to_action": {
+      "Very High": "call",
+      "High": "watch",
+      "Medium": "watch",
+      "Low": "auto-cure",
+      "Very Low": "auto-cure"
     },
-    "drift_flags": [
-      "rate"
+    "npl_threshold": 0.2,
+    "vintage_threshold": 0.15,
+    "npl_buckets": [
+      "16-30",
+      "31-120",
+      "Default"
     ],
-    "drift_significant": [
-      "rate"
-    ],
-    "max_psi": 0.27
+    "dispute_gap": 2,
+    "arbiter_confidence": 0.6,
+    "audit_k": 8,
+    "top_n": 50
   }
 }
